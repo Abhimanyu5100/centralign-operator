@@ -1,0 +1,102 @@
+%PDF-1.3
+%“Œ‹ž ReportLab Generated PDF document (opensource)
+1 0 obj
+<<
+/F1 2 0 R /F2 3 0 R
+>>
+endobj
+2 0 obj
+<<
+/BaseFont /Helvetica /Encoding /WinAnsiEncoding /Name /F1 /Subtype /Type1 /Type /Font
+>>
+endobj
+3 0 obj
+<<
+/BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding /Name /F2 /Subtype /Type1 /Type /Font
+>>
+endobj
+4 0 obj
+<<
+/Contents 8 0 R /MediaBox [ 0 0 595 842 ] /Parent 7 0 R /Resources <<
+/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>> /Rotate 0 /Trans <<
+
+>> 
+  /Type /Page
+>>
+endobj
+5 0 obj
+<<
+/PageMode /UseNone /Pages 7 0 R /Type /Catalog
+>>
+endobj
+6 0 obj
+<<
+/Author (Rao Packaging Industries) /CreationDate (D:20000101000000+00'00') /Creator (Acme vendor billing) /Keywords () /ModDate (D:20000101000000+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+  /Subject (Vendor invoice) /Title (Invoice INV-2150) /Trapped /False
+>>
+endobj
+7 0 obj
+<<
+/Count 1 /Kids [ 4 0 R ] /Type /Pages
+>>
+endobj
+8 0 obj
+<<
+/Length 1135
+>>
+stream
+1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
+BT /F2 16 Tf 19.2 TL ET
+BT 1 0 0 1 50 790 Tm (Rao Packaging Industries) Tj T* ET
+BT /F2 12 Tf 14.4 TL ET
+BT 1 0 0 1 50 760 Tm (TAX INVOICE) Tj T* ET
+BT /F1 9 Tf 10.8 TL ET
+BT 1 0 0 1 50 734 Tm (GSTIN: 29AAFCR7712M1Z8) Tj T* ET
+BT /F1 9 Tf 10.8 TL ET
+BT 1 0 0 1 50 711 Tm (Bill To: Acme Industries Pvt Ltd, Accounts Payable, Pune) Tj T* ET
+BT /F1 11 Tf 13.2 TL ET
+BT 1 0 0 1 50 688 Tm (Invoice No: INV-2150) Tj T* ET
+BT /F1 10 Tf 12 TL ET
+BT 1 0 0 1 50 663 Tm (Invoice Date: 12 Sep 2026) Tj T* ET
+BT /F1 10 Tf 12 TL ET
+BT 1 0 0 1 50 639 Tm (Due Date: 12 Oct 2026) Tj T* ET
+BT /F1 10 Tf 12 TL ET
+BT 1 0 0 1 50 615 Tm (PO Number: PO-2026-0372) Tj T* ET
+BT /F1 10 Tf 12 TL ET
+BT 1 0 0 1 50 591 Tm (Description: Corrugated packaging cartons) Tj T* ET
+BT /F1 10 Tf 12 TL ET
+BT 1 0 0 1 50 567 Tm (Subtotal: INR 10,423.73) Tj T* ET
+BT /F1 10 Tf 12 TL ET
+BT 1 0 0 1 50 543 Tm (GST at 18%: INR 1,876.27) Tj T* ET
+BT /F2 12 Tf 14.4 TL ET
+BT 1 0 0 1 50 519 Tm (Total Amount Payable: INR 12,300) Tj T* ET
+BT /F1 9 Tf 10.8 TL ET
+BT 1 0 0 1 50 493 Tm (Payment terms: net 30 days from invoice date.) Tj T* ET
+ 
+endstream
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000061 00000 n 
+0000000102 00000 n 
+0000000209 00000 n 
+0000000321 00000 n 
+0000000514 00000 n 
+0000000582 00000 n 
+0000000879 00000 n 
+0000000938 00000 n 
+trailer
+<<
+/ID 
+[<115fd8b5fd1ded3995e8cfdd4e7a7c36><115fd8b5fd1ded3995e8cfdd4e7a7c36>]
+% ReportLab generated PDF document -- digest (opensource)
+
+/Info 6 0 R
+/Root 5 0 R
+/Size 9
+>>
+startxref
+2124
+%%EOF

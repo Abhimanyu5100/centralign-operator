@@ -5,27 +5,23 @@ If this file disagrees with git, git wins for what is committed.
 
 ## Now
 
-- **Last updated:** 2026-10-06 01:25 IST
-- **Day / phase / part:** Day 1 (Phase A), part 5 done (not yet committed) → part 6 next
-- **Currently doing:** waiting for author review of Day 1.5
-- **Next step:** Day 1 part (6): generated PDFs (`scripts/make_pdfs.py`, reportlab; names already used by the
-  seed mail and invoices: `sharma_INV-1043.pdf`, `rao_INV-2210.pdf`, `verma_INV-778.pdf`, `verma_INV-778A.pdf`,
-  `mehta_INV-0091.pdf` with the injected line, `patel_INV-5512.pdf`, plus the older seeded invoices'
-  files), served from `acme/data/files/`, mail attachments and invoice source files downloadable, and the
-  UI-only "attach PDF" action on invoices. Add the existence test for mail attachment names (N.61)
-- **Carried over:** PDF attach action to part 6 (D-056); Day 3: the ORG-005 gate reads
-  `acme/knowledge/mail_allowlist.yaml` (D-064) and a negative test shows an allowlisted recipient needs no
-  action approval (D-069)
+- **Last updated:** 2026-10-06 01:55 IST
+- **Day / phase / part:** Day 1 (Phase A), part 6 done (not yet committed) → part 7 next
+- **Currently doing:** waiting for author review of Day 1.6
+- **Next step:** Day 1 part (7) per the Day 1 prompt in SETUP.md and `docs/acme-spec.md` (admin endpoints, chaos
+  profiles, task YAMLs T1–T9 with frozen `now` and SQL checkers); see SETUP.md for the exact split
+- **Carried over:** Day 3: the ORG-005 gate reads `acme/knowledge/mail_allowlist.yaml` (D-064) and a negative
+  test shows an allowlisted recipient needs no action approval (D-069); `iyer_INV-3301.pdf` stays unreferenced
+  by T1–T9 (Phase B stretch)
 - **RESUME PROMPT:**
   ```
-  Read CLAUDE.md and docs/progress.md, then docs/acme-spec.md. Day 1 parts 1 to 5 are done (service layer
-  in acme/services.py; login in acme/auth.py; web plumbing and the fixed ERROR_TYPES list in acme/web.py; UI
-  in acme/ui.py; JSON API in acme/api.py with every write through `_write`; shared idempotency store in
-  acme/idempotency.py; reads in acme/queries.py; mailbox in acme/mail.py with the allowlist in
-  acme/knowledge/mail_allowlist.yaml and seed mail in acme/data/inbox/*.json; `make acme` serves Acme,
-  `make test` is the fast suite). Build Day 1 part (6): the generated PDFs, file serving and the UI-only PDF
-  attach action on invoices, per the Day 1 prompt in SETUP.md. Show the risk table first, stop after the
-  part, and run /checkpoint. Do not commit or push.
+  Read CLAUDE.md and docs/progress.md, then docs/acme-spec.md. Day 1 parts 1 to 6 are done (service layer
+  in acme/services.py; login in acme/auth.py; web plumbing in acme/web.py; UI in acme/ui.py; JSON API in
+  acme/api.py; idempotency in acme/idempotency.py; reads in acme/queries.py; mailbox in acme/mail.py; PDFs
+  from the fact table in acme/seed.py via acme/pdfs.py, committed in acme/data/files/ with MANIFEST.sha256,
+  served by acme/files.py; `make acme` serves Acme, `make pdfs` regenerates all PDFs, `make test` is the fast
+  suite). Build the next Day 1 part per SETUP.md. Show the risk table first, stop after the part, and run
+  /checkpoint. Do not commit or push.
   ```
 
 ## Done log
@@ -40,7 +36,8 @@ If this file disagrees with git, git wins for what is committed.
 | 2026-10-05 | 1.2 | Login and roles: users and roles in code with env passwords (D-043), cookie sessions (8 h wall-clock TTL, per-session request count, revoke), `POST /api/login` shared by form and JSON, logout, whoami, login and home pages, app-wide login guard with typed 401 (API) / 303 (UI), sessions outside the state hash and wiped by reset; Testing section in CLAUDE.md, `make test` (fast) vs `make test-e2e`, `e2e` marker with a static marker check; decisions D-043 to D-051; register rows 0.10, 0.11 | `acme/{auth,app}.py`, `acme/templates/{login,home}.html`, `acme/{db,permissions}.py`, `tests/acme/test_auth.py`, `tests/test_markers.py`, `Makefile`, `pyproject.toml`, `CLAUDE.md`, `.env.example`, `docs/*` | `make test`: 114 passed, 0 failed (`make test-e2e`: none collected) | 1ab7b52 |
 | 2026-10-06 | 1.3 | UI pages and forms with server-side validation: invoices, approvals (detail page holds Approve/Reject/Withdraw), payments, vendors (read-only), employees, IT tickets; inline per-field errors, PRG with one-shot toast; shared idempotency store (UI token now, API key in part 4); exact rupee parsing; `acme/web.py` split; `make acme`; route-protection test now walks the OpenAPI schema (N.49); decisions D-052 to D-057; risks N.42 to N.49 tested | `acme/{web,ui,forms,money,idempotency,queries}.py`, `acme/{app,db}.py`, `acme/templates/*`, `Makefile`, `tests/acme/{test_ui,test_money_and_forms,test_idempotency,htmlutil}.py`, `tests/acme/test_auth.py`, `docs/*` | `make test`: 213 passed, 0 failed (`make test-e2e`: none collected); UI tests mutation-checked | 313dec3 |
 | 2026-10-06 | 1.4 | JSON API: reads incl. by-id read-back routes, writes through one `_write` helper (strict JSON bodies, 415 for non-JSON, `Idempotency-Key` on invoices/payments via the shared store with replay header), approval requests and decisions, undo endpoints, `GET /api/audit?since=` with paging; fixed `ERROR_TYPES` list incl. `server_error`, typed 404/405/422/500 under `/api/`; shared filter validation; UI/API parity and concurrent-write tests (carried over from 1.3); decisions D-058 to D-063; risks N.50 to N.55 added and tested, N.21 and N.25 tested | `acme/api.py`, `acme/{app,web,services,idempotency,queries,ui}.py`, `tests/acme/{test_api,conftest,test_ui}.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 276 passed, 0 failed (`make test-e2e`: none collected); API tests mutation-checked (6 mutants caught); race tests stable over 6 repeats; curl walk against `make acme` verified | 5320b80 |
-| 2026-10-06 | 1.5 | Mailbox: allowlist in `acme/knowledge/mail_allowlist.yaml` (single source for the `external` flag and the Day 3 ORG-005 check, fails closed); `acme/mail.py`; `services.send_mail` (computed `external`, session sender, audited, no undo); seed inbox from 9 JSON files (6 task invoices + 2 older, HR offer email without start date); `GET /api/mail`, `GET /api/mail/{id}`, `POST /api/mail/send` (idempotency key); `/mail`, `/mail/{id}`, `/mail/compose` pages; decisions D-064 to D-069; risks N.56 to N.64 tested | `acme/{mail,models,permissions,services,queries,api,ui,seed}.py`, `acme/knowledge/mail_allowlist.yaml`, `acme/data/inbox/*.json`, `acme/templates/{mails,mail,mail_form,base}.html`, `tests/acme/{test_mail,test_ui,test_api,test_services}.py`, `docs/*` | `make test`: 381 passed, 0 failed (`make test-e2e`: none collected); curl walk against a live server verified | pending |
+| 2026-10-06 | 1.5 | Mailbox: allowlist in `acme/knowledge/mail_allowlist.yaml` (single source for the `external` flag and the Day 3 ORG-005 check, fails closed); `acme/mail.py`; `services.send_mail` (computed `external`, session sender, audited, no undo); seed inbox from 9 JSON files (6 task invoices + 2 older, HR offer email without start date); `GET /api/mail`, `GET /api/mail/{id}`, `POST /api/mail/send` (idempotency key); `/mail`, `/mail/{id}`, `/mail/compose` pages; decisions D-064 to D-069; risks N.56 to N.64 tested | `acme/{mail,models,permissions,services,queries,api,ui,seed}.py`, `acme/knowledge/mail_allowlist.yaml`, `acme/data/inbox/*.json`, `acme/templates/{mails,mail,mail_form,base}.html`, `tests/acme/{test_mail,test_ui,test_api,test_services}.py`, `docs/*` | `make test`: 381 passed, 0 failed (`make test-e2e`: none collected); curl walk against a live server verified | e75d3b2 |
+| 2026-10-06 | 1.6 | Generated PDFs (13: seeded history, the six task invoices, one scanned) from one fact table in `acme/seed.py`, byte-identical reportlab invariant output, committed with `MANIFEST.sha256`; `acme/files.py` and four download routes; UI-only attach-source action; `send_mail` refuses missing attachments; duplicate check before date rules; decisions D-070 to D-076; risks N.65 to N.70 tested | `acme/{pdfs,files,seed,services,permissions,web,ui,api}.py`, `acme/templates/{invoice,mail}.html`, `acme/data/files/*`, `Makefile`, `tests/acme/test_pdfs.py`, `docs/*` | `make test`: 473 passed, 0 failed (91 new); mutation check on the file listing failed the symlink test as expected; curl against a live server: 200 pdf, traversal 404 | pending |
 
 ## Blockers and open questions
 
@@ -122,3 +119,12 @@ Day 1.5 (decisions D-064 to D-069):
 - **Seed mail:** 9 messages (spec: "the invoice emails the tasks need"): added older Sharma INV-1012 (so "latest" is meaningful) and Patel INV-5480.
 - **Length limits** on subject (200) and body (5000) are worded by the form in its own way; the status code matches the API.
 - `acme/data/inbox/*.json` and `acme/knowledge/` are now tracked directories (the DB file stays ignored).
+
+Day 1.6 (awaiting author review):
+
+- **Generator path:** `acme/pdfs.py`, not `scripts/make_pdfs.py` (D-070).
+- **Scanned PDF** is written by hand (no reportlab) so its bytes cannot vary with library versions (D-073). The vendor is "Iyer Electricals" (the seed name), not "Iyer Components".
+- **Spec table `scanned_INV-3301.pdf`** is now named `iyer_INV-3301.pdf` to match the other files.
+- **Duplicate check now runs before the date rules** in `submit_invoice` (D-074).
+- **`send_mail` now refuses attachments that are not generated files** (D-075).
+- **Base seed unchanged:** no mail or invoice rows were added; the scanned invoice has no email.

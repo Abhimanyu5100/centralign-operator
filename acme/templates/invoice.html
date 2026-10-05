@@ -12,7 +12,7 @@
   <tr><th scope="row">Total including tax</th><td>{{ invoice.amount_paise|inr }}</td></tr>
   <tr><th scope="row">Tax</th><td>{{ invoice.tax_paise|inr }}</td></tr>
   <tr><th scope="row">Status</th><td>{{ invoice.status }}</td></tr>
-  <tr><th scope="row">Source file</th><td>{{ invoice.source_file or '-' }}</td></tr>
+  <tr><th scope="row">Source file</th><td>{% if invoice.source_file %}<a href="/files/{{ invoice.source_file }}">{{ invoice.source_file }}</a>{% else %}-{% endif %}</td></tr>
   <tr><th scope="row">Entered by</th><td>{{ invoice.created_by }} via {{ invoice.channel }}</td></tr>
 </table>
 
@@ -36,6 +36,16 @@
     <label for="reason">Reason (optional)</label>
     <textarea id="reason" name="reason" rows="2"></textarea>
     <button type="submit">Request approval</button>
+  </form>
+  {% endif %}
+  {% if can_attach %}
+  <form method="post" action="/invoices/{{ invoice.id }}/attach-source">
+    <label for="source_file">Source PDF</label>
+    <select id="source_file" name="source_file">
+      <option value="">Choose a file</option>
+      {% for value, text in file_options %}<option value="{{ value }}" {% if value == invoice.source_file %}selected{% endif %}>{{ text }}</option>{% endfor %}
+    </select>
+    <button type="submit">Attach source file</button>
   </form>
   {% endif %}
   {% if can_void and invoice.status in ('draft', 'pending_approval', 'approved') %}

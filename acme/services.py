@@ -14,7 +14,7 @@ import json
 import sqlite3
 from datetime import date
 
-from acme import clock, mail
+from acme import clock, files, mail
 from acme.db import row_dict, transaction
 from acme.models import ApprovalIn, DecisionIn, EmployeeIn, InvoiceIn, ItTicketIn, MailIn, PaymentIn
 from acme.permissions import allowed, role_of
@@ -176,6 +176,15 @@ def submit_invoice(
         received = data.received_date or today
         if data.tax_paise > data.amount_paise:
             raise Invalid("Tax cannot exceed the invoice total", "tax_paise")
+        # Duplicates first: an old, already-entered invoice (its due date long past) must be reported as a
+        # duplicate, not as a date problem (the T4/T7 decoys depend on the clearer answer).
+        duplicate = conn.execute(
+            "SELECT id FROM invoices WHERE vendor_id = ? AND UPPER(invoice_no) = UPPER(?) AND status != 'void'",
+            (data.vendor_id, data.invoice_no),
+        ).fetchone()
+        if duplicate:
+            raise Conflict("Duplicate invoice number for this vendor", "invoice_no")
+
         if data.invoice_date > today:
             raise Invalid("Invoice date cannot be in the future", "invoice_date")
         if data.due_date < data.invoice_date:
@@ -184,13 +193,6 @@ def submit_invoice(
             raise Invalid("Due date is in the past", "due_date")
         if received > today:
             raise Invalid("Received date cannot be in the future", "received_date")
-        duplicate = conn.execute(
-            "SELECT id FROM invoices WHERE vendor_id = ? AND UPPER(invoice_no) = UPPER(?) AND status != 'void'",
-            (data.vendor_id, data.invoice_no),
-        ).fetchone()
-        if duplicate:
-            raise Conflict("Duplicate invoice number for this vendor", "invoice_no")
-
         ts = clock.tick(conn)
         invoice = _insert(conn, ts, actor, channel, "invoice", {
             "vendor_id": data.vendor_id,
@@ -233,6 +235,26 @@ def void_invoice(conn: sqlite3.Connection, actor: str, channel: str, invoice_id:
         ts = clock.tick(conn)
         _withdraw_pending_approvals(conn, ts, actor, channel, "invoice", invoice_id, "invoice voided")
         return _update(conn, ts, actor, channel, "invoice", invoice_id, {"status": "void"}, "invoice.void")
+
+
+def attach_source_file(conn: sqlite3.Connection, actor: str, channel: str, invoice_id: int, filename: str) -> dict:
+    """Links a generated PDF to an invoice as its source file. Only the UI offers this (D-056): the agent
+    has to use the browser for it. Attaching the file that is already attached changes nothing and writes
+    no audit row (risk 3.5)."""
+    _require(actor, "invoice.attach_source")
+    _check_channel(channel)
+    if not files.exists(filename):
+        raise Invalid(f"No such file: {filename}", "source_file")
+    with transaction(conn):
+        invoice = get(conn, "invoice", invoice_id)
+        if invoice["created_by"] != actor and not _is_admin(actor):
+            raise Forbidden("Only the user who entered this invoice can attach a source file")
+        if invoice["status"] == "void":
+            raise Conflict("A void invoice cannot be changed")
+        if invoice["source_file"] == filename:
+            return invoice
+        return _update(conn, clock.tick(conn), actor, channel, "invoice", invoice_id, {"source_file": filename},
+                       "invoice.attach_source")
 
 
 # --- approvals -----------------------------------------------------------------------------------
@@ -439,6 +461,9 @@ def send_mail(conn: sqlite3.Connection, actor: str, channel: str, data: MailIn) 
     caller (N.56, N.58). The runtime gate (ORG-005, Day 3) is what holds external mail for approval."""
     _require(actor, "mail.send")
     _check_channel(channel)
+    for name in data.attachments:
+        if not files.exists(name):  # N.61: an attachment is a real generated file
+            raise Invalid(f"Attachment {name} does not exist", "attachments")
     with transaction(conn):
         allowlist = mail.load_allowlist()
         to = data.to.lower()

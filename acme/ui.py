@@ -15,13 +15,13 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, ValidationError
 
-from acme import auth, idempotency, mail, queries, services
+from acme import auth, files, idempotency, mail, queries, services
 from acme.forms import Form
 from acme.models import ApprovalIn, DecisionIn, EmployeeIn, InvoiceIn, ItTicketIn, MailIn, PaymentIn
 from acme.money import AMOUNT_HELP, format_inr
 from acme.permissions import allowed, role_of
 from acme.services import AcmeError, Forbidden, Invalid, NotFound
-from acme.web import get_conn, require_login, templates
+from acme.web import get_conn, pdf_response, require_login, templates
 
 router = APIRouter()
 FLASH_COOKIE = "acme_flash"
@@ -225,6 +225,9 @@ def invoice_detail(request: Request, invoice_id: int, conn: sqlite3.Connection =
                 payments=queries.list_payments(conn, invoice_id=invoice_id),
                 approvals=queries.approvals_for(conn, "invoice", invoice_id),
                 can_void=allowed(actor, "invoice.void") and _owns(actor, invoice["created_by"]),
+                can_attach=allowed(actor, "invoice.attach_source") and _owns(actor, invoice["created_by"])
+                and invoice["status"] != "void",
+                file_options=_same(files.available()),
                 can_request=allowed(actor, "approval.request") and invoice["status"] == "pending_approval")
 
 
@@ -237,6 +240,17 @@ def invoice_void(invoice_id: int, conn: sqlite3.Connection = Depends(get_conn),
                  actor: str = Depends(require_login)) -> Response:
     invoice = services.void_invoice(conn, actor, CHANNEL, invoice_id)
     return go(f"/invoices/{invoice_id}", f"Invoice {invoice['invoice_no']} voided.")
+
+
+@router.post("/invoices/{invoice_id}/attach-source")
+async def invoice_attach_source(request: Request, invoice_id: int, conn: sqlite3.Connection = Depends(get_conn),
+                                actor: str = Depends(require_login)) -> Response:
+    """The only way to attach a source PDF, and it exists only here: no API route does this (D-056)."""
+    form = Form(await request.form())
+    name = form.text("source_file", "Source file", max_len=100)
+    _raise_if_errors(form)
+    invoice = services.attach_source_file(conn, actor, CHANNEL, invoice_id, name)
+    return go(f"/invoices/{invoice_id}", f"Source file {invoice['source_file']} attached.")
 
 
 @router.post("/invoices/{invoice_id}/request-approval")
@@ -544,3 +558,16 @@ async def mail_send(request: Request, conn: sqlite3.Connection = Depends(get_con
 def mail_detail(request: Request, mail_id: int, conn: sqlite3.Connection = Depends(get_conn),
                 actor: str = Depends(require_login)) -> Response:
     return page(request, "mail.html", actor, mail=mail.view(services.get(conn, "mail", mail_id)))
+
+
+@router.get("/mail/{mail_id}/attachments/{name}")
+def mail_attachment(mail_id: int, name: str, conn: sqlite3.Connection = Depends(get_conn)) -> Response:
+    """Only a file that is actually attached to this message (risk N.67)."""
+    if name not in mail.view(services.get(conn, "mail", mail_id))["attachments"]:
+        raise NotFound("File not found")
+    return pdf_response(name)
+
+
+@router.get("/files/{name}")
+def file_download(name: str) -> Response:
+    return pdf_response(name)

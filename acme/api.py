@@ -15,13 +15,13 @@ import sqlite3
 from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ValidationError
 
 from acme import idempotency, mail, queries, services
 from acme.models import ApprovalIn, DecisionIn, EmployeeIn, InvoiceIn, ItTicketIn, MailIn, PaymentIn
-from acme.services import Invalid, MalformedBody, UnsupportedMediaType
-from acme.web import get_conn, require_login
+from acme.services import Invalid, MalformedBody, NotFound, UnsupportedMediaType
+from acme.web import get_conn, pdf_response, require_login
 
 router = APIRouter()
 CHANNEL = "api"
@@ -152,6 +152,18 @@ def it_ticket(ticket_id: int, conn: sqlite3.Connection = Depends(get_conn)) -> J
 def mail_list(folder: str | None = None, conn: sqlite3.Connection = Depends(get_conn)) -> JSONResponse:
     """`folder=inbox` (default) or `outbox`; summaries only, read one message for its body."""
     return ok({"items": queries.list_mail(conn, queries.valid_folder(folder))})
+
+
+@router.get("/api/mail/{mail_id}/attachments/{name}")
+def mail_attachment(mail_id: int, name: str, conn: sqlite3.Connection = Depends(get_conn)) -> Response:
+    if name not in mail.view(services.get(conn, "mail", mail_id))["attachments"]:
+        raise NotFound("File not found")
+    return pdf_response(name)
+
+
+@router.get("/api/files/{name}")
+def file_download(name: str) -> Response:
+    return pdf_response(name)
 
 
 @router.get("/api/mail/{mail_id}")

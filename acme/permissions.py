@@ -17,6 +17,7 @@ LOGIN_USERS: tuple[str, ...] = tuple(u for u in USER_ROLES if u != "system")
 ACTION_ROLES: dict[str, set[str]] = {
     "invoice.submit": {"ops_agent", "admin"},
     "invoice.void": {"ops_agent", "admin"},  # plus: creator only (checked in the service)
+    "invoice.attach_source": {"ops_agent", "admin"},  # plus: creator only (checked in the service); UI only (D-056)
     "approval.request": {"ops_agent", "admin"},
     "approval.withdraw": {"ops_agent", "admin"},  # plus: requester only
     "approval.decide": {"finance_manager", "admin"},

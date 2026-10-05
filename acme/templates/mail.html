@@ -8,7 +8,7 @@
   <dt>To</dt><dd>{{ mail.to_addr }}{% if mail.external %} (external recipient){% endif %}</dd>
   <dt>Date</dt><dd>{{ mail.ts }}</dd>
   <dt>Attachments</dt>
-  <dd>{% if mail.attachments %}{{ mail.attachments|join(', ') }}{% else %}none{% endif %}</dd>
+  <dd>{% for name in mail.attachments %}<a href="/mail/{{ mail.id }}/attachments/{{ name }}">{{ name }}</a>{% if not loop.last %}, {% endif %}{% else %}none{% endfor %}</dd>
 </dl>
 <pre class="mail-body">{{ mail.body }}</pre>
 <p><a href="/mail">Back to inbox</a></p>

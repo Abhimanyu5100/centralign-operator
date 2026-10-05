@@ -9,12 +9,13 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from fastapi import Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from acme import auth
+from acme import auth, files
 from acme.db import connect
 from acme.money import format_inr
+from acme.services import NotFound
 
 PUBLIC_PATHS = {"/login", "/api/login", "/api/logout", "/healthz"}
 
@@ -71,3 +72,12 @@ def require_login(request: Request, conn: sqlite3.Connection = Depends(get_conn)
     return check.actor
 
 
+
+
+def pdf_response(name: str) -> Response:
+    """A generated PDF as a download. Invalid and missing names get the same 404 (risk N.67)."""
+    data = files.read(name)
+    if data is None:
+        raise NotFound("File not found")
+    return Response(data, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"', "X-Content-Type-Options": "nosniff"})
