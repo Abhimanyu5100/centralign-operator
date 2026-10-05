@@ -1,0 +1,28 @@
+[project]
+name = "centralign-operator"
+version = "0.1.0"
+description = "AI operator that turns a short company request into completed, verified work inside a mock company (Acme)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "jinja2",
+    "python-multipart",
+    "pydantic>=2",
+    "reportlab",
+    "pypdf",
+    "playwright",
+    "python-dotenv",
+    "pyyaml",
+    "httpx",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

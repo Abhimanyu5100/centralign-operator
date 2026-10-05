@@ -4,8 +4,12 @@ __pycache__/
 .venv/
 .pytest_cache/
 acme/*.db
+acme/data/*.db
+acme/data/*.db-wal
+acme/data/*.db-shm
 runs/
 bench/results/raw/
 playwright-report/
 test-results/
 .DS_Store
+acme/data/*.db*
