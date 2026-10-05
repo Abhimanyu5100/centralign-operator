@@ -21,13 +21,20 @@ from pydantic import BaseModel
 
 from acme import clock
 from acme.db import transaction
-from acme.services import Conflict, Invalid
+from acme.services import AcmeError, Conflict, Invalid
 
 MAX_KEY_LENGTH = 200
 
 
 class KeyReused(Conflict):
     """The same key arrived with different data (a client bug, not a retry)."""
+    error_type = "idempotency_key_reused"
+
+
+class KeyRequired(AcmeError):
+    """`POST /api/invoices` and `POST /api/payments` without an `Idempotency-Key` header (risk N.52)."""
+    status_code = 400
+    error_type = "idempotency_key_required"
 
 
 def fingerprint(request: BaseModel | dict) -> str:

@@ -34,7 +34,9 @@ TABLES = {
 
 
 class AcmeError(Exception):
+    """Base for every expected rejection. `error_type` must be one of `web.ERROR_TYPES` (risk N.50)."""
     status_code = 400
+    error_type = "invalid_request"
 
     def __init__(self, message: str, field: str | None = None):
         super().__init__(message)
@@ -44,18 +46,39 @@ class AcmeError(Exception):
 
 class Forbidden(AcmeError):
     status_code = 403
+    error_type = "forbidden"
 
 
 class NotFound(AcmeError):
     status_code = 404
+    error_type = "not_found"
 
 
 class Conflict(AcmeError):
     status_code = 409
+    error_type = "conflict"
 
 
 class Invalid(AcmeError):
+    """A business rule or field value rejected the input."""
     status_code = 422
+    error_type = "invalid_input"
+
+
+class BadRequest(AcmeError):
+    """The request itself is malformed (bad filter value, not JSON), not a business-rule rejection."""
+    status_code = 422
+    error_type = "invalid_request"
+
+
+class MalformedBody(BadRequest):
+    """The body is not a JSON object at all (400), as opposed to a JSON object with bad fields (422)."""
+    status_code = 400
+
+
+class UnsupportedMediaType(AcmeError):
+    status_code = 415
+    error_type = "unsupported_media_type"
 
 
 # --- helpers -------------------------------------------------------------------------------------

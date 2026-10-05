@@ -13,23 +13,22 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from acme import auth, ui
+from acme import api, auth, ui
 from acme.permissions import role_of
 from acme.services import AcmeError
-from acme.web import PUBLIC_PATHS, LoginRequired, get_conn, require_login, templates
+from acme.web import PUBLIC_PATHS, LoginRequired, api_error, get_conn, require_login, templates
 
 __all__ = ["PUBLIC_PATHS", "create_app", "require_login"]
 
 
-def _error(status: int, error_type: str, detail: str) -> JSONResponse:
-    return JSONResponse({"ok": False, "error_type": error_type, "detail": detail}, status_code=status)
-
-
 def create_app(db_path: Path | str | None = None, time_fn: Callable[[], float] = time.time) -> FastAPI:
     app = FastAPI(title="Acme", dependencies=[Depends(require_login)])
+    app.include_router(api.router)
     app.include_router(ui.router)
     app.state.db_path = db_path  # None: resolved from ACME_DB / the default on every request
     app.state.time_fn = time_fn
@@ -39,15 +38,15 @@ def create_app(db_path: Path | str | None = None, time_fn: Callable[[], float] =
         if request.url.path.startswith("/api/"):  # API clients get a typed 401, never an HTML redirect
             detail = "No session; POST /api/login first." if exc.error_type == "login_required" \
                 else "Session expired or invalidated; log in again."
-            return _error(401, exc.error_type, detail)
+            return api_error(401, exc.error_type, detail)
         target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
         return RedirectResponse(f"/login?next={quote(target, safe='')}", status_code=303)
 
     @app.exception_handler(AcmeError)
-    async def acme_error(request: Request, exc: AcmeError) -> Response:
+    async def acmeapi_error(request: Request, exc: AcmeError) -> Response:
         """One mapping from service errors to responses: typed JSON for /api/, an error page for the UI."""
         if request.url.path.startswith("/api/"):
-            return _error(exc.status_code, type(exc).__name__.lower(), exc.message)
+            return api_error(exc.status_code, exc.error_type, exc.message, {"field": exc.field} if exc.field else None)
         return ui.error_page(request, exc)
 
     @app.exception_handler(RequestValidationError)
@@ -55,8 +54,23 @@ def create_app(db_path: Path | str | None = None, time_fn: Callable[[], float] =
         """A malformed path or query value (e.g. /invoices/abc): typed JSON for /api/, an error page for the UI."""
         message = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
         if request.url.path.startswith("/api/"):
-            return _error(422, "invalid_request", message)
+            return api_error(422, "invalid_request", message)
         return ui.error_page(request, status=422, message=f"Invalid request: {message}")
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(request: Request, exc: StarletteHTTPException) -> Response:
+        """Unknown route (404) or wrong method (405) under /api/ keeps the typed shape (risk N.50)."""
+        if request.url.path.startswith("/api/"):
+            error_type = "not_found" if exc.status_code == 404 else "invalid_request"
+            return api_error(exc.status_code, error_type, f"{request.method} {request.url.path}: {exc.detail}")
+        return await http_exception_handler(request, exc)
+
+    @app.exception_handler(Exception)
+    async def server_error(request: Request, exc: Exception) -> Response:
+        """Anything unexpected: the write's transaction has already rolled back. No exception text leaks."""
+        if request.url.path.startswith("/api/"):
+            return api_error(500, "server_error", "Internal server error; nothing was saved. Read back before retrying.")
+        return ui.error_page(request, status=500, message="Internal server error; nothing was saved.")
 
     def _set_cookie(response: Response, token: str) -> None:
         # No `Secure` flag: Acme runs on plain http://localhost (accepted, register row 0.11).
@@ -82,12 +96,12 @@ def create_app(db_path: Path | str | None = None, time_fn: Callable[[], float] =
             try:
                 fields = await request.json()
             except ValueError:
-                return _error(400, "invalid_request", "Body must be JSON or a form with username and password.")
+                return api_error(400, "invalid_request", "Body must be JSON or a form with username and password.")
             if not isinstance(fields, dict):
-                return _error(400, "invalid_request", "Body must be a JSON object.")
+                return api_error(400, "invalid_request", "Body must be a JSON object.")
         username, password = fields.get("username"), fields.get("password")
         if not isinstance(username, str) or not isinstance(password, str):
-            return _error(400, "invalid_request", "username and password must be strings.")
+            return api_error(400, "invalid_request", "username and password must be strings.")
 
         actor = auth.authenticate(username, password)
         if actor is None:
@@ -96,7 +110,7 @@ def create_app(db_path: Path | str | None = None, time_fn: Callable[[], float] =
                     request, "login.html",
                     {"next": auth.safe_next(fields.get("next")), "error": "Invalid username or password."},
                     status_code=401)
-            return _error(401, "invalid_credentials", "Invalid username or password.")
+            return api_error(401, "invalid_credentials", "Invalid username or password.")
 
         token = auth.create_session(conn, actor, request.app.state.time_fn())
         if is_form:

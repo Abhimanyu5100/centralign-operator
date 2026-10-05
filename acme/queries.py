@@ -4,13 +4,25 @@ Rows are plain dicts, newest id first except where a natural order is stated. Ve
 already masked in the table, so nothing here can leak a full account number (register 7.6).
 """
 
+import json
 import sqlite3
+
+from acme.services import BadRequest
 
 INVOICE_STATUSES = ["draft", "pending_approval", "approved", "rejected", "paid", "void"]
 APPROVAL_STATUSES = ["pending", "approved", "rejected", "withdrawn"]
 PAYMENT_STATUSES = ["pending_approval", "scheduled", "rejected", "cancelled", "sent"]
 EMPLOYEE_STATUSES = ["onboarding", "active", "cancelled"]
 TICKET_STATUSES = ["open", "done", "cancelled"]
+
+
+def valid_status(value: str | None, options: list[str]) -> str | None:
+    """Shared by UI and API filters, so both reject an unknown status with the same message (N.21)."""
+    if not value:
+        return None
+    if value not in options:
+        raise BadRequest(f"Unknown status {value!r}. Use one of: {', '.join(options)}", "status")
+    return value
 
 
 def _rows(conn: sqlite3.Connection, sql: str, params: tuple = ()) -> list[dict]:
@@ -86,6 +98,17 @@ def entity_label(conn: sqlite3.Connection, entity_type: str, entity_id: int) -> 
     row = conn.execute("SELECT p.id, i.invoice_no FROM payments p JOIN invoices i ON i.id = p.invoice_id "
                        "WHERE p.id = ?", (entity_id,)).fetchone()
     return f"payment #{row['id']} for {row['invoice_no']}" if row else f"payment #{entity_id}"
+
+
+def audit_since(conn: sqlite3.Connection, since: int, limit: int) -> list[dict]:
+    """Audit rows with id > since, in id order (never by timestamp: N.20), all actors. Bank fields in
+    before/after were masked when the row was written (register 7.6)."""
+    rows = _rows(conn, "SELECT * FROM audit_log WHERE id > ? ORDER BY id LIMIT ?", (since, limit))
+    for row in rows:
+        for column, key in (("before_json", "before"), ("after_json", "after")):
+            raw = row.pop(column)
+            row[key] = json.loads(raw) if raw is not None else None
+    return rows
 
 
 def _like(text: str) -> str:

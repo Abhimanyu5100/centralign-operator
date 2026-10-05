@@ -119,6 +119,50 @@ in part 6 (with the generated PDFs), each with their tests (D-056).
 - Some actions are deliberately UI-only (for example, attaching the source PDF to an invoice) so the agent
   must use both channels.
 
+Built in part 4 (D-058 to D-063):
+
+- **Read-back routes** beyond the list above: `GET /api/vendors/{id}`, `/api/approvals/{id}`,
+  `/api/payments/{id}`, `/api/employees/{id}`, `/api/it-tickets/{id}` (read-before-retry and postconditions).
+  `GET /api/invoices/{id}` also returns `vendor_name`, `approvals` and `payments`.
+- **Filters by id only:** `vendor=`, `invoice=` and `employee=` take ids. A name is resolved to an id
+  through `GET /api/vendors?q=` / `GET /api/employees?q=` first (the entity-resolution step the
+  feasibility gate depends on). An unknown `status` is 422 `invalid_request`.
+- **Response shape** for every `/api/` response: `{"ok": bool, "error_type": str | null, "detail": str,
+  "data": {...}}`. Lists are `data.items`. Field errors carry `data.field`.
+- **Bodies** must be `Content-Type: application/json` (415 otherwise; `/api/login` is exempt and also takes
+  the `/login` page's form post, D-037). They are validated strictly: no `true` for an id, no `"6240000"`
+  or `6240000.0` for paise, no unknown fields (a body `actor` is 422). A body that is not a JSON object is
+  400. Identity comes only from the session cookie; `actor` query parameters and `X-User`-style headers
+  are ignored.
+- **Idempotency:** `POST /api/invoices` and `POST /api/payments` without an `Idempotency-Key` are 400
+  `idempotency_key_required` before any write. A retry with the same key and body returns the original
+  status and body (not current state) with header `Idempotent-Replayed: true`; the same key with a
+  different body is 409 `idempotency_key_reused`. Keys are scoped by user and endpoint and share one store
+  with the UI form tokens (D-054), so the two can never collide. The store is cleared by reset.
+- **Audit:** `GET /api/audit?since=<audit id>&limit=` returns entries with id > `since` in id order, every
+  actor (including `system`), bank fields masked. `limit` defaults to 500 (max 1000); page with
+  `data.next_since` while `data.has_more` is true. Readable by every logged-in role.
+- **Undo twice** (e.g. voiding a void invoice) is 409 `conflict` with the current status in `detail`.
+- **Mail endpoints** (`GET /api/mail`, `POST /api/mail/send`) are built in part 5 with the mailbox.
+
+`error_type` values (one constant, `acme/web.py` `ERROR_TYPES`; stable from Day 1.4 because the Day 2
+failure classifier keys off them):
+
+| error_type | HTTP | Meaning |
+| --- | --- | --- |
+| `invalid_request` | 400 / 405 / 422 | Malformed request: body not a JSON object, bad query or path value, unknown status filter, wrong method |
+| `invalid_input` | 422 | A field value or business rule rejected the input (`data.field` names the field) |
+| `not_found` | 404 | The entity or the route does not exist |
+| `forbidden` | 403 | Role or ownership check failed |
+| `conflict` | 409 | Current state does not allow it: duplicate, wrong status, undo twice |
+| `idempotency_key_required` | 400 | Invoice or payment write without an `Idempotency-Key` header |
+| `idempotency_key_reused` | 409 | The same key with a different body |
+| `unsupported_media_type` | 415 | A write with a body that is not `application/json` |
+| `login_required` | 401 | No session cookie |
+| `session_expired` | 401 | Cookie unknown, revoked, wiped by reset or past its expiry |
+| `invalid_credentials` | 401 | Wrong username or password |
+| `server_error` | 500 | Unexpected failure; the write was rolled back; read back before retrying |
+
 ## Mailbox
 
 Seeded messages in `acme/data/inbox/*.json` (from, to, subject, body, received_at, attachments[]),

@@ -122,14 +122,6 @@ def _filter_id(value: str | None, label: str) -> int | None:
     return int(value)
 
 
-def _filter_status(value: str | None, options: list[str]) -> str | None:
-    if not value:
-        return None
-    if value not in options:
-        raise Invalid(f"Unknown status {value!r}. Use one of: {', '.join(options)}")
-    return value
-
-
 def _same(values: list[str]) -> list[tuple[str, str]]:
     return [(v, v) for v in values]
 
@@ -175,7 +167,7 @@ INVOICE_FIELD_MAP = {"amount_paise": "amount", "tax_paise": "tax"}  # model/serv
 def invoices(request: Request, vendor: str | None = None, status: str | None = None,
              conn: sqlite3.Connection = Depends(get_conn), actor: str = Depends(require_login)) -> Response:
     vendor_id = _filter_id(vendor, "Vendor")
-    status = _filter_status(status, queries.INVOICE_STATUSES)
+    status = queries.valid_status(status, queries.INVOICE_STATUSES)
     return page(request, "invoices.html", actor, rows=queries.list_invoices(conn, vendor_id, status),
                 vendor_options=_vendor_options(conn), status_options=_same(queries.INVOICE_STATUSES),
                 vendor=vendor_id, status=status)
@@ -268,7 +260,7 @@ async def _request_approval(request, conn, actor, entity_type: str, entity_id: i
 @router.get("/approvals")
 def approvals(request: Request, status: str | None = None, conn: sqlite3.Connection = Depends(get_conn),
               actor: str = Depends(require_login)) -> Response:
-    status = _filter_status(status, queries.APPROVAL_STATUSES)
+    status = queries.valid_status(status, queries.APPROVAL_STATUSES)
     return page(request, "approvals.html", actor, rows=queries.list_approvals(conn, status),
                 status_options=_same(queries.APPROVAL_STATUSES), status=status)
 
@@ -311,7 +303,7 @@ PAYMENT_FIELDS = {"invoice_id", "scheduled_date"}
 @router.get("/payments")
 def payments(request: Request, status: str | None = None, conn: sqlite3.Connection = Depends(get_conn),
              actor: str = Depends(require_login)) -> Response:
-    status = _filter_status(status, queries.PAYMENT_STATUSES)
+    status = queries.valid_status(status, queries.PAYMENT_STATUSES)
     return page(request, "payments.html", actor, rows=queries.list_payments(conn, status=status),
                 status_options=_same(queries.PAYMENT_STATUSES), status=status)
 
