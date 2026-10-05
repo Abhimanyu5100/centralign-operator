@@ -53,8 +53,8 @@ undo); reads via any channel, writes via the audited channel.
   https://arxiv.org/abs/2506.04614
 - **Agent S3 / Behavior Best-of-N**: behavior narratives (what was done, what changed) as the unit of
   judgement. https://arxiv.org/abs/2510.02250
-→ We build: postconditions → milestone predicates (different channel) → side-effect DB diff →
-fresh-context judge listing unmet criteria. Verifier owns status.
+→ We build: postconditions → milestone predicates (different channel) → side-effect check over Acme's
+audit log since run start → fresh-context judge listing unmet criteria. Verifier owns status.
 
 ## Reliability and recovery
 - **τ-bench** (ICLR 2025): policy docs + state-checked success; **pass^k** — GPT-4o ≈ 61% pass^1 retail,
