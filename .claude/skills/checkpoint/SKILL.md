@@ -8,6 +8,16 @@ description: End-of-part checkpoint - update docs/progress.md (Now section, RESU
 Rules live in `CLAUDE.md` (standing rules, "Git and commits"). **Never run `git commit` or
 `git push`.**
 
+## First: sync the Done log with git
+
+Before anything else, so `docs/progress.md` never lags behind git:
+
+1. `git log --format='%h %s'`
+2. For each Done-log row whose Commit cell is `pending`, find commits whose subject starts with
+   `Day <day>.<part>:` for that row's day.part (e.g. `Day 1.2:` for row `1.2`).
+3. Exactly one match: replace `pending` with its short hash. No match or several matches: leave
+   `pending` and list the row under "Anything not done" in the report. Never guess.
+
 ## Gather
 
 - `git status --short`, `git diff --stat`, `git log --oneline -5`
@@ -21,8 +31,7 @@ Rules live in `CLAUDE.md` (standing rules, "Git and commits"). **Never run `git 
    must start with "Read CLAUDE.md and docs/progress.md", name the next part, and end with "Do not
    commit or push."
 2. **Done log**: add one row `| date | day.part | what was built | files | tests (pass/fail with counts)
-   | pending |`. For earlier rows marked `pending`, fill in the hash if `git log` shows they were
-   committed (git wins).
+   | pending |`. (Earlier `pending` rows were already synced in the first step.)
 3. **Blockers and open questions**: add new ones; remove resolved ones.
 4. **Deviations from spec**: add any place this part's code differs from `docs/acme-spec.md` or
    `CLAUDE.md`, with the reason.
