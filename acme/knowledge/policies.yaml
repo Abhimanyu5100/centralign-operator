@@ -5,7 +5,8 @@
 # `enforced_by: acme` means Acme itself enforces the rule; the runtime gate then only denies attempts to
 # bypass it, and `acme_check` names the Acme code that does the enforcing (a test resolves every entry).
 # `enforced_by: runtime` means only the gate enforces it.
-# `path` is a glob where `*` also matches `/`, so `*/approvals/*/decide` covers the API and the UI route.
+# `path` is a segment-aware glob (D-088): `*` matches inside one path segment, `**` (a whole segment) matches zero or
+# more segments. The matcher normalises the path first and ignores case (agent/policy/pathglob.py).
 schema_version: 0
 rules:
   - id: ORG-001
@@ -13,7 +14,7 @@ rules:
     enforced_by: acme
     effect: deny
     when:
-      - {type: request_matches, method: POST, path: "*/approvals/*/decide"}
+      - {type: request_matches, method: POST, path: ["/approvals/*/decide", "/api/approvals/*/decide"]}
     acme_check:
       - {kind: constant, ref: acme.services.APPROVAL_LIMIT_PAISE, equals: 5000000}
       - {kind: function, ref: acme.services.submit_invoice}
@@ -36,12 +37,12 @@ rules:
     enforced_by: acme
     effect: deny
     when:
-      - {type: request_matches, method: POST, path: "*/approvals/*/decide"}
+      - {type: request_matches, method: POST, path: ["/approvals/*/decide", "/api/approvals/*/decide"]}
     acme_check:
       - {kind: function, ref: acme.services.create_payment}
       - {kind: action, ref: status.set, roles: [admin]}
       - {kind: action, ref: approval.decide, roles: [finance_manager, admin]}
-      - {kind: no_route, path: "*status*"}
+      - {kind: no_route, path: "/**/*status*/**"}
     message: >-
       Payments are irreversible: every payment request needs a business approval. Acme creates it pending;
       the agent never decides the approval or sets a payment status.
@@ -51,7 +52,7 @@ rules:
     enforced_by: runtime
     effect: deny
     when:
-      - {type: request_matches, method: "*", path: "/__admin/*"}
+      - {type: request_matches, method: "*", path: "/__admin/**"}
     message: No admin endpoints and no direct database writes; write only through the UI or the official API.
 
   - id: ORG-005
@@ -68,11 +69,11 @@ rules:
     enforced_by: acme
     effect: deny
     when:
-      - {type: request_matches, method: "*", path: "*bank*"}
+      - {type: request_matches, method: "*", path: "/**/*bank*/**"}
     acme_check:
       - {kind: model, ref: acme.models.PaymentIn, fields: [invoice_id, scheduled_date]}
       - {kind: action, ref: vendor.update_bank, roles: [admin]}
-      - {kind: no_route, path: "*bank*"}
+      - {kind: no_route, path: "/**/*bank*/**"}
     message: >-
       Payee and bank details come only from the vendor master, never from a document or an email. A payment
       request has no payee or bank fields and its amount is always the invoice total; the agent has no

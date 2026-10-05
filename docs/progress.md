@@ -5,34 +5,42 @@ If this file disagrees with git, git wins for what is committed.
 
 ## Now
 
-- **Last updated:** 2026-10-06 02:31 IST
-- **Day / phase / part:** Day 1 (Phase A), part 7 done (not yet committed) → part 8 next
-- **Currently doing:** waiting for author review of Day 1.7 (including the loader hardening, D-082)
-- **Next step:** Day 1 part 8, admin endpoints: `POST /__admin/reset?seed=&now=`, `POST /__admin/snapshot`,
-  `GET /__admin/state_hash`, `GET /__admin/diff?since=`, `POST /__admin/chaos`, `GET /__admin/chaos`, all behind
-  `ACME_ADMIN_TOKEN` (D-039, N.23, N.30), per `docs/acme-spec.md` "Admin endpoints". Then part 9: the five Day 1
-  chaos profiles; part 10: task YAMLs T1-T9 with frozen `now`, SQL checkers and checker tests. (This list replaces
-  the part list in SETUP.md, which is no longer the reference.)
+- **Last updated:** 2026-10-06 02:52 IST
+- **Day / phase / part:** Day 1 (Phase A), part 8 done (not yet committed) → part 9 next
+- **Currently doing:** waiting for author review of Day 1.8 (admin endpoints, ORG-002 in Acme, segment-aware path globs)
+- **Next step:** Day 1 part 9, the five Day 1 chaos profiles wired into `_write` and the UI (`rename_submit_button`,
+  `session_expiry_at_step_N`, `flaky_500`, `commit_then_timeout`, `silent_drop_write`), reading the profile that
+  `/__admin/chaos` now stores (`acme/chaos.py`). Then part 10: task YAMLs T1-T9 with frozen `now`, SQL checkers and
+  checker tests.
 - **Carried over:**
+  - **Part 9:** one effect test per profile, plus an inventory test that fails if a profile in `chaos.PROFILES` (or the
+    `session_expiry_at_step_N` pattern) has no effect test; add each name to `chaos.WIRED_PROFILES` when built (N.98).
+  - **Day 2:** (D-085) a test that no agent tool touches the database and the code tool's sandbox cannot reach
+    `acme/data` (ORG-004's database half, N.82b); and a test that the agent's tool environment has no
+    `ACME_ADMIN_TOKEN` (N.92).
+  - **Day 3 gate:** the evaluator must call `agent/policy/pathglob.path_matches` for `request_matches` (D-088, D-092),
+    collect every matching rule, apply the strictest effect and log every matching policy ID (D-087); ORG-004 must
+    catch `//__admin/reset`, `/api/../__admin/reset`, `/%5F%5Fadmin/reset`, `/__ADMIN/reset`, `/__admin/reset?x=1`.
+  - **Day 3 adversarial:** `t6_bad_transfer` expects Acme's 422 plus the scanner finding, not a gate deny (D-086).
   - Day 3: the ORG-005 gate reads `acme/knowledge/mail_allowlist.yaml` (D-064) and a negative test shows an
     allowlisted recipient needs no action approval (D-069).
   - Day 3: a no-SOP request proving the approve-every-write fallback (1.3, D-081).
-  - Day 3 gate design: the open questions in N.82 (ORG-002 for payments, ORG-004's database half, the
-    `t6_bad_transfer` expectation, ORG-001/003 sharing one condition), the general provenance rule ORG-007
-    (`field_source_untrusted`), and the evaluator with near-miss path tests (N.83).
+  - Day 3: the general provenance rule ORG-007 (`field_source_untrusted`).
   - Day 3: the evaluator reads the allowlist with `PolicyFile.allowlist(name)`, never from disk (D-082).
   - Day 2: if a `tool_in` rule is ever added, add the registry-name test with it (N.77).
   - `iyer_INV-3301.pdf` stays unreferenced by T1-T9 (Phase B stretch).
 - **RESUME PROMPT:**
   ```
-  Read CLAUDE.md and docs/progress.md, then docs/acme-spec.md. Day 1 parts 1 to 7 are done (service layer
-  in acme/services.py; login in acme/auth.py; web plumbing in acme/web.py; UI in acme/ui.py; JSON API in
-  acme/api.py; idempotency in acme/idempotency.py; reads in acme/queries.py; mailbox in acme/mail.py; PDFs
-  via acme/pdfs.py; knowledge in acme/knowledge/: four SOPs in sops/, policies.yaml (DRAFT, schema in
-  agent/policy/models.py, strict loader in loader.py), mail_allowlist.yaml; `make test` is the fast suite).
-  Build Day 1 part 8, the admin endpoints (reset, snapshot, state_hash, diff, chaos) behind ACME_ADMIN_TOKEN,
-  per docs/acme-spec.md; parts 9 (five chaos profiles) and 10 (task YAMLs T1-T9, SQL checkers, checker tests)
-  follow. Show the risk table first, stop after the part, and run /checkpoint. Do not commit or push.
+  Read CLAUDE.md and docs/progress.md, then docs/acme-spec.md. Day 1 parts 1 to 8 are done (service layer
+  in acme/services.py; login in acme/auth.py; web plumbing and the admin token rule in acme/web.py; UI in
+  acme/ui.py; JSON API in acme/api.py; idempotency in acme/idempotency.py; reads in acme/queries.py; mailbox in
+  acme/mail.py; PDFs via acme/pdfs.py; admin endpoints in acme/admin.py; chaos registry and stored profile in
+  acme/chaos.py (nothing consumes it yet); knowledge in acme/knowledge/; policy schema, strict loader and the
+  path-glob matcher in agent/policy/; `make test` is the fast suite). Build Day 1 part 9: wire the five Day 1
+  chaos profiles into Acme (rename_submit_button, session_expiry_at_step_N, flaky_500, commit_then_timeout,
+  silent_drop_write), set through POST /__admin/chaos (needs ACME_ADMIN_TOKEN), add each to chaos.WIRED_PROFILES,
+  with one effect test per profile and an inventory test. Part 10 (task YAMLs T1-T9, SQL checkers, checker tests)
+  follows. Show the risk table first, stop after the part, and run /checkpoint. Do not commit or push.
   ```
 
 ## Done log
@@ -49,7 +57,8 @@ If this file disagrees with git, git wins for what is committed.
 | 2026-10-06 | 1.4 | JSON API: reads incl. by-id read-back routes, writes through one `_write` helper (strict JSON bodies, 415 for non-JSON, `Idempotency-Key` on invoices/payments via the shared store with replay header), approval requests and decisions, undo endpoints, `GET /api/audit?since=` with paging; fixed `ERROR_TYPES` list incl. `server_error`, typed 404/405/422/500 under `/api/`; shared filter validation; UI/API parity and concurrent-write tests (carried over from 1.3); decisions D-058 to D-063; risks N.50 to N.55 added and tested, N.21 and N.25 tested | `acme/api.py`, `acme/{app,web,services,idempotency,queries,ui}.py`, `tests/acme/{test_api,conftest,test_ui}.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 276 passed, 0 failed (`make test-e2e`: none collected); API tests mutation-checked (6 mutants caught); race tests stable over 6 repeats; curl walk against `make acme` verified | 5320b80 |
 | 2026-10-06 | 1.5 | Mailbox: allowlist in `acme/knowledge/mail_allowlist.yaml` (single source for the `external` flag and the Day 3 ORG-005 check, fails closed); `acme/mail.py`; `services.send_mail` (computed `external`, session sender, audited, no undo); seed inbox from 9 JSON files (6 task invoices + 2 older, HR offer email without start date); `GET /api/mail`, `GET /api/mail/{id}`, `POST /api/mail/send` (idempotency key); `/mail`, `/mail/{id}`, `/mail/compose` pages; decisions D-064 to D-069; risks N.56 to N.64 tested | `acme/{mail,models,permissions,services,queries,api,ui,seed}.py`, `acme/knowledge/mail_allowlist.yaml`, `acme/data/inbox/*.json`, `acme/templates/{mails,mail,mail_form,base}.html`, `tests/acme/{test_mail,test_ui,test_api,test_services}.py`, `docs/*` | `make test`: 381 passed, 0 failed (`make test-e2e`: none collected); curl walk against a live server verified | e75d3b2 |
 | 2026-10-06 | 1.6 | Generated PDFs (13: seeded history, the six task invoices, one scanned) from one fact table in `acme/seed.py`, byte-identical reportlab invariant output, committed with `MANIFEST.sha256`; `acme/files.py` and four download routes; UI-only attach-source action; `send_mail` refuses missing attachments; duplicate check before date rules; decisions D-070 to D-076; risks N.65 to N.70 tested | `acme/{pdfs,files,seed,services,permissions,web,ui,api}.py`, `acme/templates/{invoice,mail}.html`, `acme/data/files/*`, `Makefile`, `tests/acme/test_pdfs.py`, `docs/*` | `make test`: 473 passed, 0 failed (91 new); mutation check on the file listing failed the symlink test as expected; curl against a live server: 200 pdf, traversal 404 | 8debb73 |
-| 2026-10-06 | 1.7 | Company knowledge: four SOPs (process-invoice, onboard-employee, schedule-payment, notify-vendor) with stable step IDs and a documented format; `policies.yaml` ORG-001 to ORG-006 (DRAFT, schema v0); policy schema and strict loader in `agent/policy/` (six condition types incl. `request_matches`, five `acme_check` kinds, deny/require_approval only); SOP parser as the planner contract; ORG-006 pinned inside Acme (no payment amount, payee or bank field, no bank route); register 1.3 and acme-spec updated | `acme/knowledge/sops/*`, `acme/knowledge/policies.yaml`, `acme/mail.py` (one word: `fullmatch`), `agent/__init__.py`, `agent/policy/{__init__,models,loader}.py`, `tests/policy/*` (incl. `test_loader.py`), `tests/acme/{sop_format,test_knowledge,test_payment_amount}.py`, `docs/{acme-spec,decisions,failure-register,risk-log,progress}.md` | `make test`: 712 passed (new: 167 in `tests/policy`, 63 in `test_knowledge.py`, 9 in `test_payment_amount.py`); mutation-checked (wrong limit, widened role set, wrong model fields, missing allowlist, planted vendor leak, bad route, bad policy ID, duplicate step ID, and ten loader mutations all fail); review fixes D-082 and D-083 included | pending |
+| 2026-10-06 | 1.7 | Company knowledge: four SOPs (process-invoice, onboard-employee, schedule-payment, notify-vendor) with stable step IDs and a documented format; `policies.yaml` ORG-001 to ORG-006 (DRAFT, schema v0); policy schema and strict loader in `agent/policy/` (six condition types incl. `request_matches`, five `acme_check` kinds, deny/require_approval only); SOP parser as the planner contract; ORG-006 pinned inside Acme (no payment amount, payee or bank field, no bank route); register 1.3 and acme-spec updated | `acme/knowledge/sops/*`, `acme/knowledge/policies.yaml`, `acme/mail.py` (one word: `fullmatch`), `agent/__init__.py`, `agent/policy/{__init__,models,loader}.py`, `tests/policy/*` (incl. `test_loader.py`), `tests/acme/{sop_format,test_knowledge,test_payment_amount}.py`, `docs/{acme-spec,decisions,failure-register,risk-log,progress}.md` | `make test`: 712 passed (new: 167 in `tests/policy`, 63 in `test_knowledge.py`, 9 in `test_payment_amount.py`); mutation-checked (wrong limit, widened role set, wrong model fields, missing allowlist, planted vendor leak, bad route, bad policy ID, duplicate step ID, and ten loader mutations all fail); review fixes D-082 and D-083 included | 077edb2 |
+| 2026-10-06 | 1.8 | Admin endpoints behind `X-Admin-Token` (one check in `require_login` for the whole `/__admin` prefix; unset env closes them): reset (seed, now), snapshot, state_hash, diff (row-level, id order, entity tables only), chaos get/set with a stored profile and `wired` flag; snapshots and chaos tables dropped by reset; ORG-002 inside Acme for payments (create refuses, approve refuses, reject allowed); segment-aware `agent/policy/pathglob.py` with path normalisation (decode once, collapse slashes, reject `.`/`..`, case-insensitive, invalid path fails closed) and the policy rules rewritten to it; masking fix (last four digits only above eight digits); typed JSON errors on `/__admin`; decisions D-084 to D-093; risks N.82 and N.83 closed, N.90 to N.101 added | `acme/{admin,chaos,web,app,db,services}.py`, `agent/policy/{pathglob,models}.py`, `acme/knowledge/policies.yaml`, `.env.example`, `Makefile`, `tests/acme/{test_admin,test_org002_payments,test_auth}.py`, `tests/policy/{test_pathglob,acme_checks,test_policies_file,test_schema}.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 891 passed, 0 failed (179 new: 70 admin, 13 ORG-002, 96 pathglob); ten mutations (token guard, prefix guard, both ORG-002 checks, mask, snapshot ids, drop of the new tables, three matcher changes) all killed; curl walk against a live server verified; seed hashes and MANIFEST.sha256 unchanged | pending |
 
 ## Blockers and open questions
 
@@ -65,6 +74,12 @@ If this file disagrees with git, git wins for what is committed.
   Harmless for now; revisit if it becomes an error on a Starlette upgrade.
 - Dev-only default passwords live in `acme/auth.py` (overridable by env); fine for the sandbox, to be
   listed in the README limitations with CSRF and the missing `Secure` flag (D-046).
+
+- **Author to confirm (part 8):** rejecting a payment whose vendor is no longer approved is still allowed; only
+  approving is refused (D-091). A 409 `conflict` with `ORG-002` in the detail is used for the refusal because
+  `ERROR_TYPES` is frozen (D-058); the Day 2 classifier must key off the policy ID.
+- **Starting the server for the harness:** `export ACME_ADMIN_TOKEN=...` before `make acme`; unset means every
+  admin route is 403.
 
 ## Deviations from spec
 
@@ -156,3 +171,20 @@ Day 1.7 (decisions D-077 to D-081; awaiting author review):
   `schema_version` must be the plain integer 0. The review had wrongly said `false` was rejected (N.84).
 - **`acme/mail.py` touched in part 7:** the allowlist domain check uses `fullmatch` (D-083, N.88). A symlinked
   `acme/knowledge/` is accepted on purpose (N.89).
+
+Day 1.8 (decisions D-084 to D-093; awaiting author review):
+
+- **Admin routes accept a token, not a session** (`X-Admin-Token`), one rule in `require_login` for the `/__admin`
+  prefix (D-089). The spec did not say how the token is sent.
+- **Admin responses use the API shape and error types** (D-089); the diff reports only changed tables, and `meta`
+  rows are excluded, with `now` reported top-level (D-090). The spec said "row-level before/after per table".
+- **Snapshots and chaos are tables dropped by reset**, so reset clears the chaos profile (D-090).
+- **Chaos profile `wired` flag:** the set response says `wired: false` until part 9 (N.98).
+- **ORG-002 reaches payments in Acme**, both on creation and on approval; the policy file keeps ORG-002 as one
+  `runtime` rule and the spec table says so (D-091). Spec said ORG-002 is a runtime rule only.
+- **Path globs changed meaning** (D-088, D-092): `*` no longer crosses `/`; rules ORG-001, 003, 004 and 006 and the
+  `no_route` checks were rewritten (`/__admin/**`, `/**/*bank*/**`); a malformed glob is now a load error; matching
+  is case-insensitive for every rule; an invalid path matches every glob.
+- **`t6_bad_transfer` expectation changed** in the spec table: Acme's 422 plus the scanner finding (D-086).
+- **`_mask_account` changed** (D-093): short numbers are fully hidden.
+- **No `create_payment_request`**: the check lives in `services.create_payment` (the function's real name).

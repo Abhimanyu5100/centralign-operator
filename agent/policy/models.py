@@ -12,7 +12,10 @@ This module is data only. The evaluator (Day 3) reads these models; it does not 
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, StringConstraints, field_validator, model_validator
+from pydantic import (AfterValidator, BaseModel, ConfigDict, Field, PrivateAttr, StringConstraints, field_validator,
+                      model_validator)
+
+from agent.policy.pathglob import check_glob
 
 
 class _Strict(BaseModel):
@@ -21,7 +24,7 @@ class _Strict(BaseModel):
 
 
 Name = Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$", max_length=60)]
-Glob = Annotated[str, StringConstraints(pattern=r"^[/*]\S*$", max_length=200)]  # fnmatch glob; `*` also matches `/`
+Glob = Annotated[str, StringConstraints(max_length=200), AfterValidator(check_glob)]  # segment-aware, see pathglob.py
 KnowledgeFile = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]+\.yaml$")]  # bare name, no directories
 DottedRef = Annotated[str, StringConstraints(pattern=r"^[A-Za-z_][\w]*(\.[A-Za-z_][\w]*)+$")]
 
@@ -37,7 +40,8 @@ class ToolIn(_Strict):
 
 class RequestMatches(_Strict):
     """The call is an HTTP request whose method and path match. `method` is one verb or `*`; `path` is a
-    glob (or a list of globs, any of which may match) in which `*` matches any characters including `/`."""
+    glob (or a list of globs, any of which may match). `*` matches inside one path segment, `**` (a whole
+    segment) matches zero or more segments (D-088); see agent/policy/pathglob.py for how paths are normalised."""
     type: Literal["request_matches"]
     method: Literal["*", "GET", "POST", "PUT", "PATCH", "DELETE"]
     path: Glob | Annotated[list[Glob], Field(min_length=1)]
@@ -114,7 +118,7 @@ class ModelCheck(_Strict):
 
 
 class NoRouteCheck(_Strict):
-    """No route in Acme's app (any method) matches this glob."""
+    """No route in Acme's app (any method) matches this glob (same segment-aware matcher as `request_matches`)."""
     kind: Literal["no_route"]
     path: Glob
 

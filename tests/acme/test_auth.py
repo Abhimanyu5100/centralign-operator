@@ -13,6 +13,7 @@ from acme.app import PUBLIC_PATHS, create_app, require_login
 from acme.db import connect
 from acme.models import ApprovalIn, DecisionIn
 from acme.seed import reset, state_hash
+from acme.web import is_admin_path
 from tests.acme.test_services import invoice_in
 
 
@@ -169,7 +170,7 @@ def test_every_non_public_route_requires_login(app, client):
     (those sit inside an `_IncludedRouter` that `app.routes` does not expand). Path parameters get a sample value."""
     probed = []
     for template, methods in app.openapi()["paths"].items():
-        if template in PUBLIC_PATHS:
+        if template in PUBLIC_PATHS or is_admin_path(template):  # admin routes: token rule, tests/acme/test_admin.py
             continue
         path = re.sub(r"\{[^}]+\}", "1", template)
         for method in methods:

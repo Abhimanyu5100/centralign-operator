@@ -4,7 +4,7 @@ NOW ?= 2026-10-07T10:30:00+05:30
 
 .PHONY: acme reset pdfs test test-e2e
 
-acme:  ## make sure the PDFs exist, reset to SEED at NOW, then serve Acme on http://localhost:8000 (one worker: SQLite + logical clock)
+acme:  ## (export ACME_ADMIN_TOKEN first to enable /__admin/*; unset = closed) make sure the PDFs exist, reset to SEED at NOW, then serve Acme on http://localhost:8000 (one worker: SQLite + logical clock)
 	uv run python -m acme.pdfs
 	uv run python -m acme.seed --seed $(SEED) --now $(NOW)
 	uv run uvicorn --factory acme.app:create_app --host 127.0.0.1 --port 8000

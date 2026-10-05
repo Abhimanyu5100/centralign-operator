@@ -35,7 +35,7 @@ ACME_CHECKS = {
     "action": {"kind": "action", "ref": "approval.decide", "roles": ["admin"]},
     "function": {"kind": "function", "ref": "acme.services.submit_invoice"},
     "model": {"kind": "model", "ref": "acme.models.PaymentIn", "fields": ["invoice_id"]},
-    "no_route": {"kind": "no_route", "path": "*bank*"},
+    "no_route": {"kind": "no_route", "path": "/**/*bank*/**"},
 }
 BAD_ACME_CHECKS = {  # every kind also rejects an unknown key (extra=forbid on nested models)
     "constant": [{"ref": "no_dots"}, {"equals": 1.5}, {"equals": True}, {"extra": 1}],
@@ -88,9 +88,9 @@ def test_each_condition_type_needs_all_its_fields(ctype):
 
 
 def test_request_matches_takes_one_glob_or_a_list_and_any_method():
-    one = valid(policy(rule(when=[{"type": "request_matches", "method": "*", "path": "/__admin/*"}])))
-    many = valid(policy(rule(when=[{"type": "request_matches", "method": "POST", "path": ["/a", "*/b"]}])))
-    assert one.rules[0].when[0].paths == ["/__admin/*"] and many.rules[0].when[0].paths == ["/a", "*/b"]
+    one = valid(policy(rule(when=[{"type": "request_matches", "method": "*", "path": "/__admin/**"}])))
+    many = valid(policy(rule(when=[{"type": "request_matches", "method": "POST", "path": ["/a", "/*/b"]}])))
+    assert one.rules[0].when[0].paths == ["/__admin/**"] and many.rules[0].when[0].paths == ["/a", "/*/b"]
 
 
 def test_an_unknown_condition_type_fails_closed():

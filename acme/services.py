@@ -114,8 +114,10 @@ def _masked(row: dict | None) -> dict | None:
 
 
 def _mask_account(value: str) -> str:
-    digits = value[-4:]
-    return "X" * max(len(value) - 4, 4) + digits
+    """Keep the last four digits only when the number is longer than eight; a short number is fully hidden."""
+    if len(value) > 8:
+        return "X" * (len(value) - 4) + value[-4:]
+    return "X" * max(len(value), 4)
 
 
 def _audit(conn, ts, actor, channel, action, entity_type, entity_id, before, after, reason=None) -> None:
@@ -299,8 +301,11 @@ def decide_approval(conn: sqlite3.Connection, actor: str, channel: str, approval
         if entity["status"] != "pending_approval":
             raise Conflict(f"{entity_type.capitalize()} {entity['id']} is no longer pending approval")
 
-        ts = clock.tick(conn)
         approved = data.decision == "approve"
+        if approved and entity_type == "payment":  # rejecting stays possible: it is the safe direction
+            _require_approved_vendor(conn, get(conn, "invoice", entity["invoice_id"]),
+                                     f"payment {entity['id']} cannot be approved; reject it instead")
+        ts = clock.tick(conn)
         if entity_type == "invoice":
             new_status = "approved" if approved else "rejected"
         else:
@@ -331,6 +336,14 @@ def withdraw_approval(conn: sqlite3.Connection, actor: str, channel: str, approv
 # --- payments ------------------------------------------------------------------------------------
 
 
+def _require_approved_vendor(conn: sqlite3.Connection, invoice: dict, what: str, field: str | None = None) -> None:
+    """ORG-002 for payments: Acme refuses `what` when the invoice's vendor is not approved (D-084).
+    The invoice-entry half of ORG-002 is a runtime gate rule; a payment request has no vendor field to match."""
+    vendor = get(conn, "vendor", invoice["vendor_id"])
+    if vendor["status"] != "approved":
+        raise Conflict(f"ORG-002: {what}; vendor {vendor['name']} is {vendor['status']}, not approved", field)
+
+
 def create_payment(conn: sqlite3.Connection, actor: str, channel: str, data: PaymentIn) -> dict:
     """Payment request for an approved invoice. Payee and bank account come from the vendor master
     by construction: the request has no payee or bank fields (ORG-006)."""
@@ -343,6 +356,7 @@ def create_payment(conn: sqlite3.Connection, actor: str, channel: str, data: Pay
                 f"Payment can only be requested for an approved invoice (current status: {invoice['status']})",
                 "invoice_id",
             )
+        _require_approved_vendor(conn, invoice, "a payment request cannot be created", "invoice_id")
         active = conn.execute(
             "SELECT id FROM payments WHERE invoice_id = ? AND status IN ('pending_approval', 'scheduled', 'sent')",
             (data.invoice_id,),

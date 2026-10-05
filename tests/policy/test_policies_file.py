@@ -41,13 +41,13 @@ def test_every_acme_rule_maps_to_checks_that_exist_in_acme(rule_id, app):
 
 def test_org_004_denies_every_method_on_admin_paths():
     (cond,) = RULES["ORG-004"].when
-    assert isinstance(cond, RequestMatches) and (cond.method, cond.paths) == ("*", ["/__admin/*"])
+    assert isinstance(cond, RequestMatches) and (cond.method, cond.paths) == ("*", ["/__admin/**"])
 
 
 def test_org_001_and_003_deny_a_post_on_both_approval_decide_routes():
     for rule_id in ("ORG-001", "ORG-003"):
         (cond,) = RULES[rule_id].when
-        assert (cond.method, cond.paths) == ("POST", ["*/approvals/*/decide"])
+        assert (cond.method, cond.paths) == ("POST", ["/approvals/*/decide", "/api/approvals/*/decide"])
 
 
 def test_org_005_reads_the_shared_allowlist_file_and_keeps_no_domain_list():
@@ -79,7 +79,7 @@ KINDS = dict(constant=ConstantCheck, action=ActionCheck, function=FunctionCheck,
     ("action", dict(ref="vendor.update_bank", roles=["ops_agent", "admin"])),
     ("action", dict(ref="no.such_action", roles=["admin"])),
     ("model", dict(ref="acme.models.PaymentIn", fields=["invoice_id"])),
-    ("no_route", dict(path="*/payments*")),
+    ("no_route", dict(path="/**/payments*/**")),
 ])
 def test_a_wrong_acme_check_fails(kind, fields, app):
     with pytest.raises(AssertionError):

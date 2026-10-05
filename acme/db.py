@@ -14,7 +14,8 @@ DEFAULT_DB_PATH = Path(__file__).parent / "data" / "acme.db"
 
 # Entity tables in dependency order. `state_hash` and `/__admin/diff` cover exactly these plus `meta`.
 # `sessions` and `idempotency_keys` are deliberately not listed: logging in or replaying a key must not
-# change the state hash or the diff (risks N.32, N.45). Both are dropped by reset.
+# change the state hash or the diff (risks N.32, N.45). Both are dropped by reset. So are the harness tables
+# `snapshots` and `chaos` (part 8): they are not company state either (N.93, N.97).
 ENTITY_TABLES = ["vendors", "employees", "invoices", "approvals", "payments", "it_tickets", "mail", "audit_log"]
 
 SCHEMA = [
@@ -119,6 +120,17 @@ SCHEMA = [
         created_at    TEXT NOT NULL,      -- logical clock; reading it does not tick
         PRIMARY KEY (actor, endpoint, key)
     )""",
+    """CREATE TABLE snapshots (
+        id         TEXT PRIMARY KEY,      -- random token: an id from before a reset can never match a new snapshot
+        taken_at   TEXT NOT NULL,         -- logical clock at the time
+        state_hash TEXT NOT NULL,
+        state_json TEXT NOT NULL          -- {table: [rows in primary-key order]} for every entity table
+    )""",
+    """CREATE TABLE chaos (
+        id      INTEGER PRIMARY KEY CHECK (id = 1),   -- at most one active profile
+        profile TEXT NOT NULL,
+        seed    INTEGER NOT NULL
+    )""",
     """CREATE TABLE audit_log (
         id          INTEGER PRIMARY KEY,
         ts          TEXT NOT NULL,
@@ -170,7 +182,7 @@ def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
 
 def create_schema(conn: sqlite3.Connection) -> None:
     """Drop and recreate every table. Must run inside a transaction (see `seed.reset`)."""
-    for table in reversed(["meta", "sessions", "idempotency_keys", *ENTITY_TABLES]):
+    for table in reversed(["meta", "sessions", "idempotency_keys", "snapshots", "chaos", *ENTITY_TABLES]):
         conn.execute(f"DROP TABLE IF EXISTS {table}")
     for statement in SCHEMA:
         conn.execute(statement)

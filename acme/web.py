@@ -1,9 +1,13 @@
 """Shared web plumbing for Acme's routes: public paths, per-request connection, login guard, templates.
 
+The admin routes (`/__admin/*`, part 8) are guarded here too, by a token instead of a session (risk N.91).
+
 Kept apart from `app.py` so `ui.py` (and the part-4 API router) can import it without a circular import.
 The actor comes only from the session cookie, never from request text (risk N.34).
 """
 
+import hmac
+import os
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -15,9 +19,29 @@ from fastapi.templating import Jinja2Templates
 from acme import auth, files
 from acme.db import connect
 from acme.money import format_inr
-from acme.services import NotFound
+from acme.services import Forbidden, NotFound
 
 PUBLIC_PATHS = {"/login", "/api/login", "/api/logout", "/healthz"}
+ADMIN_PREFIX = "/__admin"
+ADMIN_TOKEN_HEADER = "X-Admin-Token"
+
+
+def is_admin_path(path: str) -> bool:
+    return path == ADMIN_PREFIX or path.startswith(ADMIN_PREFIX + "/")
+
+
+def is_json_path(path: str) -> bool:
+    """Paths whose errors are typed JSON: the API and the admin endpoints."""
+    return path.startswith("/api/") or is_admin_path(path)
+
+
+def check_admin_token(request: Request) -> None:
+    """Admin routes need `X-Admin-Token` equal to the ACME_ADMIN_TOKEN environment variable, never a session.
+    An unset or empty variable closes every admin route (compare_digest("", "") would be true, risk N.90)."""
+    expected = os.environ.get("ACME_ADMIN_TOKEN", "")
+    supplied = request.headers.get(ADMIN_TOKEN_HEADER, "")
+    if not expected or not hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8")):
+        raise Forbidden(f"Admin endpoints need a valid {ADMIN_TOKEN_HEADER} header")
 
 # Every `error_type` an API response can carry. Stable from Day 1.4: the Day 2 failure classifier keys off
 # these values (risk N.50, D-058). Documented in docs/acme-spec.md, "API".
@@ -62,7 +86,11 @@ def get_conn(request: Request) -> Iterator[sqlite3.Connection]:
 
 
 def require_login(request: Request, conn: sqlite3.Connection = Depends(get_conn)) -> str | None:
-    """Returns the actor for this request (None on public paths). Runs once per request."""
+    """Returns the actor for this request (None on public and admin paths). Runs once per request.
+    Everything under /__admin is token-only: a valid session without the token is still 403 (N.91)."""
+    if is_admin_path(request.url.path):
+        check_admin_token(request)
+        return None
     if request.url.path in PUBLIC_PATHS:
         return None
     check = auth.check_session(conn, request.cookies.get(auth.COOKIE_NAME), request.app.state.time_fn())

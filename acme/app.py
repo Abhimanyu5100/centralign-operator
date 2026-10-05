@@ -18,10 +18,10 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from acme import api, auth, ui
+from acme import admin, api, auth, ui
 from acme.permissions import role_of
 from acme.services import AcmeError
-from acme.web import PUBLIC_PATHS, LoginRequired, api_error, get_conn, require_login, templates
+from acme.web import PUBLIC_PATHS, LoginRequired, api_error, get_conn, is_json_path, require_login, templates
 
 __all__ = ["PUBLIC_PATHS", "create_app", "require_login"]
 
@@ -29,6 +29,7 @@ __all__ = ["PUBLIC_PATHS", "create_app", "require_login"]
 def create_app(db_path: Path | str | None = None, time_fn: Callable[[], float] = time.time) -> FastAPI:
     app = FastAPI(title="Acme", dependencies=[Depends(require_login)])
     app.include_router(api.router)
+    app.include_router(admin.router)
     app.include_router(ui.router)
     app.state.db_path = db_path  # None: resolved from ACME_DB / the default on every request
     app.state.time_fn = time_fn
@@ -44,8 +45,8 @@ def create_app(db_path: Path | str | None = None, time_fn: Callable[[], float] =
 
     @app.exception_handler(AcmeError)
     async def acmeapi_error(request: Request, exc: AcmeError) -> Response:
-        """One mapping from service errors to responses: typed JSON for /api/, an error page for the UI."""
-        if request.url.path.startswith("/api/"):
+        """One mapping from service errors to responses: typed JSON for /api/ and /__admin/, an error page for the UI."""
+        if is_json_path(request.url.path):
             return api_error(exc.status_code, exc.error_type, exc.message, {"field": exc.field} if exc.field else None)
         return ui.error_page(request, exc)
 
@@ -53,14 +54,14 @@ def create_app(db_path: Path | str | None = None, time_fn: Callable[[], float] =
     async def bad_request(request: Request, exc: RequestValidationError) -> Response:
         """A malformed path or query value (e.g. /invoices/abc): typed JSON for /api/, an error page for the UI."""
         message = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
-        if request.url.path.startswith("/api/"):
+        if is_json_path(request.url.path):
             return api_error(422, "invalid_request", message)
         return ui.error_page(request, status=422, message=f"Invalid request: {message}")
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException) -> Response:
         """Unknown route (404) or wrong method (405) under /api/ keeps the typed shape (risk N.50)."""
-        if request.url.path.startswith("/api/"):
+        if is_json_path(request.url.path):
             error_type = "not_found" if exc.status_code == 404 else "invalid_request"
             return api_error(exc.status_code, error_type, f"{request.method} {request.url.path}: {exc.detail}")
         return await http_exception_handler(request, exc)
@@ -68,7 +69,7 @@ def create_app(db_path: Path | str | None = None, time_fn: Callable[[], float] =
     @app.exception_handler(Exception)
     async def server_error(request: Request, exc: Exception) -> Response:
         """Anything unexpected: the write's transaction has already rolled back. No exception text leaks."""
-        if request.url.path.startswith("/api/"):
+        if is_json_path(request.url.path):
             return api_error(500, "server_error", "Internal server error; nothing was saved. Read back before retrying.")
         return ui.error_page(request, status=500, message="Internal server error; nothing was saved.")
 
