@@ -24,6 +24,8 @@ Before implementing any step, component or non-trivial change, output a short ri
 - Any new risk found while building gets appended to `docs/risk-log.md` (date, ID, problem, handling, status).
 - After implementing, state which risks are now covered and which test proves each.
 - Use `/risk-check` (see `.claude/commands/risk-check.md`) to run this protocol.
+- docs/progress.md is the source of truth for where we are. Run /checkpoint at the end of every part
+  before saying it is done. If progress.md disagrees with git, say so and trust git.
 
 ## Architecture (one executor, four runtime components, a mock company)
 
@@ -153,7 +155,9 @@ bench/                # AcmeBench: tasks/*.yaml, checkers/, oracles/, adversaria
                       # agent/ never reads anything here (decision 11)
 ui/                   # run viewer + approval inbox
 tests/
-docs/                 # problem statement, research notes, failure register, risk log, model plan
+docs/                 # problem statement, research notes, failure register, risk log, model plan,
+                      # progress.md (where we are), decisions.md (append-only decision log)
+.claude/              # settings.json, commands/, skills/ (project skills), hooks/session-context.sh
 ```
 
 ## Conventions

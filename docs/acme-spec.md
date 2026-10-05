@@ -16,7 +16,7 @@ for Playwright and the agent.
 
 | User | Role | Can |
 | --- | --- | --- |
-| `ops-agent` | AP clerk + HR assistant (the agent's service account) | Submit invoices; void own invoices while `draft` or `pending_approval`; request and withdraw approvals; create and cancel payment requests; create and cancel onboarding employees; create and cancel IT tickets; send mail; read the audit log. **Cannot** approve or reject anything, cannot set a payment to `scheduled` or `sent`, cannot touch vendors' bank details |
+| `ops-agent` | AP clerk + HR assistant (the agent's service account) | Submit invoices; void own invoices (see undo paths); request and withdraw approvals; create and cancel payment requests; create and cancel onboarding employees; create and cancel IT tickets; send mail; read the audit log. **Cannot** approve or reject anything, cannot set a payment to `scheduled` or `sent`, cannot touch vendors' bank details |
 | `meera` | Finance manager (human business approver) | Approve or reject invoices and payment requests (approving a payment moves it to `scheduled`) |
 | `admin` | Admin | Everything (never given to the agent) |
 
@@ -45,15 +45,15 @@ roles: if the agent tries an approver action, Acme returns 403 regardless of the
 
    | Entity | Undo | Allowed when | Resulting status |
    | --- | --- | --- | --- |
-   | Invoice | Void (creator only) | `draft` or `pending_approval` | `void` (pending approval requests for it are withdrawn in the same transaction) |
+   | Invoice | Void (creator only) | `draft` or `pending_approval`; or `approved` if no payment request exists for it (a `cancelled` or `rejected` request does not count) | `void` (pending approval requests for it are withdrawn in the same transaction) |
    | Approval request | Withdraw (requester only) | `pending` | `withdrawn` |
    | Payment request | Cancel (creator only) | `pending_approval` | `cancelled` (its pending approval request is withdrawn) |
    | Employee | Cancel onboarding | `onboarding` | `cancelled` |
    | IT ticket | Cancel | `open` | `cancelled` |
    | Sent email | **None** | — | Cannot be undone; this is why external email needs action approval (ORG-005) |
 
-   Consequence: an auto-approved invoice (total ≤ ₹50,000) cannot be voided by the agent, so for the
-   agent that submission is effectively irreversible (risk N.11).
+   An auto-approved invoice (total ≤ ₹50,000) can therefore be voided by its creator until a payment
+   is requested, so invoice submission stays a `reversible_write` (decision D-034, risk N.11).
 
    **Rollback means net entity state restored**: every run-created row ends `void`, `cancelled` or
    `withdrawn`; no pre-existing row is changed; audit rows are allowed.
