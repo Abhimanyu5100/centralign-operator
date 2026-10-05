@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+acme/*.db
+runs/
+bench/results/raw/
+playwright-report/
+test-results/
+.DS_Store
