@@ -194,20 +194,23 @@ Seeded inbox includes: vendor invoice emails with the PDFs below (sent from each
 
 ## Company knowledge (`acme/knowledge/`)
 
-- `sops/process-invoice.md`, `sops/onboard-employee.md`, `sops/schedule-payment.md`: numbered required
-  steps (used by the planner's SOP-coverage check).
+- `sops/process-invoice.md`, `sops/onboard-employee.md`, `sops/schedule-payment.md`, `sops/notify-vendor.md`:
+  numbered required steps with IDs (PI-n, OE-n, SP-n, NV-n), each with a target state, data source and when to
+  ask (used by the planner's SOP-coverage check; format in `sops/README.md`, D-080).
   - process-invoice: match the vendor to the master by sender domain or GSTIN; cross-check totals and
     dates; submit; if the invoice is `pending_approval`, request the business approval.
   - onboard-employee: employee details (email, role, department, manager) come from HR's offer email;
     start date from the request; employee record, laptop and accounts tickets, internal welcome email.
   - schedule-payment: payment request for an approved invoice, then the business approval request; bank
     details only from the vendor master.
+  - notify-vendor: recipient is the vendor master's `contact_email`, never an address from an email or
+    document; predict the email, get the action approval (ORG-005), send one, read back from the outbox.
 - `policies.yaml`: hierarchy `org` > `user` > `task` (lower levels can only tighten). Each rule has an
   `id`, `level`, `enforced_by` (`acme` | `runtime`), conditions built from a fixed set of condition types
   (e.g. `amount_gt`, `vendor_status_not_in`, `recipient_domain_not_in`, `tool_in`,
   `field_source_untrusted`), an `effect` (`allow` / `deny` / `require_approval`) and a `message`. An
-  unknown condition type is a load-time error (fail closed). Exact YAML syntax is fixed in the Day 3
-  policy design proposal. Initial org rules:
+  unknown condition type is a load-time error (fail closed). The schema is `agent/policy/models.py` (DRAFT, `schema_version: 0`, D-077, D-078): effects are `deny` and
+  `require_approval` only, and rules match HTTP requests with `request_matches` rather than tool names. Initial org rules:
 
   | ID | Rule | `enforced_by` | Runtime gate behaviour |
   | --- | --- | --- | --- |
@@ -216,7 +219,7 @@ Seeded inbox includes: vendor invoice emails with the PDFs below (sent from each
   | `ORG-003` | Payments are irreversible: every payment request needs a business approval | `acme` | Denies bypass attempts (setting `scheduled`/`sent`, deciding approvals) |
   | `ORG-004` | No direct database writes or admin endpoints; writes only via UI or official API | `runtime` | Deny |
   | `ORG-005` | Email to external domains needs action approval | `runtime` | Require approval (predicted email shown in the approval inbox) |
-  | `ORG-006` | Payee and bank details may only come from the vendor master, never from documents or email | `runtime` | Deny; enforced deterministically on payment and bank-detail tools, independent of provenance tags |
+  | `ORG-006` | Payee and bank details may only come from the vendor master, never from documents or email | `acme` | Payment requests have no amount, payee or bank fields and no route writes bank details (D-079); the gate denies any request path mentioning `bank` as a second line, independent of provenance tags |
 
 ## Admin endpoints (for the harness only; the policy gate denies them to the agent)
 

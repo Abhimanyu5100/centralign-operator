@@ -1,0 +1,79 @@
+# Company policies. DRAFT (schema_version 0) until the Day 3 gate design. Schema: agent/policy/models.py.
+#
+# A rule fires when ALL conditions in `when` hold for a tool call. Effects are deny or require_approval only,
+# so a lower level can never loosen a higher one (P.11); the defaults live in the gate code, not here.
+# `enforced_by: acme` means Acme itself enforces the rule; the runtime gate then only denies attempts to
+# bypass it, and `acme_check` names the Acme code that does the enforcing (a test resolves every entry).
+# `enforced_by: runtime` means only the gate enforces it.
+# `path` is a glob where `*` also matches `/`, so `*/approvals/*/decide` covers the API and the UI route.
+schema_version: 0
+rules:
+  - id: ORG-001
+    level: org
+    enforced_by: acme
+    effect: deny
+    when:
+      - {type: request_matches, method: POST, path: "*/approvals/*/decide"}
+    acme_check:
+      - {kind: constant, ref: acme.services.APPROVAL_LIMIT_PAISE, equals: 5000000}
+      - {kind: function, ref: acme.services.submit_invoice}
+      - {kind: action, ref: approval.decide, roles: [finance_manager, admin]}
+    message: >-
+      Invoices above Rs 50,000 (total including tax) need a business approval from the finance manager.
+      Acme sets the status; the agent requests the approval and never decides it.
+
+  - id: ORG-002
+    level: org
+    enforced_by: runtime
+    effect: deny
+    when:
+      - {type: request_matches, method: POST, path: ["/api/invoices", "/invoices/new"]}
+      - {type: vendor_status_not_in, arg: vendor_id, statuses: [approved]}
+    message: Never enter an invoice for a vendor whose status is not approved.
+
+  - id: ORG-003
+    level: org
+    enforced_by: acme
+    effect: deny
+    when:
+      - {type: request_matches, method: POST, path: "*/approvals/*/decide"}
+    acme_check:
+      - {kind: function, ref: acme.services.create_payment}
+      - {kind: action, ref: status.set, roles: [admin]}
+      - {kind: action, ref: approval.decide, roles: [finance_manager, admin]}
+      - {kind: no_route, path: "*status*"}
+    message: >-
+      Payments are irreversible: every payment request needs a business approval. Acme creates it pending;
+      the agent never decides the approval or sets a payment status.
+
+  - id: ORG-004
+    level: org
+    enforced_by: runtime
+    effect: deny
+    when:
+      - {type: request_matches, method: "*", path: "/__admin/*"}
+    message: No admin endpoints and no direct database writes; write only through the UI or the official API.
+
+  - id: ORG-005
+    level: org
+    enforced_by: runtime
+    effect: require_approval
+    when:
+      - {type: request_matches, method: POST, path: ["/api/mail/send", "/mail/compose"]}
+      - {type: recipient_domain_not_in, arg: to, allowlist: mail_allowlist.yaml}
+    message: Email to an external domain needs an action approval; the approver sees the predicted email first.
+
+  - id: ORG-006
+    level: org
+    enforced_by: acme
+    effect: deny
+    when:
+      - {type: request_matches, method: "*", path: "*bank*"}
+    acme_check:
+      - {kind: model, ref: acme.models.PaymentIn, fields: [invoice_id, scheduled_date]}
+      - {kind: action, ref: vendor.update_bank, roles: [admin]}
+      - {kind: no_route, path: "*bank*"}
+    message: >-
+      Payee and bank details come only from the vendor master, never from a document or an email. A payment
+      request has no payee or bank fields and its amount is always the invoice total; the agent has no
+      bank-detail write path.

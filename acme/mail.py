@@ -43,7 +43,7 @@ def load_allowlist(path: Path | str | None = None) -> Allowlist:
     if not isinstance(partners, list):
         raise ValueError(f"mail allowlist {path}: partner_domains must be a list")
     domains = [internal, *partners]
-    if not all(isinstance(d, str) and _DOMAIN.match(d) for d in domains):
+    if not all(isinstance(d, str) and _DOMAIN.fullmatch(d) for d in domains):
         raise ValueError(f"mail allowlist {path}: every domain must be lowercase like example.com")
     return Allowlist(internal, frozenset(partners))
 

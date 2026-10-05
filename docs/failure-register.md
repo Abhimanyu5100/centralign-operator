@@ -42,7 +42,7 @@ Free-tier model risks (M.1–M.7) are in `model-plan.md`. Run statuses are defin
 | --- | --- | --- | --- | --- | --- |
 | 1.1 | Intent misread | "Latest" by date vs received | Goal Spec records interpretation and why; SOP defines terms; else ask | T1 ("latest"), T4 (ambiguous) | test |
 | 1.2 | Missing value invented | Vendor ID or amount never seen | Every field has a source: user / SOP / discovered / unknown; unknown required → discover or ask; guesses rejected by schema | Goal Spec schema unit test; T3 discovers fields from the HR email | build |
-| 1.3 | Wrong or no SOP | Approval skipped | SOPs indexed with triggers + retrieval; milestones cite SOP ID; no SOP → approve every write | T9 has no SOP | test |
+| 1.3 | Wrong or no SOP | Approval skipped | SOPs indexed with triggers + retrieval; milestones cite SOP ID; no SOP → approve every write | A no-SOP request proves the approve-every-write fallback (Day 3; T9 now has the `notify-vendor` SOP, D-081) | test |
 | 1.4 | SOPs/policies conflict | Last-read wins | Org > user > task; deny wins; unresolved → human | Policy evaluator unit test with conflicting rules | build |
 | 1.5 | Gate misses impossible task | Fabricated end state | Read-only probes; `infeasible` is a legal outcome | T5; correct-refusal rate | test |
 | 1.6 | Gate refuses possible task | Real work abandoned | Refusal must cite probe evidence; track specificity | False-refusal rate across feasible tasks | test |
