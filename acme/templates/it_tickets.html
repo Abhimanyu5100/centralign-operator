@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}IT tickets{% endblock %}
+{% block content %}
+<h1>IT tickets</h1>
+<form method="get" action="/it-tickets" aria-label="Filter IT tickets">
+  {{ m.filter('employee', 'Employee', employee_options, employee, 'All employees') }}
+  <button type="submit">Apply filters</button>
+</form>
+{% if can('it_ticket.create') %}<p><a href="/it-tickets/new">New IT ticket</a></p>{% endif %}
+<table>
+  <caption>{{ rows|length }} IT ticket(s)</caption>
+  <thead><tr><th>Ticket</th><th>Employee</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><a href="/it-tickets/{{ r.id }}">IT ticket #{{ r.id }} – {{ r.type }} for {{ r.employee_name }}</a></td>
+      <td>{{ r.employee_name }}</td><td>{{ r.status }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="3">No IT tickets match.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

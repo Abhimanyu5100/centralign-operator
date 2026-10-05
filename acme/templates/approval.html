@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Approval {{ approval.id }}{% endblock %}
+{% block content %}
+<h1>Approval #{{ approval.id }}</h1>
+<table>
+  <tr><th scope="row">For</th><td>
+    <a href="/{{ 'invoices' if approval.entity_type == 'invoice' else 'payments' }}/{{ approval.entity_id }}">{{ label }}</a></td></tr>
+  <tr><th scope="row">Status</th><td>{{ approval.status }}</td></tr>
+  <tr><th scope="row">Requested by</th><td>{{ approval.requested_by }}</td></tr>
+  <tr><th scope="row">Approver role</th><td>{{ approval.approver_role }}</td></tr>
+  <tr><th scope="row">Reason</th><td>{{ approval.reason or '-' }}</td></tr>
+  <tr><th scope="row">Decided by</th><td>{{ approval.decided_by or '-' }}</td></tr>
+  <tr><th scope="row">Decided at</th><td>{{ approval.decided_at or '-' }}</td></tr>
+</table>
+<div class="actions">
+  {% if can_decide %}
+  <form method="post" action="/approvals/{{ approval.id }}/decide" novalidate>
+    <label for="reason">Decision reason (optional)</label>
+    <textarea id="reason" name="reason" rows="2"></textarea>
+    <button type="submit" name="decision" value="approve">Approve</button>
+    <button type="submit" name="decision" value="reject">Reject</button>
+  </form>
+  {% endif %}
+  {% if can_withdraw %}
+  <form method="post" action="/approvals/{{ approval.id }}/withdraw"><button type="submit">Withdraw approval request</button></form>
+  {% endif %}
+</div>
+{% endblock %}

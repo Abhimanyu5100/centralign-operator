@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Payment {{ payment.id }}{% endblock %}
+{% block content %}
+<h1>Payment request #{{ payment.id }}</h1>
+<table>
+  <tr><th scope="row">Invoice</th><td><a href="/invoices/{{ invoice.id }}">{{ invoice.invoice_no }} (#{{ invoice.id }})</a></td></tr>
+  <tr><th scope="row">Amount</th><td>{{ payment.amount_paise|inr }}</td></tr>
+  <tr><th scope="row">Scheduled date</th><td>{{ payment.scheduled_date }}</td></tr>
+  <tr><th scope="row">Status</th><td>{{ payment.status }}</td></tr>
+  <tr><th scope="row">Created by</th><td>{{ payment.created_by }}</td></tr>
+</table>
+<h2>Approvals</h2>
+<ul>
+  {% for a in approvals %}<li><a href="/approvals/{{ a.id }}">Approval #{{ a.id }}</a>: {{ a.status }}</li>
+  {% else %}<li>No approval requests.</li>{% endfor %}
+</ul>
+<div class="actions">
+  {% if can_request %}
+  <form method="post" action="/payments/{{ payment.id }}/request-approval">
+    <label for="reason">Reason (optional)</label>
+    <textarea id="reason" name="reason" rows="2"></textarea>
+    <button type="submit">Request approval</button>
+  </form>
+  {% endif %}
+  {% if can_cancel and payment.status == 'pending_approval' %}
+  <form method="post" action="/payments/{{ payment.id }}/cancel"><button type="submit">Cancel payment request</button></form>
+  {% endif %}
+</div>
+{% endblock %}

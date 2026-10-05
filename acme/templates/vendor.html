@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ vendor.name }}{% endblock %}
+{% block content %}
+<h1>{{ vendor.name }}</h1>
+<table>
+  <tr><th scope="row">Vendor ID</th><td>{{ vendor.id }}</td></tr>
+  <tr><th scope="row">GSTIN</th><td>{{ vendor.gstin }}</td></tr>
+  <tr><th scope="row">Status</th><td>{{ vendor.status }}</td></tr>
+  <tr><th scope="row">Email domain</th><td>{{ vendor.email_domain }}</td></tr>
+  <tr><th scope="row">Contact email</th><td>{{ vendor.contact_email }}</td></tr>
+  <tr><th scope="row">Bank account</th><td>{{ vendor.bank_account_masked }}</td></tr>
+</table>
+<h2>Invoices</h2>
+<ul>
+  {% for i in invoices %}<li><a href="/invoices/{{ i.id }}">{{ i.invoice_no }} – {{ i.vendor_name }} (#{{ i.id }})</a>: {{ i.status }}</li>
+  {% else %}<li>No invoices.</li>{% endfor %}
+</ul>
+<p>Vendor records are read-only here.</p>
+{% endblock %}

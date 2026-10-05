@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}New payment request{% endblock %}
+{% block content %}
+<h1>New payment request</h1>
+<p>The payee and bank account always come from the vendor record; they cannot be entered here.</p>
+<form method="post" action="/payments/new" novalidate>
+  {{ m.form_errors(errors) }}
+  <input type="hidden" name="idempotency_token" value="{{ token }}">
+  {{ m.select('invoice_id', 'Invoice', invoice_options, values, errors, placeholder='Choose an approved invoice') }}
+  {{ m.field('scheduled_date', 'Scheduled date', values, errors, type='date', help='Optional; defaults to the due date, or today if that has passed') }}
+  <p><button type="submit">Create payment request</button></p>
+</form>
+{% endblock %}

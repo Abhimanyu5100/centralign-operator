@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Employees{% endblock %}
+{% block content %}
+<h1>Employees</h1>
+<form method="get" action="/employees" aria-label="Search employees">
+  <label for="q">Name contains</label>
+  <input id="q" name="q" value="{{ q }}">
+  <button type="submit">Search employees</button>
+</form>
+{% if can('employee.create') %}<p><a href="/employees/new">New employee</a></p>{% endif %}
+<table>
+  <caption>{{ rows|length }} employee(s)</caption>
+  <thead><tr><th>Employee</th><th>Email</th><th>Role</th><th>Department</th><th>Start date</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><a href="/employees/{{ r.id }}">{{ r.name }} (#{{ r.id }})</a></td>
+      <td>{{ r.email }}</td><td>{{ r.role }}</td><td>{{ r.department }}</td><td>{{ r.start_date }}</td><td>{{ r.status }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6">No employees match.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,10 +1,10 @@
-<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>Acme</title></head>
-<body>
-  <main>
-    <h1>Acme</h1>
-    <p>Signed in as {{ actor }} ({{ role }}).</p>
-  </main>
-</body>
-</html>
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<h1>Acme</h1>
+<p>Signed in as {{ actor }} ({{ role }}).</p>
+<ul>
+  <li>New work: <a href="/invoices/new">New invoice</a>, <a href="/payments/new">New payment request</a>,
+    <a href="/employees/new">New employee</a>, <a href="/it-tickets/new">New IT ticket</a></li>
+</ul>
+{% endblock %}

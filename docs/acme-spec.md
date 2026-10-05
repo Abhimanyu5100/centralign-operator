@@ -83,7 +83,7 @@ clock, so Acme and the runtime agree on what "today" and "latest" mean.
 ## UI pages
 
 `/login` · `/invoices` (list, filter by vendor/status) · `/invoices/new` (form) · `/invoices/{id}`
-(Void button) · `/approvals` (Withdraw for the requester; Approve/Reject for `meera`) · `/payments` ·
+(Void button) · `/approvals` (list) · `/approvals/{id}` (Withdraw for the requester; Approve/Reject for `meera`; D-053) · `/payments` ·
 `/payments/new` (payment request form) · `/payments/{id}` (Cancel button) · `/vendors` and
 `/vendors/{id}` (read-only for the agent) · `/employees` · `/employees/new` · `/employees/{id}` (Cancel
 onboarding) · `/it-tickets` · `/it-tickets/new` · `/it-tickets/{id}` (Cancel) · `/mail` (inbox list) ·
@@ -91,6 +91,16 @@ onboarding) · `/it-tickets` · `/it-tickets/new` · `/it-tickets/{id}` (Cancel)
 
 Forms validate server-side and show inline errors (e.g. "Due date must be after invoice date",
 "Duplicate invoice number for this vendor"). Successful writes show a toast and redirect to the record.
+
+Also built in part 3: `POST /logout`; `POST /invoices/{id}/request-approval` and
+`POST /payments/{id}/request-approval` (the UI way to create a business approval request, on the detail
+pages); `POST /approvals/{id}/decide` and `/withdraw`. Every state-changing route is POST only (GET returns
+405) and answers with a 303 redirect plus a one-shot toast. Amount fields take rupees as plain decimals
+("62400.00"), and a bad value is rejected with the exact hint (D-055). The invoice and payment forms carry a
+hidden idempotency token (D-054); employee and IT-ticket forms do not (register 3.5).
+
+**Carried over:** the `/mail*` pages are built in part 5 (with the mailbox) and the UI-only PDF attach action
+in part 6 (with the generated PDFs), each with their tests (D-056).
 
 ## API (the "official" channel)
 

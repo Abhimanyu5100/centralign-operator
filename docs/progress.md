@@ -5,19 +5,24 @@ If this file disagrees with git, git wins for what is committed.
 
 ## Now
 
-- **Last updated:** 2026-10-05 22:00 IST
-- **Day / phase / part:** Day 1 (Phase A), part 2 done (not yet committed) → part 3 next
-- **Currently doing:** waiting for author review of Day 1.2
-- **Next step:** Day 1 part (3): UI pages and forms with server-side validation (`/invoices`, `/invoices/new`,
-  invoice detail, approvals, payments, employees, IT tickets, mailbox), calling the service layer, with
-  the `rename_submit_button` hook in mind and accessible names that are unique (N.26)
+- **Last updated:** 2026-10-06 00:28 IST
+- **Day / phase / part:** Day 1 (Phase A), part 3 done → part 4 next. Part 3's page code is in the WIP commit
+  `58eb606` (with the money, forms and idempotency tests); `tests/acme/test_ui.py`, the `test_auth.py` fix, the
+  Makefile target and the docs are uncommitted.
+- **Currently doing:** waiting for author review of Day 1.3
+- **Next step:** Day 1 part (4): read and write API with idempotency keys (reuse `acme/idempotency.run`, do not
+  reimplement it), undo endpoints and `GET /api/audit`; typed JSON errors through the existing `AcmeError`
+  handler; reuse `acme/queries.py` for reads; add the concurrent UI+API write test (N.25)
+- **Carried over:** `/mail*` pages to part 5, PDF attach action to part 6, each with their tests (D-056).
 - **RESUME PROMPT:**
   ```
-  Read CLAUDE.md and docs/progress.md, then docs/acme-spec.md. Day 1 parts 1 and 2 are done (service
-  layer in acme/services.py; login, sessions and the app shell in acme/auth.py and acme/app.py; `make
-  test` is the fast suite). Build Day 1 part (3): UI pages and forms with server-side validation, per the
-  Day 1 prompt in SETUP.md. Show the risk table first, stop after the part, and run /checkpoint. Do not
-  commit or push.
+  Read CLAUDE.md and docs/progress.md, then docs/acme-spec.md. Day 1 parts 1 to 3 are done (service layer in
+  acme/services.py; login and sessions in acme/auth.py; shared web plumbing in acme/web.py; UI pages in
+  acme/ui.py with templates; idempotency store in acme/idempotency.py; read queries in acme/queries.py;
+  `make acme` serves Acme, `make test` is the fast suite). Build Day 1 part (4): read and write API with
+  idempotency keys (reuse acme/idempotency.run), undo endpoints and GET /api/audit, per the Day 1 prompt in
+  SETUP.md. Also carried over: /mail* pages to part 5, PDF attach action to part 6. Show the risk table
+  first, stop after the part, and run /checkpoint. Do not commit or push.
   ```
 
 ## Done log
@@ -29,7 +34,8 @@ If this file disagrees with git, git wins for what is committed.
 | 2026-10-05 | 0.3 | N.11 decision (D-034); project skills (add-task, explain, day-review, ship-check, checkpoint, resume); continuity (progress, decisions log, SessionStart hook) | `docs/acme-spec.md`, `docs/risk-log.md`, `docs/decisions.md`, `docs/progress.md`, `CLAUDE.md`, `.claude/skills/*/SKILL.md`, `.claude/hooks/session-context.sh`, `.claude/settings.json` | Hook output test: pass | 2bb1c8d |
 | 2026-10-05 | 0.4 | Checkpoint skill syncs the Done log with git before updating progress | `.claude/skills/checkpoint/SKILL.md`, `docs/progress.md` | n/a (docs) | 2516246 |
 | 2026-10-05 | 1.1 | Python 3.12 project (uv); Acme data model, logical clock, permission map, input models, service layer with audit log and business rules (auto-approval, approvals, payments, undo paths), seed (base/t8/t9) and reset with frozen `now`, `make reset`/`make test` | `pyproject.toml`, `uv.lock`, `.python-version`, `Makefile`, `.gitignore`, `acme/{db,clock,permissions,models,services,seed}.py`, `tests/acme/*` | 72 passed, 0 failed | 7d4abb6 |
-| 2026-10-05 | 1.2 | Login and roles: users and roles in code with env passwords (D-043), cookie sessions (8 h wall-clock TTL, per-session request count, revoke), `POST /api/login` shared by form and JSON, logout, whoami, login and home pages, app-wide login guard with typed 401 (API) / 303 (UI), sessions outside the state hash and wiped by reset; Testing section in CLAUDE.md, `make test` (fast) vs `make test-e2e`, `e2e` marker with a static marker check; decisions D-043 to D-051; register rows 0.10, 0.11 | `acme/{auth,app}.py`, `acme/templates/{login,home}.html`, `acme/{db,permissions}.py`, `tests/acme/test_auth.py`, `tests/test_markers.py`, `Makefile`, `pyproject.toml`, `CLAUDE.md`, `.env.example`, `docs/*` | `make test`: 114 passed, 0 failed (`make test-e2e`: none collected) | pending |
+| 2026-10-05 | 1.2 | Login and roles: users and roles in code with env passwords (D-043), cookie sessions (8 h wall-clock TTL, per-session request count, revoke), `POST /api/login` shared by form and JSON, logout, whoami, login and home pages, app-wide login guard with typed 401 (API) / 303 (UI), sessions outside the state hash and wiped by reset; Testing section in CLAUDE.md, `make test` (fast) vs `make test-e2e`, `e2e` marker with a static marker check; decisions D-043 to D-051; register rows 0.10, 0.11 | `acme/{auth,app}.py`, `acme/templates/{login,home}.html`, `acme/{db,permissions}.py`, `tests/acme/test_auth.py`, `tests/test_markers.py`, `Makefile`, `pyproject.toml`, `CLAUDE.md`, `.env.example`, `docs/*` | `make test`: 114 passed, 0 failed (`make test-e2e`: none collected) | 1ab7b52 |
+| 2026-10-06 | 1.3 | UI pages and forms with server-side validation: invoices, approvals (detail page holds Approve/Reject/Withdraw), payments, vendors (read-only), employees, IT tickets; inline per-field errors, PRG with one-shot toast; shared idempotency store (UI token now, API key in part 4); exact rupee parsing; `acme/web.py` split; `make acme`; route-protection test now walks the OpenAPI schema (N.49); decisions D-052 to D-057; risks N.42 to N.49 tested | `acme/{web,ui,forms,money,idempotency,queries}.py`, `acme/{app,db}.py`, `acme/templates/*`, `Makefile`, `tests/acme/{test_ui,test_money_and_forms,test_idempotency,htmlutil}.py`, `tests/acme/test_auth.py`, `docs/*` | `make test`: 213 passed, 0 failed (`make test-e2e`: none collected); UI tests mutation-checked | pending |
 
 ## Blockers and open questions
 
@@ -77,3 +83,17 @@ Day 1.2:
 - **Session errors are typed** (`login_required`, `session_expired`, `invalid_credentials`) so the Day 2
   expiry detector can tell "never logged in" from "expired" (3.4).
 - **CSRF and the `Secure` flag are not built** (D-046; register rows 0.10, 0.11).
+
+Day 1.3 (decisions D-052 to D-057):
+
+- **Approve, Reject and Withdraw are on `/approvals/{id}`**, not on the list (spec put them on the list), so
+  role+name locators stay unique (N.26, D-053). The list rows link to the detail page.
+- **`/mail*` pages and the PDF attach action are not built** (carried over to parts 5 and 6, D-056).
+- **Extra routes:** `POST /logout` (UI logout with a redirect), `POST /invoices/{id}/request-approval` and
+  `POST /payments/{id}/request-approval` (the UI way to create a business approval request), and
+  `POST /approvals/{id}/decide|withdraw`. All writes are POST with a 303 redirect.
+- **UI forms use rupees as plain decimals** (D-055) and `novalidate`, so the server's messages are shown (D-057).
+- **Idempotency store built in part 3**, not part 4 (D-054); part 4 must reuse it.
+- **`app.py` split**: login guard, connection and templates moved to `acme/web.py` (D-052).
+- **Error handling:** `AcmeError` and malformed-URL errors share one handler: typed JSON for `/api/`, an error
+  page for the UI.

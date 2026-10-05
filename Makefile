@@ -2,7 +2,11 @@
 SEED ?= base
 NOW ?= 2026-10-07T10:30:00+05:30
 
-.PHONY: reset test test-e2e
+.PHONY: acme reset test test-e2e
+
+acme:  ## reset to SEED at NOW, then serve Acme on http://localhost:8000 (one worker: SQLite + logical clock)
+	uv run python -m acme.seed --seed $(SEED) --now $(NOW)
+	uv run uvicorn --factory acme.app:create_app --host 127.0.0.1 --port 8000
 
 reset:  ## rebuild acme/data/acme.db for SEED (base | t8 | t9) at the frozen NOW; prints the state hash
 	uv run python -m acme.seed --seed $(SEED) --now $(NOW)

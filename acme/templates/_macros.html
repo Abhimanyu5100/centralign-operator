@@ -1,0 +1,43 @@
+{# Every control has a <label for>; errors sit beside the field and are linked with aria-describedby (N.42, N.47). #}
+{% macro form_errors(errors) %}
+  {% if errors.get('') %}<p role="alert">{{ errors[''] }}</p>{% endif %}
+{% endmacro %}
+
+{% macro field(name, label, values, errors, type='text', help=None) %}
+  <label for="{{ name }}">{{ label }}</label>
+  <input id="{{ name }}" name="{{ name }}" type="{{ type }}" value="{{ values.get(name, '') }}"
+    {% if errors.get(name) or help %}aria-describedby="{% if help %}{{ name }}-help {% endif %}{% if errors.get(name) %}{{ name }}-error{% endif %}"{% endif %}
+    {% if errors.get(name) %}aria-invalid="true"{% endif %}>
+  {% if help %}<small id="{{ name }}-help">{{ help }}</small>{% endif %}
+  {% if errors.get(name) %}<span id="{{ name }}-error" role="alert">{{ errors[name] }}</span>{% endif %}
+{% endmacro %}
+
+{# options: list of (value, label) pairs; the first option is an empty placeholder #}
+{% macro select(name, label, options, values, errors, placeholder='Choose one') %}
+  <label for="{{ name }}">{{ label }}</label>
+  <select id="{{ name }}" name="{{ name }}"
+    {% if errors.get(name) %}aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}>
+    <option value="">{{ placeholder }}</option>
+    {% for value, text in options %}
+    <option value="{{ value }}" {% if values.get(name) == value|string %}selected{% endif %}>{{ text }}</option>
+    {% endfor %}
+  </select>
+  {% if errors.get(name) %}<span id="{{ name }}-error" role="alert">{{ errors[name] }}</span>{% endif %}
+{% endmacro %}
+
+{% macro textarea(name, label, values, errors) %}
+  <label for="{{ name }}">{{ label }}</label>
+  <textarea id="{{ name }}" name="{{ name }}" rows="3">{{ values.get(name, '') }}</textarea>
+  {% if errors.get(name) %}<span id="{{ name }}-error" role="alert">{{ errors[name] }}</span>{% endif %}
+{% endmacro %}
+
+{# Filter dropdown on a list page: (value, label) options; first option is "All" #}
+{% macro filter(name, label, options, selected, all_label) %}
+  <label for="{{ name }}">{{ label }}</label>
+  <select id="{{ name }}" name="{{ name }}">
+    <option value="">{{ all_label }}</option>
+    {% for value, text in options %}
+    <option value="{{ value }}" {% if selected|string == value|string %}selected{% endif %}>{{ text }}</option>
+    {% endfor %}
+  </select>
+{% endmacro %}

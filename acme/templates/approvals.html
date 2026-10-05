@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Approvals{% endblock %}
+{% block content %}
+<h1>Approvals</h1>
+<form method="get" action="/approvals" aria-label="Filter approvals">
+  {{ m.filter('status', 'Status', status_options, status, 'All statuses') }}
+  <button type="submit">Apply filters</button>
+</form>
+<table>
+  <caption>{{ rows|length }} approval(s)</caption>
+  <thead><tr><th>Approval</th><th>Requested by</th><th>Approver role</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><a href="/approvals/{{ r.id }}">Approval #{{ r.id }}: {{ r.entity_label }}</a></td>
+      <td>{{ r.requested_by }}</td><td>{{ r.approver_role }}</td><td>{{ r.status }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4">No approvals match.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

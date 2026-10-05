@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Invoice {{ invoice.invoice_no }}{% endblock %}
+{% block content %}
+<h1>Invoice {{ invoice.invoice_no }}</h1>
+<table>
+  <tr><th scope="row">Invoice ID</th><td>{{ invoice.id }}</td></tr>
+  <tr><th scope="row">Vendor</th><td><a href="/vendors/{{ vendor.id }}">{{ vendor.name }}</a></td></tr>
+  <tr><th scope="row">PO number</th><td>{{ invoice.po_number or '-' }}</td></tr>
+  <tr><th scope="row">Invoice date</th><td>{{ invoice.invoice_date }}</td></tr>
+  <tr><th scope="row">Received date</th><td>{{ invoice.received_date }}</td></tr>
+  <tr><th scope="row">Due date</th><td>{{ invoice.due_date }}</td></tr>
+  <tr><th scope="row">Total including tax</th><td>{{ invoice.amount_paise|inr }}</td></tr>
+  <tr><th scope="row">Tax</th><td>{{ invoice.tax_paise|inr }}</td></tr>
+  <tr><th scope="row">Status</th><td>{{ invoice.status }}</td></tr>
+  <tr><th scope="row">Source file</th><td>{{ invoice.source_file or '-' }}</td></tr>
+  <tr><th scope="row">Entered by</th><td>{{ invoice.created_by }} via {{ invoice.channel }}</td></tr>
+</table>
+
+<h2>Approvals</h2>
+<ul>
+  {% for a in approvals %}<li><a href="/approvals/{{ a.id }}">Approval #{{ a.id }}</a>: {{ a.status }}</li>
+  {% else %}<li>No approval requests.</li>{% endfor %}
+</ul>
+<h2>Payment requests</h2>
+<ul>
+  {% for p in payments %}<li><a href="/payments/{{ p.id }}">Payment #{{ p.id }}</a>: {{ p.status }}</li>
+  {% else %}<li>No payment requests.</li>{% endfor %}
+</ul>
+{% if invoice.status == 'approved' and can('payment.create') %}
+<p><a href="/payments/new?invoice_id={{ invoice.id }}">New payment request for this invoice</a></p>
+{% endif %}
+
+<div class="actions">
+  {% if can_request %}
+  <form method="post" action="/invoices/{{ invoice.id }}/request-approval">
+    <label for="reason">Reason (optional)</label>
+    <textarea id="reason" name="reason" rows="2"></textarea>
+    <button type="submit">Request approval</button>
+  </form>
+  {% endif %}
+  {% if can_void and invoice.status in ('draft', 'pending_approval', 'approved') %}
+  <form method="post" action="/invoices/{{ invoice.id }}/void"><button type="submit">Void invoice</button></form>
+  {% endif %}
+</div>
+{% endblock %}

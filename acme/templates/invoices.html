@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Invoices{% endblock %}
+{% block content %}
+<h1>Invoices</h1>
+<form method="get" action="/invoices" aria-label="Filter invoices">
+  {{ m.filter('vendor', 'Vendor', vendor_options, vendor, 'All vendors') }}
+  {{ m.filter('status', 'Status', status_options, status, 'All statuses') }}
+  <button type="submit">Apply filters</button>
+</form>
+{% if can('invoice.submit') %}<p><a href="/invoices/new">New invoice</a></p>{% endif %}
+<table>
+  <caption>{{ rows|length }} invoice(s)</caption>
+  <thead><tr><th>Invoice</th><th>Invoice date</th><th>Due date</th><th>Total</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><a href="/invoices/{{ r.id }}">{{ r.invoice_no }} – {{ r.vendor_name }} (#{{ r.id }})</a></td>
+      <td>{{ r.invoice_date }}</td><td>{{ r.due_date }}</td><td>{{ r.amount_paise|inr }}</td><td>{{ r.status }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5">No invoices match.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

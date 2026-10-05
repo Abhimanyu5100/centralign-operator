@@ -1,59 +1,36 @@
-"""Acme's FastAPI app. Part 2 holds only login, logout, whoami, the login page and the home page;
-the UI pages (part 3), the read/write API (part 4) and the admin endpoints (part 8) are added to this app.
+"""Acme's FastAPI app: login, logout, whoami and the UI pages (`acme/ui.py`, part 3). The read/write API
+(part 4) and the admin endpoints (part 8) are added to this app.
 
 Every route requires a login unless its path is in `PUBLIC_PATHS` (risk N.36). The check is an app-wide
 dependency, so a route added later is protected without anyone remembering to ask. The actor comes only
 from the session cookie, never from request text (risk N.34). UI and API share one login (D-037).
 """
 
+import sqlite3
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import quote
 
-import sqlite3
 from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse, Response
-from fastapi.templating import Jinja2Templates
 
-from acme import auth
-from acme.db import connect
+from acme import auth, ui
 from acme.permissions import role_of
+from acme.services import AcmeError
+from acme.web import PUBLIC_PATHS, LoginRequired, get_conn, require_login, templates
 
-PUBLIC_PATHS = {"/login", "/api/login", "/api/logout", "/healthz"}
-
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-
-
-class LoginRequired(Exception):
-    def __init__(self, error_type: str):
-        self.error_type = error_type  # "login_required" (no cookie) or "session_expired"
+__all__ = ["PUBLIC_PATHS", "create_app", "require_login"]
 
 
 def _error(status: int, error_type: str, detail: str) -> JSONResponse:
     return JSONResponse({"ok": False, "error_type": error_type, "detail": detail}, status_code=status)
 
 
-def get_conn(request: Request) -> Iterator[sqlite3.Connection]:
-    conn = connect(request.app.state.db_path)
-    try:
-        yield conn
-    finally:
-        conn.close()
-
-
-def require_login(request: Request, conn: sqlite3.Connection = Depends(get_conn)) -> str | None:
-    """Returns the actor for this request (None on public paths). Runs once per request."""
-    if request.url.path in PUBLIC_PATHS:
-        return None
-    check = auth.check_session(conn, request.cookies.get(auth.COOKIE_NAME), request.app.state.time_fn())
-    if check.actor is None:
-        raise LoginRequired(check.error_type)
-    return check.actor
-
-
 def create_app(db_path: Path | str | None = None, time_fn: Callable[[], float] = time.time) -> FastAPI:
     app = FastAPI(title="Acme", dependencies=[Depends(require_login)])
+    app.include_router(ui.router)
     app.state.db_path = db_path  # None: resolved from ACME_DB / the default on every request
     app.state.time_fn = time_fn
 
@@ -65,6 +42,21 @@ def create_app(db_path: Path | str | None = None, time_fn: Callable[[], float] =
             return _error(401, exc.error_type, detail)
         target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
         return RedirectResponse(f"/login?next={quote(target, safe='')}", status_code=303)
+
+    @app.exception_handler(AcmeError)
+    async def acme_error(request: Request, exc: AcmeError) -> Response:
+        """One mapping from service errors to responses: typed JSON for /api/, an error page for the UI."""
+        if request.url.path.startswith("/api/"):
+            return _error(exc.status_code, type(exc).__name__.lower(), exc.message)
+        return ui.error_page(request, exc)
+
+    @app.exception_handler(RequestValidationError)
+    async def bad_request(request: Request, exc: RequestValidationError) -> Response:
+        """A malformed path or query value (e.g. /invoices/abc): typed JSON for /api/, an error page for the UI."""
+        message = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
+        if request.url.path.startswith("/api/"):
+            return _error(422, "invalid_request", message)
+        return ui.error_page(request, status=422, message=f"Invalid request: {message}")
 
     def _set_cookie(response: Response, token: str) -> None:
         # No `Secure` flag: Acme runs on plain http://localhost (accepted, register row 0.11).
@@ -126,9 +118,5 @@ def create_app(db_path: Path | str | None = None, time_fn: Callable[[], float] =
     @app.get("/api/whoami")
     def whoami(actor: str = Depends(require_login)) -> dict:
         return {"ok": True, "error_type": None, "detail": "", "data": {"actor": actor, "role": role_of(actor)}}
-
-    @app.get("/")
-    def home(request: Request, actor: str = Depends(require_login)) -> Response:
-        return templates.TemplateResponse(request, "home.html", {"actor": actor, "role": role_of(actor)})
 
     return app

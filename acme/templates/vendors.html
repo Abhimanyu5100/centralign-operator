@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Vendors{% endblock %}
+{% block content %}
+<h1>Vendors</h1>
+<form method="get" action="/vendors" aria-label="Search vendors">
+  <label for="q">Vendor name contains</label>
+  <input id="q" name="q" value="{{ q }}">
+  <button type="submit">Search vendors</button>
+</form>
+<table>
+  <caption>{{ rows|length }} vendor(s)</caption>
+  <thead><tr><th>Vendor</th><th>GSTIN</th><th>Status</th><th>Email domain</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr><td><a href="/vendors/{{ r.id }}">{{ r.name }}</a></td><td>{{ r.gstin }}</td><td>{{ r.status }}</td><td>{{ r.email_domain }}</td></tr>
+  {% else %}
+    <tr><td colspan="4">No vendors match.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

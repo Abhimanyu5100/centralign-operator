@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Payments{% endblock %}
+{% block content %}
+<h1>Payment requests</h1>
+<form method="get" action="/payments" aria-label="Filter payments">
+  {{ m.filter('status', 'Status', status_options, status, 'All statuses') }}
+  <button type="submit">Apply filters</button>
+</form>
+{% if can('payment.create') %}<p><a href="/payments/new">New payment request</a></p>{% endif %}
+<table>
+  <caption>{{ rows|length }} payment request(s)</caption>
+  <thead><tr><th>Payment</th><th>Amount</th><th>Scheduled date</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><a href="/payments/{{ r.id }}">Payment #{{ r.id }} – {{ r.invoice_no }} – {{ r.vendor_name }}</a></td>
+      <td>{{ r.amount_paise|inr }}</td><td>{{ r.scheduled_date }}</td><td>{{ r.status }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4">No payment requests match.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

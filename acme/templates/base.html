@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Acme{% endblock %} - Acme</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; color: #1a1a1a; }
+    nav { display: flex; gap: 1rem; align-items: center; padding: .6rem 1rem; background: #f0f2f5; flex-wrap: wrap; }
+    nav form { margin-left: auto; }
+    main { padding: 1rem; max-width: 60rem; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: .35rem .6rem; border-bottom: 1px solid #ddd; }
+    label { display: block; margin-top: .8rem; font-weight: 600; }
+    input, select, textarea { display: block; min-width: 18rem; padding: .3rem; }
+    small { display: block; color: #555; }
+    [role="alert"] { color: #a40000; display: block; }
+    [role="status"] { background: #e6f4ea; padding: .5rem 1rem; }
+    .actions form { display: inline-block; margin-right: 1rem; }
+  </style>
+</head>
+<body>
+  {% if actor %}
+  <nav aria-label="Main">
+    <a href="/">Acme home</a>
+    <a href="/invoices">Invoices</a>
+    <a href="/approvals">Approvals</a>
+    <a href="/payments">Payments</a>
+    <a href="/vendors">Vendors</a>
+    <a href="/employees">Employees</a>
+    <a href="/it-tickets">IT tickets</a>
+    <span>{{ actor }} ({{ role }})</span>
+    <form method="post" action="/logout"><button type="submit">Sign out</button></form>
+  </nav>
+  {% endif %}
+  {% if flash %}<div role="status" id="toast">{{ flash }}</div>{% endif %}
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

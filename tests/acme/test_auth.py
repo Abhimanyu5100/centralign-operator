@@ -1,5 +1,7 @@
 """Login, roles and sessions (D-037, D-043; risks N.32 to N.37, P.9, 3.4)."""
 
+import re
+
 import pytest
 from fastapi import Depends
 from fastapi.responses import JSONResponse
@@ -163,17 +165,37 @@ def test_garbage_cookie_is_session_expired(client):
 
 
 def test_every_non_public_route_requires_login(app, client):
-    protected = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute) or route.path in PUBLIC_PATHS:
+    """Walks every route from the OpenAPI schema, which includes routes added through `include_router`
+    (those sit inside an `_IncludedRouter` that `app.routes` does not expand). Path parameters get a sample value."""
+    probed = []
+    for template, methods in app.openapi()["paths"].items():
+        if template in PUBLIC_PATHS:
             continue
-        protected.append(route.path)
-        for method in route.methods:
-            path = route.path.replace("{", "").replace("}", "")  # path params: any value will do
-            r = client.request(method, path)
+        path = re.sub(r"\{[^}]+\}", "1", template)
+        for method in methods:
+            r = client.request(method.upper(), path)
             expected = 401 if path.startswith("/api/") else 303
-            assert r.status_code == expected, f"{method} {route.path} served without a session"
-    assert "/api/whoami" in protected and "/" in protected  # the walk really covered something
+            assert r.status_code == expected, f"{method.upper()} {template} served without a session"
+            probed.append((method.upper(), template))
+    # the walk really covered the app-level routes and the UI router's routes (read and write)
+    for expected in [("GET", "/api/whoami"), ("GET", "/"), ("GET", "/invoices/{invoice_id}"),
+                     ("POST", "/invoices/new"), ("POST", "/approvals/{approval_id}/decide")]:
+        assert expected in probed, f"{expected} was not probed"
+
+
+def test_the_openapi_walk_sees_every_registered_route(app):
+    """Guards the walk itself: if a route is hidden from the schema the login test above would skip it."""
+    def leaves(routes):
+        for r in routes:
+            inner = getattr(r, "original_router", None)
+            if inner is not None:
+                yield from leaves(inner.routes)
+            elif hasattr(r, "path"):
+                yield r
+    registered = {(r.path, m) for r in leaves(app.routes) for m in getattr(r, "methods", set()) - {"HEAD"}
+                  if getattr(r, "include_in_schema", True)}
+    in_schema = {(p, m.upper()) for p, ms in app.openapi()["paths"].items() for m in ms}
+    assert registered <= in_schema
 
 
 def test_a_route_added_later_without_its_own_check_is_still_protected(app, client):

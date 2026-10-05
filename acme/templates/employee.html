@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ employee.name }}{% endblock %}
+{% block content %}
+<h1>{{ employee.name }}</h1>
+<table>
+  <tr><th scope="row">Employee ID</th><td>{{ employee.id }}</td></tr>
+  <tr><th scope="row">Email</th><td>{{ employee.email }}</td></tr>
+  <tr><th scope="row">Role</th><td>{{ employee.role }}</td></tr>
+  <tr><th scope="row">Department</th><td>{{ employee.department }}</td></tr>
+  <tr><th scope="row">Manager</th><td>{% if manager %}<a href="/employees/{{ manager.id }}">{{ manager.name }} (#{{ manager.id }})</a>{% else %}-{% endif %}</td></tr>
+  <tr><th scope="row">Start date</th><td>{{ employee.start_date }}</td></tr>
+  <tr><th scope="row">Status</th><td>{{ employee.status }}</td></tr>
+</table>
+<h2>IT tickets</h2>
+<ul>
+  {% for t in tickets %}<li><a href="/it-tickets/{{ t.id }}">IT ticket #{{ t.id }} – {{ t.type }}</a>: {{ t.status }}</li>
+  {% else %}<li>No IT tickets.</li>{% endfor %}
+</ul>
+{% if employee.status in ('onboarding', 'active') and can('it_ticket.create') %}
+<p><a href="/it-tickets/new?employee_id={{ employee.id }}">New IT ticket for this employee</a></p>
+{% endif %}
+{% if can_cancel %}
+<form method="post" action="/employees/{{ employee.id }}/cancel"><button type="submit">Cancel onboarding</button></form>
+{% endif %}
+{% endblock %}

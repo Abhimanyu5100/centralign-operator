@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}New employee{% endblock %}
+{% block content %}
+<h1>New employee</h1>
+<form method="post" action="/employees/new" novalidate>
+  {{ m.form_errors(errors) }}
+  {{ m.field('name', 'Full name', values, errors) }}
+  {{ m.field('email', 'Email', values, errors, help='Must be an @acme.example address') }}
+  {{ m.field('role', 'Role', values, errors) }}
+  {{ m.field('department', 'Department', values, errors) }}
+  {{ m.select('manager_id', 'Manager', manager_options, values, errors) }}
+  {{ m.field('start_date', 'Start date', values, errors, type='date', help='Today or later') }}
+  <p><button type="submit">Create employee</button></p>
+</form>
+{% endblock %}

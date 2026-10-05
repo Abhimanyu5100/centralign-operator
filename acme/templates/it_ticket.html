@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}IT ticket {{ ticket.id }}{% endblock %}
+{% block content %}
+<h1>IT ticket #{{ ticket.id }}</h1>
+<table>
+  <tr><th scope="row">Type</th><td>{{ ticket.type }}</td></tr>
+  <tr><th scope="row">Employee</th><td><a href="/employees/{{ employee.id }}">{{ employee.name }} (#{{ employee.id }})</a></td></tr>
+  <tr><th scope="row">Status</th><td>{{ ticket.status }}</td></tr>
+  <tr><th scope="row">Created by</th><td>{{ ticket.created_by }}</td></tr>
+</table>
+{% if can_cancel %}
+<form method="post" action="/it-tickets/{{ ticket.id }}/cancel"><button type="submit">Cancel IT ticket</button></form>
+{% endif %}
+{% endblock %}

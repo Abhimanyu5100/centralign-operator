@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}New IT ticket{% endblock %}
+{% block content %}
+<h1>New IT ticket</h1>
+<form method="post" action="/it-tickets/new" novalidate>
+  {{ m.form_errors(errors) }}
+  {{ m.select('type', 'Type', [('laptop', 'laptop'), ('accounts', 'accounts')], values, errors) }}
+  {{ m.select('employee_id', 'Employee', staff_options, values, errors) }}
+  <p><button type="submit">Create IT ticket</button></p>
+</form>
+{% endblock %}
