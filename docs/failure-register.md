@@ -33,6 +33,8 @@ Free-tier model risks (M.1–M.7) are in `model-plan.md`. Run statuses are defin
 | 0.7 | Evaluators cannot start it | Judged unrunnable | `docker compose up` / `make demo`; pinned versions; Playwright browsers in image | Fresh clone on a second machine (Day 6) | test |
 | 0.8 | Environment eats the schedule | Day 3 with no agent | Hard cap Day 1; three modules; plain HTML; four chaos profiles moved to Day 3 | End-of-day: tasks doable by hand | test |
 | 0.9 | Tasks too easy | One obvious path; no autonomy visible | Unstated SOP steps; cross-source; impossible and ambiguous variants | Task list vs JD capability list | test |
+| 0.10 | No CSRF protection on Acme's forms and cookie API | A page on another site makes the logged-in browser post to Acme | SameSite=Lax cookie is the only defence; no CSRF tokens. Acme is a localhost sandbox with no real users | None (known limitation, listed in the README) | future |
+| 0.11 | Session cookie has no `Secure` flag | The cookie would travel over plain http on a real network | Acme runs on plain http://localhost and in Docker, where `Secure` would stop the cookie being sent; HttpOnly and SameSite=Lax are set | Part 2 test asserts the flags that are set (known limitation, listed in the README) | future |
 
 ## Step 1: Goal and Understand
 

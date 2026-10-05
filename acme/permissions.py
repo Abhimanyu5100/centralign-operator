@@ -1,7 +1,7 @@
 """Who may do what in Acme. One table, checked inside the service layer (risk N.22).
 
 Routers never check roles themselves, so a forgotten route cannot skip the check.
-Passwords and sessions are part 2 (login); this module only maps users to roles and actions to roles.
+Users live here, in code, with no users table (D-043). Passwords come from the environment (`auth.py`).
 """
 
 USER_ROLES: dict[str, str] = {
@@ -10,6 +10,9 @@ USER_ROLES: dict[str, str] = {
     "admin": "admin",
     "system": "system",          # Acme itself, e.g. the ORG-001 auto-approval
 }
+
+# Accounts that can log in. `system` is Acme acting on itself and has no password.
+LOGIN_USERS: tuple[str, ...] = tuple(u for u in USER_ROLES if u != "system")
 
 ACTION_ROLES: dict[str, set[str]] = {
     "invoice.submit": {"ops_agent", "admin"},

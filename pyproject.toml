@@ -26,3 +26,5 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "--strict-markers"
+markers = ["e2e: needs a real browser, a running Acme server or an oracle run; excluded from `make test`"]

@@ -13,6 +13,7 @@ from pathlib import Path
 DEFAULT_DB_PATH = Path(__file__).parent / "data" / "acme.db"
 
 # Entity tables in dependency order. `state_hash` and `/__admin/diff` cover exactly these plus `meta`.
+# `sessions` is deliberately not listed: logging in must not change the state hash or the diff (risk N.32).
 ENTITY_TABLES = ["vendors", "employees", "invoices", "approvals", "payments", "it_tickets", "mail", "audit_log"]
 
 SCHEMA = [
@@ -100,6 +101,14 @@ SCHEMA = [
         external         INTEGER NOT NULL DEFAULT 0 CHECK (external IN (0, 1)),
         created_by       TEXT NOT NULL
     )""",
+    """CREATE TABLE sessions (
+        token_hash    TEXT PRIMARY KEY,   -- SHA-256 of the cookie value; the raw token is never stored
+        actor         TEXT NOT NULL,
+        created_at    REAL NOT NULL,      -- wall-clock seconds: sessions expire in real time (risk N.33)
+        expires_at    REAL NOT NULL,
+        request_count INTEGER NOT NULL DEFAULT 0,
+        revoked       INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1))
+    )""",
     """CREATE TABLE audit_log (
         id          INTEGER PRIMARY KEY,
         ts          TEXT NOT NULL,
@@ -151,7 +160,7 @@ def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
 
 def create_schema(conn: sqlite3.Connection) -> None:
     """Drop and recreate every table. Must run inside a transaction (see `seed.reset`)."""
-    for table in reversed(["meta", *ENTITY_TABLES]):
+    for table in reversed(["meta", "sessions", *ENTITY_TABLES]):
         conn.execute(f"DROP TABLE IF EXISTS {table}")
     for statement in SCHEMA:
         conn.execute(statement)

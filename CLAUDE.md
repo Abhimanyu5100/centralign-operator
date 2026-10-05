@@ -245,8 +245,26 @@ make reset       # restore seeded DB snapshot
 make oracle TASK=T1 [CHAOS=profile]   # Phase A: scripted agent runs the oracle
 make run TASK="..." [CHAOS=profile] [REPLAY=1]   # Phase B: LLM agent
 make bench       # AcmeBench -> bench/results/
-make test
+make test        # fast: unit, integration, checker (excludes the e2e marker)
+make test-e2e    # Playwright and oracle runs (from Day 2)
 ```
+
+## Testing
+
+Five layers. Pytest runs the first three on every change (`make test`); the last two are slower and
+run on demand.
+
+| Layer | What it proves | Where | Runs in |
+| --- | --- | --- | --- |
+| Unit | One function or class in isolation: clock, permissions, auth helpers, policy evaluator, scanner, normalisers | `tests/` | `make test` |
+| Integration | Several modules against a temporary SQLite file: service layer, Acme routes through `TestClient`, registry plus gate | `tests/` | `make test` |
+| Checker | Every SQL checker passes on a good state and fails on a bad one; states are built through the service layer, never raw INSERTs (N.28) | `tests/checkers/` | `make test` |
+| End-to-end | A real Acme server driven by Playwright, and oracle scripts run through the registry and the gate (Day 2 on) | `tests/e2e/`, marker `e2e` | `make test-e2e` |
+| System | Whole runs of the agent on AcmeBench tasks: pass^k, chaos on/off, CuP, side effects (Day 4 on) | `bench/` | `make bench` |
+
+- Any test that imports Playwright carries `pytestmark = pytest.mark.e2e`; a test enforces this.
+  Markers are registered in `pyproject.toml` and `--strict-markers` is on, so a typo fails loudly.
+- Every policy rule and every checker has a passing and a failing test.
 
 ## Git and commits (author identity is the user's only)
 
