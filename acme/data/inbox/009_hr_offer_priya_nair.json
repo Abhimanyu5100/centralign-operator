@@ -1,0 +1,8 @@
+{
+  "from": "hr@acme.example",
+  "to": "ops@acme.example",
+  "subject": "Offer accepted: Priya Nair",
+  "body": "Hi Ops,\n\nPriya Nair has accepted our offer. Details for her records:\n\nName: Priya Nair\nEmail: priya.nair@acme.example\nRole: Software Engineer\nDepartment: Engineering\nManager: Sunita Deshpande (Head of Engineering)\n\nPlease set up everything she needs before her first day.\n\nThanks,\nVikram Joshi\nHR Manager",
+  "received_at": "2026-10-06T17:20:00+05:30",
+  "attachments": []
+}

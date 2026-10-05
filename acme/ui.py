@@ -15,9 +15,9 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, ValidationError
 
-from acme import auth, idempotency, queries, services
+from acme import auth, idempotency, mail, queries, services
 from acme.forms import Form
-from acme.models import ApprovalIn, DecisionIn, EmployeeIn, InvoiceIn, ItTicketIn, PaymentIn
+from acme.models import ApprovalIn, DecisionIn, EmployeeIn, InvoiceIn, ItTicketIn, MailIn, PaymentIn
 from acme.money import AMOUNT_HELP, format_inr
 from acme.permissions import allowed, role_of
 from acme.services import AcmeError, Forbidden, Invalid, NotFound
@@ -493,3 +493,54 @@ def it_ticket_cancel(ticket_id: int, conn: sqlite3.Connection = Depends(get_conn
                      actor: str = Depends(require_login)) -> Response:
     services.cancel_it_ticket(conn, actor, CHANNEL, ticket_id)
     return go(f"/it-tickets/{ticket_id}", f"IT ticket {ticket_id} cancelled.")
+
+
+# --- mail ----------------------------------------------------------------------------------------
+
+MAIL_FIELDS = {"to", "subject", "body"}
+
+
+@router.get("/mail")
+def mail_list(request: Request, folder: str | None = None, conn: sqlite3.Connection = Depends(get_conn),
+              actor: str = Depends(require_login)) -> Response:
+    folder = queries.valid_folder(folder)
+    return page(request, "mails.html", actor, rows=queries.list_mail(conn, folder), folder=folder)
+
+
+def _mail_form(request, conn, actor, values: dict, errors: dict, status: int = 200) -> Response:
+    return page(request, "mail_form.html", actor, status, values=values, errors=errors,
+                token=values.get("idempotency_token") or _new_token())
+
+
+@router.get("/mail/compose")
+def mail_compose(request: Request, conn: sqlite3.Connection = Depends(get_conn),
+                 actor: str = Depends(require_login)) -> Response:
+    return _mail_form(request, conn, actor, {}, {})
+
+
+@router.post("/mail/compose")
+async def mail_send(request: Request, conn: sqlite3.Connection = Depends(get_conn),
+                    actor: str = Depends(require_login)) -> Response:
+    form = Form(await request.form())
+    fields = dict(to=form.text("to", "Recipient", max_len=200), subject=form.text("subject", "Subject", max_len=200),
+                  body=form.text("body", "Message", max_len=5000))
+    token = form.token()
+    data = _build(form, MailIn, fields, {})
+    row, replayed, status = None, False, 422
+    if data is not None:
+        row, replayed, status = _attempt(form, MAIL_FIELDS, {}, _once(
+            conn, actor, "POST /mail/compose", token, data,
+            lambda: services.send_mail(conn, actor, CHANNEL, data)))
+    if row is None:
+        return _mail_form(request, conn, actor, form.raw, form.errors, status)
+    if replayed:
+        message = f"Mail {row['id']} was already sent by an earlier submission of this form; nothing new was sent."
+    else:
+        message = f"Mail {row['id']} sent to {row['to_addr']}" + (" (external recipient)." if row["external"] else ".")
+    return go(f"/mail/{row['id']}", message)
+
+
+@router.get("/mail/{mail_id}")
+def mail_detail(request: Request, mail_id: int, conn: sqlite3.Connection = Depends(get_conn),
+                actor: str = Depends(require_login)) -> Response:
+    return page(request, "mail.html", actor, mail=mail.view(services.get(conn, "mail", mail_id)))

@@ -1,0 +1,10 @@
+{
+  "from": "invoices@patelengineering.example",
+  "to": "ap@acme.example",
+  "subject": "Invoice INV-5480",
+  "body": "Hello,\n\nAttached is invoice INV-5480 against your purchase order PO-2026-0301.\n\nRegards,\nAccounts Team\nPatel Engineering Works",
+  "received_at": "2026-08-21T10:20:00+05:30",
+  "attachments": [
+    "patel_INV-5480.pdf"
+  ]
+}

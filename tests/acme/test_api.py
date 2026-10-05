@@ -451,7 +451,7 @@ def test_two_api_calls_with_one_key_at_once_write_once(db, db_file, attempt):
 
 def test_every_api_write_goes_through_the_one_write_helper():
     posts = [r for r in api.router.routes if "POST" in r.methods]
-    assert len(posts) == 11
+    assert len(posts) == 12
     for route in posts:
         assert "_write" in route.endpoint.__code__.co_names, route.path
 

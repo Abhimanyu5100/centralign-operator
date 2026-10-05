@@ -31,6 +31,7 @@ def pages(world) -> list[str]:
             "/vendors", "/vendors/1", "/employees", "/employees/new", f"/employees/{world['employee']['id']}",
             "/it-tickets", "/it-tickets/new", f"/it-tickets/{world['ticket']['id']}",
             "/invoices?status=approved", "/vendors?q=sharma", "/it-tickets?employee=1",
+            "/mail", "/mail?folder=outbox", "/mail/compose", "/mail/1", "/mail/9",
             f"/payments/new?invoice_id={world['ok']['id']}"]
 
 
@@ -83,10 +84,6 @@ def test_list_rows_link_with_unique_names_even_for_same_invoice_number(db, agent
 
 def test_submit_button_name_is_save_invoice_by_default(agent):
     assert "Save invoice" in Page(agent.get("/invoices/new").text).buttons
-
-
-def test_mail_pages_are_not_built_yet(agent):
-    assert agent.get("/mail").status_code == 404  # carried over to part 5
 
 
 # --- writes: invoice form ---------------------------------------------------------------------

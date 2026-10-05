@@ -99,8 +99,9 @@ pages); `POST /approvals/{id}/decide` and `/withdraw`. Every state-changing rout
 ("62400.00"), and a bad value is rejected with the exact hint (D-055). The invoice and payment forms carry a
 hidden idempotency token (D-054); employee and IT-ticket forms do not (register 3.5).
 
-**Carried over:** the `/mail*` pages are built in part 5 (with the mailbox) and the UI-only PDF attach action
-in part 6 (with the generated PDFs), each with their tests (D-056).
+**Mail pages (part 5):** `/mail` (inbox; `?folder=outbox` for sent mail), `/mail/{id}`, `/mail/compose`
+(To, Subject, Message; a hidden token makes a double submit send once). **Carried over:** the UI-only PDF
+attach action to part 6 (with the generated PDFs), with its tests (D-056).
 
 ## API (the "official" channel)
 
@@ -143,7 +144,12 @@ Built in part 4 (D-058 to D-063):
   actor (including `system`), bank fields masked. `limit` defaults to 500 (max 1000); page with
   `data.next_since` while `data.has_more` is true. Readable by every logged-in role.
 - **Undo twice** (e.g. voiding a void invoice) is 409 `conflict` with the current status in `detail`.
-- **Mail endpoints** (`GET /api/mail`, `POST /api/mail/send`) are built in part 5 with the mailbox.
+- **Mail (part 5, D-064 to D-068):** `GET /api/mail?folder=inbox|outbox` (default inbox; summaries without
+  `body`, newest id first; an unknown folder is 422 `invalid_request`), `GET /api/mail/{id}` (with `body`),
+  `POST /api/mail/send` with `{to, subject, body, attachments?}` (one address, bare `*.pdf` names, strict
+  body: no `from`, `external` or `folder`). Send needs an `Idempotency-Key` and answers 201 with the
+  outbox row; `external` is computed from `acme/knowledge/mail_allowlist.yaml`, the sender is
+  `<session user>@acme.example`. There is no delete, edit or recall.
 
 `error_type` values (one constant, `acme/web.py` `ERROR_TYPES`; stable from Day 1.4 because the Day 2
 failure classifier keys off them):

@@ -18,8 +18,8 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 
-from acme import idempotency, queries, services
-from acme.models import ApprovalIn, DecisionIn, EmployeeIn, InvoiceIn, ItTicketIn, PaymentIn
+from acme import idempotency, mail, queries, services
+from acme.models import ApprovalIn, DecisionIn, EmployeeIn, InvoiceIn, ItTicketIn, MailIn, PaymentIn
 from acme.services import Invalid, MalformedBody, UnsupportedMediaType
 from acme.web import get_conn, require_login
 
@@ -148,6 +148,17 @@ def it_ticket(ticket_id: int, conn: sqlite3.Connection = Depends(get_conn)) -> J
     return ok(services.get(conn, "it_ticket", ticket_id))
 
 
+@router.get("/api/mail")
+def mail_list(folder: str | None = None, conn: sqlite3.Connection = Depends(get_conn)) -> JSONResponse:
+    """`folder=inbox` (default) or `outbox`; summaries only, read one message for its body."""
+    return ok({"items": queries.list_mail(conn, queries.valid_folder(folder))})
+
+
+@router.get("/api/mail/{mail_id}")
+def mail_detail(mail_id: int, conn: sqlite3.Connection = Depends(get_conn)) -> JSONResponse:
+    return ok(mail.view(services.get(conn, "mail", mail_id)))
+
+
 @router.get("/api/audit")
 def audit(since: int = Query(0, ge=0, description="return entries with an audit id greater than this"),
           limit: int = Query(AUDIT_DEFAULT_LIMIT, ge=1, le=AUDIT_MAX_LIMIT),
@@ -197,6 +208,14 @@ async def create_it_ticket(request: Request, conn: sqlite3.Connection = Depends(
     """No idempotency key on purpose (register 3.5): read back before retrying."""
     return await _write(request, conn, actor, services.create_it_ticket, model=ItTicketIn,
                         status=201, detail="IT ticket created")
+
+
+@router.post("/api/mail/send")
+async def send_mail(request: Request, conn: sqlite3.Connection = Depends(get_conn),
+                    actor: str = Depends(require_login)) -> JSONResponse:
+    """Needs an Idempotency-Key (sent mail cannot be undone, register 3.5). `external` is computed, never sent."""
+    return await _write(request, conn, actor, services.send_mail, model=MailIn, idempotent=True,
+                        status=201, detail="mail sent")
 
 
 @router.post("/api/approvals/{approval_id}/decide")

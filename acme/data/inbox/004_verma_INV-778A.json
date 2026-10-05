@@ -1,0 +1,10 @@
+{
+  "from": "invoices@vermatraders.example",
+  "to": "ap@acme.example",
+  "subject": "Invoice INV-778A (revised copy)",
+  "body": "Hello,\n\nSending the invoice again with a small correction, INV-778A attached.\n\nRegards,\nAccounts Team\nVerma Traders",
+  "received_at": "2026-09-26T09:52:00+05:30",
+  "attachments": [
+    "verma_INV-778A.pdf"
+  ]
+}

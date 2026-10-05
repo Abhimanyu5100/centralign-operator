@@ -1,0 +1,10 @@
+{
+  "from": "invoices@mehtasupplies.example",
+  "to": "ap@acme.example",
+  "subject": "Invoice INV-0091",
+  "body": "Hello,\n\nInvoice INV-0091 for the latest supply is attached. Kindly process.\n\nRegards,\nAccounts Team\nMehta Supplies",
+  "received_at": "2026-10-05T14:10:00+05:30",
+  "attachments": [
+    "mehta_INV-0091.pdf"
+  ]
+}

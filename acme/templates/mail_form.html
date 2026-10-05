@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Compose mail{% endblock %}
+{% block content %}
+<h1>Compose mail</h1>
+<form method="post" action="/mail/compose" novalidate>
+  {{ m.form_errors(errors) }}
+  <input type="hidden" name="idempotency_token" value="{{ token }}">
+  {{ m.field('to', 'Recipient', values, errors, help='One email address') }}
+  {{ m.field('subject', 'Subject', values, errors) }}
+  {{ m.textarea('body', 'Message', values, errors) }}
+  <p><button type="submit">Send mail</button></p>
+</form>
+{% endblock %}

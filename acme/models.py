@@ -4,9 +4,11 @@ for the UI form and the API body (risk N.21). Business rules that need the datab
 """
 
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from acme.mail import ATTACHMENT_PATTERN
 
 
 class _In(BaseModel):
@@ -53,3 +55,14 @@ class EmployeeIn(_In):
 class ItTicketIn(_In):
     type: Literal["laptop", "accounts"]
     employee_id: int
+
+
+class MailIn(_In):
+    """One recipient, no `from` and no `external`: the sender is the session and the flag is computed
+    by the service from the allowlist (risks N.56, N.58)."""
+    to: str = Field(pattern=r"^[^@\s<>,;\"()\[\]\\]+@[^@\s<>,;\"()\[\]\\]+\.[^@\s<>,;\"()\[\]\\]+$", max_length=200,
+                    description="One email address, no display name or list")
+    subject: str = Field(pattern=r"^[^\r\n]+$", max_length=200)
+    body: str = Field(min_length=1, max_length=5000)
+    attachments: list[Annotated[str, Field(pattern=ATTACHMENT_PATTERN, max_length=100)]] = Field(
+        default_factory=list, max_length=5, description="Bare PDF filenames")

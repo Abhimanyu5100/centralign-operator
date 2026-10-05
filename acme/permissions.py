@@ -26,6 +26,7 @@ ACTION_ROLES: dict[str, set[str]] = {
     "employee.cancel": {"ops_agent", "admin"},
     "it_ticket.create": {"ops_agent", "admin"},
     "it_ticket.cancel": {"ops_agent", "admin"},
+    "mail.send": {"ops_agent", "finance_manager", "admin"},  # no undo: sent mail is final (D-005)
     "vendor.update_bank": {"admin"},
     "status.set": {"admin"},  # direct status changes (e.g. payment -> sent): admin/harness only
 }

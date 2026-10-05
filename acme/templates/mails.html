@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Sent mail' if folder == 'outbox' else 'Inbox' }}{% endblock %}
+{% block content %}
+<h1>{{ 'Sent mail' if folder == 'outbox' else 'Inbox' }}</h1>
+<p>
+  <a href="/mail">Inbox</a>
+  <a href="/mail?folder=outbox">Sent mail</a>
+  {% if can('mail.send') %}<a href="/mail/compose">Compose mail</a>{% endif %}
+</p>
+<table>
+  <caption>{{ rows|length }} message(s)</caption>
+  <thead><tr><th>Message</th><th>{{ 'To' if folder == 'outbox' else 'From' }}</th><th>Date</th><th>Attachments</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><a href="/mail/{{ r.id }}">Mail #{{ r.id }} – {{ r.subject }}</a></td>
+      <td>{{ r.to_addr if folder == 'outbox' else r.from_addr }}{% if r.external %} (external){% endif %}</td>
+      <td>{{ r.ts }}</td>
+      <td>{{ r.attachments|length }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4">No messages.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

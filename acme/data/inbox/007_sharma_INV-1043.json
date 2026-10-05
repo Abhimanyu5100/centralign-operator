@@ -1,0 +1,10 @@
+{
+  "from": "invoices@sharmalogistics.example",
+  "to": "ap@acme.example",
+  "subject": "Invoice INV-1043",
+  "body": "Hello,\n\nPlease find attached invoice INV-1043 for the October dispatches.\n\nRegards,\nAccounts Team\nSharma Logistics Pvt Ltd",
+  "received_at": "2026-10-06T09:15:00+05:30",
+  "attachments": [
+    "sharma_INV-1043.pdf"
+  ]
+}

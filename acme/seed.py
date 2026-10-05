@@ -19,10 +19,11 @@ import json
 import sqlite3
 from collections.abc import Callable
 from datetime import timedelta
+from pathlib import Path
 
 from acme import clock, services
 from acme.db import ENTITY_TABLES, connect, create_schema, transaction
-from acme.models import ApprovalIn, DecisionIn, InvoiceIn
+from acme.models import ApprovalIn, DecisionIn, InvoiceIn, MailIn
 
 # --- base world ----------------------------------------------------------------------------------
 
@@ -58,6 +59,10 @@ EMPLOYEES = [
     # Near-name decoy for "Priya Nair" (failure register 0.1, 1.10).
     (7, "Priya Natarajan", "priya.natarajan@acme.example", "Sales Executive", "Sales", 6, "2024-08-19", "active"),
 ]
+
+INBOX_DIR = Path(__file__).parent / "data" / "inbox"
+INBOX_KEYS = {"from", "to", "subject", "body", "received_at", "attachments"}
+MAIL_SYSTEM = "system"
 
 CLERK = "arvind.pillai"  # the human AP clerk who entered the history; ops-agent cannot void these rows
 
@@ -132,6 +137,22 @@ def _insert_base(conn: sqlite3.Connection) -> None:
         IT_TICKETS)
 
 
+def _insert_inbox(conn: sqlite3.Connection) -> None:
+    """One row per `acme/data/inbox/*.json`, in file-name order, so ids follow the file names (the names
+    start with a sequence number that is also chronological). Messages are raw rows, like the rest of the
+    base world, and `received_at` is their `ts` (no wall clock, risks N.17, N.60)."""
+    for path in sorted(INBOX_DIR.glob("*.json")):
+        raw = json.loads(path.read_text())
+        if set(raw) != INBOX_KEYS:
+            raise ValueError(f"{path.name}: keys must be exactly {sorted(INBOX_KEYS)}")
+        MailIn(to=raw["to"], subject=raw["subject"], body=raw["body"], attachments=raw["attachments"])  # same rules as a send
+        conn.execute(
+            "INSERT INTO mail (folder, from_addr, to_addr, subject, body, ts, attachments_json, external, created_by)"
+            " VALUES ('inbox', ?, ?, ?, ?, ?, ?, 0, ?)",
+            (raw["from"], raw["to"], raw["subject"], raw["body"], raw["received_at"],
+             json.dumps(raw["attachments"]), MAIL_SYSTEM))
+
+
 # --- per-task overlays (run through the service layer) -------------------------------------------
 
 # INV-1043 as the agent enters it in T1. The PDF generator (part 6) prints the same facts.
@@ -180,6 +201,7 @@ def reset(conn: sqlite3.Connection, seed: str = "base", now: str = clock.DEFAULT
         create_schema(conn)
         conn.execute("INSERT INTO meta (key, value) VALUES ('seed', ?), ('frozen_now', ?)", (seed, now))
         _insert_base(conn)
+        _insert_inbox(conn)
         overlay = SEEDS[seed]
         if overlay is not None:
             clock.set_now(conn, (frozen - timedelta(days=1)).replace(hour=16, minute=0, second=0).isoformat())

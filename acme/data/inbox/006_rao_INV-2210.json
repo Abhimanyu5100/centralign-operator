@@ -1,0 +1,10 @@
+{
+  "from": "invoices@raopackaging.example",
+  "to": "ap@acme.example",
+  "subject": "Invoice INV-2210",
+  "body": "Hello,\n\nPlease find attached invoice INV-2210.\n\nRegards,\nAccounts Team\nRao Packaging Industries",
+  "received_at": "2026-10-05T16:30:00+05:30",
+  "attachments": [
+    "rao_INV-2210.pdf"
+  ]
+}

@@ -14,9 +14,9 @@ import json
 import sqlite3
 from datetime import date
 
-from acme import clock
+from acme import clock, mail
 from acme.db import row_dict, transaction
-from acme.models import ApprovalIn, DecisionIn, EmployeeIn, InvoiceIn, ItTicketIn, PaymentIn
+from acme.models import ApprovalIn, DecisionIn, EmployeeIn, InvoiceIn, ItTicketIn, MailIn, PaymentIn
 from acme.permissions import allowed, role_of
 
 APPROVAL_LIMIT_PAISE = 5_000_000  # ORG-001: ₹50,000, compared with the total including tax
@@ -30,6 +30,7 @@ TABLES = {
     "payment": "payments",
     "employee": "employees",
     "it_ticket": "it_tickets",
+    "mail": "mail",
 }
 
 
@@ -427,6 +428,33 @@ def cancel_it_ticket(conn: sqlite3.Connection, actor: str, channel: str, ticket_
             raise Conflict(f"A ticket in status {ticket['status']} cannot be cancelled")
         ts = clock.tick(conn)
         return _update(conn, ts, actor, channel, "it_ticket", ticket_id, {"status": "cancelled"}, "it_ticket.cancel")
+
+
+# --- mail ------------------------------------------------------------------------------------------
+
+
+def send_mail(conn: sqlite3.Connection, actor: str, channel: str, data: MailIn) -> dict:
+    """Send = write one outbox row; nothing leaves localhost. There is deliberately no undo (D-005, N.59).
+    The sender is the session actor; `external` is computed here from the allowlist, never taken from the
+    caller (N.56, N.58). The runtime gate (ORG-005, Day 3) is what holds external mail for approval."""
+    _require(actor, "mail.send")
+    _check_channel(channel)
+    with transaction(conn):
+        allowlist = mail.load_allowlist()
+        to = data.to.lower()
+        ts = clock.tick(conn)
+        row = _insert(conn, ts, actor, channel, "mail", {
+            "folder": "outbox",
+            "from_addr": f"{actor}@{allowlist.internal_domain}",
+            "to_addr": to,
+            "subject": data.subject,
+            "body": data.body,
+            "ts": ts,
+            "attachments_json": json.dumps(data.attachments),
+            "external": int(mail.is_external(to, allowlist)),
+            "created_by": actor,
+        }, "mail.send")
+        return mail.view(row)
 
 
 # --- admin-only writes (never available to ops-agent) --------------------------------------------

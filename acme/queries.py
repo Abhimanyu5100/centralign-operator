@@ -7,6 +7,7 @@ already masked in the table, so nothing here can leak a full account number (reg
 import json
 import sqlite3
 
+from acme import mail
 from acme.services import BadRequest
 
 INVOICE_STATUSES = ["draft", "pending_approval", "approved", "rejected", "paid", "void"]
@@ -82,6 +83,21 @@ def list_it_tickets(conn: sqlite3.Connection, employee_id: int | None = None) ->
     where, params = ("WHERE t.employee_id = ?", (employee_id,)) if employee_id is not None else ("", ())
     return _rows(conn, f"SELECT t.*, e.name AS employee_name FROM it_tickets t "
                        f"JOIN employees e ON e.id = t.employee_id {where} ORDER BY t.id DESC", params)
+
+
+def valid_folder(value: str | None) -> str:
+    """Shared by the page and the API; no folder means the inbox."""
+    if not value:
+        return "inbox"
+    if value not in mail.FOLDERS:
+        raise BadRequest(f"Unknown folder {value!r}. Use one of: {', '.join(mail.FOLDERS)}", "folder")
+    return value
+
+
+def list_mail(conn: sqlite3.Connection, folder: str = "inbox") -> list[dict]:
+    """Summaries without the body (keeps the agent's observation small); read one message for its body."""
+    rows = _rows(conn, "SELECT * FROM mail WHERE folder = ? ORDER BY id DESC", (folder,))
+    return [mail.view(row, with_body=False) for row in rows]
 
 
 def approvals_for(conn: sqlite3.Connection, entity_type: str, entity_id: int) -> list[dict]:

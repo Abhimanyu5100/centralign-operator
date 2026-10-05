@@ -1,0 +1,7 @@
+# Recipient domains Acme treats as non-external. The single source for two readers (D-064):
+# Acme's `external` flag on sent mail (acme/mail.py) and, from Day 3, the ORG-005 `recipient_domain_not_in`
+# condition in the runtime policy gate. Do not keep a second copy of this list anywhere.
+# Vendor domains are deliberately NOT here: mail to a vendor is external and needs action approval.
+internal_domain: acme.example
+partner_domains:
+  - partner.example   # placeholder; no task uses it

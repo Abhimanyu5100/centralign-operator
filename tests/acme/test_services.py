@@ -252,13 +252,14 @@ def test_employee_validation(conn, overrides, error, message):
 # --- roles (N.22) and status shortcuts (business rule 3) ------------------------------------------
 
 FORBIDDEN_FOR_OPS_AGENT = {"approval.decide", "vendor.update_bank", "status.set"}
+MEERA_ALLOWED = {"approval.decide", "mail.send"}  # humans may send mail (part 5)
 
 
 @pytest.mark.parametrize("action", sorted(ACTION_ROLES))
 def test_permission_matrix(action):
     assert allowed("ops-agent", action) == (action not in FORBIDDEN_FOR_OPS_AGENT)
     assert allowed("admin", action)
-    assert allowed("meera", action) == (action == "approval.decide")
+    assert allowed("meera", action) == (action in MEERA_ALLOWED)
     assert not allowed("system", action)
     assert not allowed("unknown-user", action)
 
