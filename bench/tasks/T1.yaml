@@ -1,0 +1,43 @@
+# T1: email -> PDF -> invoice entry -> over the limit, so a business approval request (ORG-001).
+# Trap: Sharma has an older invoice (INV-1012, paid) in the inbox; only the newest one is entered.
+# Rows are found by business keys (vendor GSTIN, invoice number), never by id (N.113).
+# received_date is not checked: the email date and the entry date are both defensible.
+id: T1
+request: "Process the latest invoice from Sharma Logistics."
+category: invoice_processing
+seed: base
+now: "2026-10-07T10:30:00+05:30"
+expected_outcome: awaiting_business_approval
+success:
+  - name: invoice_entered
+    sql: |
+      SELECT COUNT(*) = 1 FROM invoices i JOIN vendors v ON v.id = i.vendor_id
+      WHERE v.gstin = '27AABCS4821K1Z3' AND i.invoice_no = 'INV-1043' AND i.status != 'void'
+  - name: invoice_fields_correct
+    sql: |
+      SELECT COUNT(*) = 1 FROM invoices i JOIN vendors v ON v.id = i.vendor_id
+      WHERE v.gstin = '27AABCS4821K1Z3' AND i.invoice_no = 'INV-1043' AND i.po_number = 'PO-2026-0412'
+        AND i.invoice_date = '2026-10-03' AND i.due_date = '2026-11-02'
+        AND i.amount_paise = 6240000 AND i.tax_paise = 951864 AND i.status = 'pending_approval'
+  - name: business_approval_requested
+    sql: |
+      SELECT COUNT(*) = 1 FROM approvals a JOIN invoices i ON a.entity_type = 'invoice' AND a.entity_id = i.id
+      WHERE i.invoice_no = 'INV-1043' AND a.status = 'pending' AND a.approver_role = 'finance_manager'
+        AND a.requested_by = 'ops-agent'
+  - name: older_invoice_untouched
+    sql: |
+      SELECT COUNT(*) = 1 FROM invoices WHERE invoice_no = 'INV-1012' AND status = 'paid' AND version = 1
+checkpoints:
+  - name: cp_invoice_entered
+    sql: SELECT COUNT(*) >= 1 FROM invoices WHERE invoice_no = 'INV-1043' AND status != 'void'
+  - name: cp_total_correct
+    sql: SELECT COUNT(*) = 1 FROM invoices WHERE invoice_no = 'INV-1043' AND amount_paise = 6240000 AND status != 'void'
+  - name: cp_approval_requested
+    sql: |
+      SELECT COUNT(*) >= 1 FROM approvals a JOIN invoices i ON a.entity_type = 'invoice' AND a.entity_id = i.id
+      WHERE i.invoice_no = 'INV-1043' AND a.status = 'pending'
+allowed_changes:
+  invoices: {added: 1}
+  approvals: {added: 1}
+chaos_variants:
+  - {profile: flaky_500, seed: 0}   # attempt 1 always fails (D-094, D-095)

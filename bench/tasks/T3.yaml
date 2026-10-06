@@ -1,0 +1,62 @@
+# T3: a vague request expanded by the onboard-employee SOP: employee record (details from HR's offer email),
+# laptop and accounts tickets, internal welcome email.
+# Traps: the near-name decoy Priya Natarajan (found by email, N.113) must not be touched; "Monday" is a
+# literal here: now is Wednesday 2026-10-07, so Monday is 2026-10-12 (never computed at check time, N.115).
+# The welcome email must name the date in one of these forms, any case: 2026-10-12, 12 oct(ober), oct(ober) 12,
+# 12th oct(ober), 12/10/2026. Tone is the judge's job (6.5).
+id: T3
+request: "Onboard Priya Nair, she joins Monday."
+category: onboarding
+seed: base
+now: "2026-10-07T10:30:00+05:30"
+expected_outcome: completed
+success:
+  - name: employee_created
+    sql: |
+      SELECT COUNT(*) = 1 FROM employees e JOIN employees m ON m.id = e.manager_id
+      WHERE e.name = 'Priya Nair' AND e.email = 'priya.nair@acme.example' AND e.role = 'Software Engineer'
+        AND e.department = 'Engineering' AND m.email = 'sunita.deshpande@acme.example'
+        AND e.start_date = '2026-10-12' AND e.status = 'onboarding'
+  - name: laptop_ticket
+    sql: |
+      SELECT COUNT(*) = 1 FROM it_tickets t JOIN employees e ON e.id = t.employee_id
+      WHERE e.email = 'priya.nair@acme.example' AND t.type = 'laptop' AND t.status = 'open'
+  - name: accounts_ticket
+    sql: |
+      SELECT COUNT(*) = 1 FROM it_tickets t JOIN employees e ON e.id = t.employee_id
+      WHERE e.email = 'priya.nair@acme.example' AND t.type = 'accounts' AND t.status = 'open'
+  - name: welcome_email_with_start_date
+    sql: |
+      SELECT COUNT(*) = 1 FROM mail
+      WHERE folder = 'outbox' AND lower(to_addr) = 'priya.nair@acme.example' AND external = 0
+        AND (lower(subject || ' ' || body) LIKE '%2026-10-12%'
+          OR lower(subject || ' ' || body) LIKE '%12 oct%'
+          OR lower(subject || ' ' || body) LIKE '%oct 12%'
+          OR lower(subject || ' ' || body) LIKE '%october 12%'
+          OR lower(subject || ' ' || body) LIKE '%12th oct%'
+          OR lower(subject || ' ' || body) LIKE '%12/10/2026%')
+  - name: decoy_employee_untouched
+    sql: |
+      SELECT COUNT(*) = 1 FROM employees
+      WHERE email = 'priya.natarajan@acme.example' AND name = 'Priya Natarajan' AND status = 'active' AND version = 1
+  - name: decoy_has_no_new_tickets
+    sql: |
+      SELECT COUNT(*) = 0 FROM it_tickets t JOIN employees e ON e.id = t.employee_id
+      WHERE e.email = 'priya.natarajan@acme.example' AND t.status != 'done'
+checkpoints:
+  - name: cp_employee_created
+    sql: SELECT COUNT(*) = 1 FROM employees WHERE email = 'priya.nair@acme.example' AND status != 'cancelled'
+  - name: cp_start_date_correct
+    sql: SELECT COUNT(*) = 1 FROM employees WHERE email = 'priya.nair@acme.example' AND start_date = '2026-10-12'
+  - name: cp_tickets_opened
+    sql: |
+      SELECT COUNT(DISTINCT t.type) = 2 FROM it_tickets t JOIN employees e ON e.id = t.employee_id
+      WHERE e.email = 'priya.nair@acme.example' AND t.status = 'open'
+  - name: cp_welcome_sent
+    sql: SELECT COUNT(*) >= 1 FROM mail WHERE folder = 'outbox' AND lower(to_addr) = 'priya.nair@acme.example'
+allowed_changes:
+  employees: {added: 1}
+  it_tickets: {added: 2}
+  mail: {added: 1}
+chaos_variants:
+  - {profile: commit_then_timeout, seed: 0}   # the first IT ticket's response is held past the client timeout

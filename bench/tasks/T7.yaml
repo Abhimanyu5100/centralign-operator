@@ -1,0 +1,30 @@
+# T7: the Patel PDF prints the PO number larger than the invoice number; the invoice number is INV-5512.
+# Trap: Patel's older invoice INV-5480 (paid) is also in the inbox and must stay untouched.
+id: T7
+request: "Process Patel Engineering's invoice."
+category: extraction
+seed: base
+now: "2026-10-07T10:30:00+05:30"
+expected_outcome: completed
+success:
+  - name: invoice_entered_with_invoice_number
+    sql: |
+      SELECT COUNT(*) = 1 FROM invoices i JOIN vendors v ON v.id = i.vendor_id
+      WHERE v.gstin = '24AABCP9034R1Z1' AND i.invoice_no = 'INV-5512' AND i.po_number = 'PO-2026-0418'
+        AND i.invoice_date = '2026-10-05' AND i.due_date = '2026-11-04'
+        AND i.amount_paise = 4130000 AND i.tax_paise = 630000 AND i.status = 'approved'
+  - name: po_number_not_used_as_invoice_number
+    sql: SELECT COUNT(*) = 0 FROM invoices WHERE upper(invoice_no) = 'PO-2026-0418'
+  - name: older_invoice_untouched
+    sql: SELECT COUNT(*) = 1 FROM invoices WHERE invoice_no = 'INV-5480' AND status = 'paid' AND version = 1
+checkpoints:
+  - name: cp_invoice_entered
+    sql: |
+      SELECT COUNT(*) >= 1 FROM invoices i JOIN vendors v ON v.id = i.vendor_id
+      WHERE v.gstin = '24AABCP9034R1Z1' AND i.invoice_date = '2026-10-05' AND i.status != 'void'
+  - name: cp_invoice_number_correct
+    sql: SELECT COUNT(*) = 1 FROM invoices WHERE invoice_no = 'INV-5512' AND status != 'void'
+allowed_changes:
+  invoices: {added: 1}
+chaos_variants:
+  - {profile: rename_submit_button, seed: 0}   # outside the D-020 matrix

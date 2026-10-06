@@ -253,3 +253,89 @@ def test_the_leak_check_catches_a_planted_leak(planted):
 
 def test_the_leak_check_allows_policy_values_and_ordinary_words():
     assert leaks("Above Rs 50,000 needs approval; the total includes 18% GST. Raoul and Patelsky are not vendors.") == []
+
+
+# --- no task answer keys under agent/ or acme/knowledge/ (N.10, part 10) ------------------------------------------
+# Forbidden: values that only a task file knows: task ids, task file names, predicate names, quoted SQL literals,
+# long numbers, report-check values and the proper names in each request. Acme's own words (enum values,
+# login users, policy IDs) are allowed: the agent may legitimately know them.
+
+from pathlib import Path  # noqa: E402
+
+from acme import db as acme_db  # noqa: E402
+from acme.permissions import LOGIN_USERS  # noqa: E402
+from bench import tasks as bench_tasks  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[2]
+SCANNED = [ROOT / "agent", ROOT / "acme" / "knowledge"]
+
+
+def acme_words() -> set[str]:
+    words = set(LOGIN_USERS) | set(bench_tasks.Status.__args__) | {"finance_manager"}
+    for statement in acme_db.SCHEMA:
+        for group in re.findall(r"\bIN\s*\(([^)]*)\)", statement):
+            words |= set(re.findall(r"'([^']*)'", group))
+    return {w.lower() for w in words}
+
+
+def task_terms() -> set[str]:
+    terms: set[str] = set()
+    for task in bench_tasks.load_all():
+        terms |= {task.id, f"{task.id}.yaml"}
+        words = re.findall(r"\b[A-Z][a-z]+", task.request)  # proper names: adjacent capitalised words
+        terms |= {f"{a} {b}" for a, b in zip(words, words[1:]) if f"{a} {b}" in task.request}
+        for run in bench_tasks.runs(task):
+            for p in run.success + run.checkpoints:
+                terms.add(p.name)
+                terms |= {lit.strip("%") for lit in re.findall(r"'([^']*)'", p.sql)}
+                terms |= set(re.findall(r"\b\d{5,}\b", p.sql))
+            for rc in run.report_checks:
+                terms |= set(rc.contains_all or []) | set(rc.text_contains or []) | ({rc.equals} if rc.equals else set())
+    allowed = acme_words()
+    return {t for t in terms if t.strip() and t.lower() not in allowed and not re.fullmatch(r"ORG-\d{3}", t)}
+
+
+def task_leaks(text: str) -> list[str]:
+    return sorted(t for t in task_terms() if re.search(rf"(?<![\w-]){re.escape(t)}(?![\w-])", text, re.I))
+
+
+def scanned_files() -> list[Path]:
+    return [p for base in SCANNED for p in sorted(base.rglob("*"))
+            if p.is_file() and p.suffix in {".py", ".md", ".yaml", ".yml", ".json", ".txt"}]
+
+
+def test_task_terms_cover_every_kind_of_answer_and_spare_acme_words():
+    terms = task_terms()
+    assert {"T1", "T9", "T9.yaml", "INV-1043", "6240000", "Priya Nair", "priya.nair@acme.example", "Sharma Logistics",
+            "Kapoor Steel", "accounts@sharmalogistics.example", "2026-10-12", "12 oct", "under review",
+            "invoice_fields_correct", "INV-778A", "XXXXXXXX6602"} <= terms
+    assert not {"pending_approval", "approved", "ops-agent", "ORG-006", "finance_manager", "outbox", "laptop",
+                "needs_clarification"} & terms
+
+
+def test_no_file_under_agent_or_knowledge_holds_a_task_answer():
+    files = scanned_files()
+    assert any(p.suffix == ".py" for p in files) and any(p.suffix == ".md" for p in files)
+    offenders = {str(p.relative_to(ROOT)): task_leaks(p.read_text()) for p in files}
+    assert {k: v for k, v in offenders.items() if v} == {}
+
+
+def test_the_current_sops_pass_the_task_answer_check_unchanged():
+    sops = sorted(SOP_DIR.glob("*.md"))
+    assert len(sops) >= 4
+    for path in sops:
+        assert task_leaks(path.read_text()) == [], path.name
+
+
+@pytest.mark.parametrize("planted", [
+    "Handle INV-0091 first.", "Send it to priya.nair@acme.example.", "She starts 2026-10-12.",
+    "if check == 'invoice_fields_correct':", "see T9.yaml", "amount_paise == 6240000", "Kapoor Steel is missing",
+    "say it is under review", "This is T4.", "bank XXXXXXXX6602",
+])
+def test_the_task_answer_check_catches_a_planted_value(planted):
+    assert task_leaks(planted)
+
+
+def test_the_task_answer_check_allows_acme_words():
+    assert task_leaks("status pending_approval or approved; actor ops-agent; ORG-006; finance_manager; outbox; "
+                      "a laptop ticket; needs_clarification") == []

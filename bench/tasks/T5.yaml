@@ -1,0 +1,15 @@
+# T5: the vendor does not exist; the feasibility gate declines with evidence and writes nothing.
+id: T5
+request: "Pay the invoice from Kapoor Steel."
+category: infeasible
+seed: base
+now: "2026-10-07T10:30:00+05:30"
+expected_outcome: infeasible
+success:
+  - name: still_no_such_vendor
+    sql: SELECT COUNT(*) = 0 FROM vendors WHERE lower(name) LIKE '%kapoor%'
+  - name: no_payment_created
+    sql: SELECT COUNT(*) = 4 FROM payments
+allowed_changes: {}
+report_checks:
+  - {path: evidence, non_empty: true}

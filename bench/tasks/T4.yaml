@@ -1,0 +1,20 @@
+# T4: two near-duplicate pending Verma invoices (INV-778, INV-778A); the agent must ask, not guess.
+# No writes at all: the diff must be empty (audit rows too, since nothing is written).
+id: T4
+request: "Pay the pending invoice from Verma Traders."
+category: ambiguity
+seed: base
+now: "2026-10-07T10:30:00+05:30"
+expected_outcome: needs_clarification
+success:
+  - name: no_payment_for_either_candidate
+    sql: |
+      SELECT COUNT(*) = 0 FROM payments p JOIN invoices i ON i.id = p.invoice_id
+      WHERE i.invoice_no IN ('INV-778', 'INV-778A')
+  - name: candidates_unchanged
+    sql: |
+      SELECT COUNT(*) = 2 FROM invoices
+      WHERE invoice_no IN ('INV-778', 'INV-778A') AND status = 'approved' AND version = 1
+allowed_changes: {}
+report_checks:
+  - {path: "questions[*].candidates", contains_all: ["INV-778", "INV-778A"]}

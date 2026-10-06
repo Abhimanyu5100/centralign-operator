@@ -5,14 +5,27 @@ If this file disagrees with git, git wins for what is committed.
 
 ## Now
 
-- **Last updated:** 2026-10-06 10:48 IST
-- **Day / phase / part:** Day 1 (Phase A), part 9 done (not yet committed) → part 10 next
-- **Currently doing:** waiting for author review of Day 1.9 (the five Day 1 chaos profiles and the chaos event log)
-- **Next step:** Day 1 part 10, the last Day 1 part: task YAMLs T1-T9 in `bench/tasks/` with frozen `now`, SQL
-  checkers in `bench/checkers/`, and checker tests (passing and failing state per checker, states built through the
-  service layer, N.28), per `docs/acme-spec.md` "Tasks". Then the Day 1 definition of done: every task doable by
-  hand in the browser.
+- **Last updated:** 2026-10-06 11:21 IST
+- **Day / phase / part:** Day 1 (Phase A), part 10 done (not yet committed): all Day 1 parts built → Day 2 next
+- **Currently doing:** waiting for author review of Day 1.10 (task YAMLs, checker engine, checker tests) and the
+  author's manual browser walk of T1-T9 (Day 1 definition of done; steps are in the Day 1.10 report)
+- **Next step:** Day 2 part 1: the tool registry with the uniform contract (`agent/tools/registry.py`: name, JSON
+  schema, one-line description, `side_effect`, `channel`, preconditions, postconditions, `undo`; typed results
+  `{ok, error_type, detail, data}`), the pass-through `PolicyGate` with its final interface, the run store with the
+  append-only event log, and the test that nothing in `agent/` imports or opens `bench/` (decision 11, N.10).
+  Then the Acme API tool, mailbox and files/PDF tools, the Playwright browser tool, read-before-retry, compensating
+  actions, the scripted agent and the T1 oracle end to end (CLAUDE.md Day 2 row).
 - **Carried over:**
+  - **Day 2 oracles:** one `bench/oracles/<task>.py` per run (T1-T8, T9 for each approver variant), the perfect agent
+    through `registry.call`; each oracle's end state must pass its checker with chaos off (`bench/checkers/engine.py`,
+    D-014, D-096). T4/T5 oracles end with ask / infeasible and no write.
+  - **Day 3:** the report generator must emit the provisional report contract (D-098: `status`, `questions[]`,
+    `security_findings[]`, `evidence[]`, `action_approvals[]`, `side_effects[]`); add a contract test that runs the
+    generator's output through `report_checks` for T4, T5, T6 and T9.
+  - **Day 3 harness:** call `engine.check(run, db_path, diff_tables, report)` with the `tables` object of
+    `GET /__admin/diff?since=<snapshot taken right after reset and chaos set>`; T9 runs as three run ids.
+  - **Day 5:** `silent_drop_write` is UI-only; if the executor writes through the API, the T2 matrix slot moves to
+    `commit_then_timeout` on T8 (approval request) (D-095).
   - **Day 2:** the agent's HTTP client timeout must be well below `ACME_CHAOS_TIMEOUT_DELAY_SECONDS` (120 s), so
     `commit_then_timeout` surfaces as a client timeout and exercises read-before-retry (3.5, D-094).
   - **Day 2:** (D-085) a test that no agent tool touches the database and the code tool's sandbox cannot reach
@@ -41,15 +54,15 @@ If this file disagrees with git, git wins for what is committed.
   - `iyer_INV-3301.pdf` stays unreferenced by T1-T9 (Phase B stretch).
 - **RESUME PROMPT:**
   ```
-  Read CLAUDE.md and docs/progress.md, then docs/acme-spec.md. Day 1 parts 1 to 9 are done (service layer
-  in acme/services.py; login in acme/auth.py; web plumbing and the admin token rule in acme/web.py; UI in
-  acme/ui.py; JSON API in acme/api.py; idempotency in acme/idempotency.py; reads in acme/queries.py; mailbox in
-  acme/mail.py; PDFs via acme/pdfs.py; admin endpoints in acme/admin.py; the five Day 1 chaos profiles and the
-  chaos event log in acme/chaos.py; knowledge in acme/knowledge/; policy schema, strict loader and the path-glob
-  matcher in agent/policy/; `make test` is the fast suite). Build Day 1 part 10, the last Day 1 part: task YAMLs
-  T1-T9 in bench/tasks/ with frozen `now` (+05:30), SQL checkers in bench/checkers/, and checker tests with a
-  passing and a failing state per checker, states built through the service layer (N.28). agent/ must never read
-  bench/. Show the risk table first and wait for my confirmation, stop after the part, and run /checkpoint.
+  Read CLAUDE.md and docs/progress.md, then docs/acme-spec.md. Day 1 is built: Acme (acme/: services, auth, UI, API,
+  idempotency, mailbox, PDFs, admin endpoints, the five Day 1 chaos profiles), knowledge in acme/knowledge/, the
+  policy schema, loader and path-glob matcher in agent/policy/, and AcmeBench task files T1-T9 in bench/tasks/ with
+  one checker engine in bench/checkers/engine.py (tests in tests/checkers/; `make test` is the fast suite). Build
+  Day 2 part 1: the tool registry with the uniform contract (agent/tools/registry.py; JSON schema and one-line
+  description per tool, side_effect, channel, pre/postconditions, undo; typed results), the pass-through PolicyGate
+  with its final interface (check(call) -> Decision: allow | deny | require_approval plus policy_id and reason) that
+  allows and logs, the run store with the append-only event log, and the test that nothing in agent/ imports or
+  opens bench/. Show the risk table first and wait for my confirmation, stop after the part, and run /checkpoint.
   Do not commit or push.
   ```
 
@@ -69,7 +82,8 @@ If this file disagrees with git, git wins for what is committed.
 | 2026-10-06 | 1.6 | Generated PDFs (13: seeded history, the six task invoices, one scanned) from one fact table in `acme/seed.py`, byte-identical reportlab invariant output, committed with `MANIFEST.sha256`; `acme/files.py` and four download routes; UI-only attach-source action; `send_mail` refuses missing attachments; duplicate check before date rules; decisions D-070 to D-076; risks N.65 to N.70 tested | `acme/{pdfs,files,seed,services,permissions,web,ui,api}.py`, `acme/templates/{invoice,mail}.html`, `acme/data/files/*`, `Makefile`, `tests/acme/test_pdfs.py`, `docs/*` | `make test`: 473 passed, 0 failed (91 new); mutation check on the file listing failed the symlink test as expected; curl against a live server: 200 pdf, traversal 404 | 8debb73 |
 | 2026-10-06 | 1.7 | Company knowledge: four SOPs (process-invoice, onboard-employee, schedule-payment, notify-vendor) with stable step IDs and a documented format; `policies.yaml` ORG-001 to ORG-006 (DRAFT, schema v0); policy schema and strict loader in `agent/policy/` (six condition types incl. `request_matches`, five `acme_check` kinds, deny/require_approval only); SOP parser as the planner contract; ORG-006 pinned inside Acme (no payment amount, payee or bank field, no bank route); register 1.3 and acme-spec updated | `acme/knowledge/sops/*`, `acme/knowledge/policies.yaml`, `acme/mail.py` (one word: `fullmatch`), `agent/__init__.py`, `agent/policy/{__init__,models,loader}.py`, `tests/policy/*` (incl. `test_loader.py`), `tests/acme/{sop_format,test_knowledge,test_payment_amount}.py`, `docs/{acme-spec,decisions,failure-register,risk-log,progress}.md` | `make test`: 712 passed (new: 167 in `tests/policy`, 63 in `test_knowledge.py`, 9 in `test_payment_amount.py`); mutation-checked (wrong limit, widened role set, wrong model fields, missing allowlist, planted vendor leak, bad route, bad policy ID, duplicate step ID, and ten loader mutations all fail); review fixes D-082 and D-083 included | 077edb2 |
 | 2026-10-06 | 1.8 | Admin endpoints behind `X-Admin-Token` (one check in `require_login` for the whole `/__admin` prefix; unset env closes them): reset (seed, now), snapshot, state_hash, diff (row-level, id order, entity tables only), chaos get/set with a stored profile and `wired` flag; snapshots and chaos tables dropped by reset; ORG-002 inside Acme for payments (create refuses, approve refuses, reject allowed); segment-aware `agent/policy/pathglob.py` with path normalisation (decode once, collapse slashes, reject `.`/`..`, case-insensitive, invalid path fails closed) and the policy rules rewritten to it; masking fix (last four digits only above eight digits); typed JSON errors on `/__admin`; decisions D-084 to D-093; risks N.82 and N.83 closed, N.90 to N.101 added | `acme/{admin,chaos,web,app,db,services}.py`, `agent/policy/{pathglob,models}.py`, `acme/knowledge/policies.yaml`, `.env.example`, `Makefile`, `tests/acme/{test_admin,test_org002_payments,test_auth}.py`, `tests/policy/{test_pathglob,acme_checks,test_policies_file,test_schema}.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 891 passed, 0 failed (179 new: 70 admin, 13 ORG-002, 96 pathglob); ten mutations (token guard, prefix guard, both ORG-002 checks, mask, snapshot ids, drop of the new tables, three matcher changes) all killed; curl walk against a live server verified; seed hashes and MANIFEST.sha256 unchanged | 6874984 |
-| 2026-10-06 | 1.9 | The five Day 1 chaos profiles (`rename_submit_button`, `session_expiry_at_step_N`, `flaky_500`, `commit_then_timeout`, `silent_drop_write`): one module `acme/chaos.py`; API writes meet chaos in `_write`, UI writes in `ChaosRoute` (route class of the UI router), session expiry in `require_login`, the label in `invoice_submit_label`; deterministic SHA-256 schedule over attempt numbers; retry of the same attempt never faulted; once-per-activation faults; ops-agent only, admin exempt; silent drop through a `DISCARD_COMMITS` context variable honoured by `db.transaction`; `chaos_attempts` and `chaos_events` tables (dropped by reset); `GET /__admin/chaos/events` with `fired`; Day 3 profiles refused with a typed 422; decisions D-094, D-095; risks N.18, N.19, N.98, N.102 to N.108 tested | `acme/{chaos,db,api,ui,web,auth,admin}.py`, `.env.example`, `tests/acme/{test_chaos,conftest,test_admin}.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 924 passed, 0 failed (33 new in `test_chaos.py`); 13 mutations (drop ignored, retry dedupe, actor check x2, once-only, expiry off by one, attempts kept, events survive reset, redirect rewrite, route class, API after_write, schedule, fingerprint) all killed; curl walk against a live server verified every profile | pending |
+| 2026-10-06 | 1.9 | The five Day 1 chaos profiles (`rename_submit_button`, `session_expiry_at_step_N`, `flaky_500`, `commit_then_timeout`, `silent_drop_write`): one module `acme/chaos.py`; API writes meet chaos in `_write`, UI writes in `ChaosRoute` (route class of the UI router), session expiry in `require_login`, the label in `invoice_submit_label`; deterministic SHA-256 schedule over attempt numbers; retry of the same attempt never faulted; once-per-activation faults; ops-agent only, admin exempt; silent drop through a `DISCARD_COMMITS` context variable honoured by `db.transaction`; `chaos_attempts` and `chaos_events` tables (dropped by reset); `GET /__admin/chaos/events` with `fired`; Day 3 profiles refused with a typed 422; decisions D-094, D-095; risks N.18, N.19, N.98, N.102 to N.108 tested | `acme/{chaos,db,api,ui,web,auth,admin}.py`, `.env.example`, `tests/acme/{test_chaos,conftest,test_admin}.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 924 passed, 0 failed (33 new in `test_chaos.py`); 13 mutations (drop ignored, retry dedupe, actor check x2, once-only, expiry off by one, attempts kept, events survive reset, redirect rewrite, route class, API after_write, schedule, fingerprint) all killed; curl walk against a live server verified every profile | bb43e7c |
+| 2026-10-06 | 1.10 | AcmeBench tasks T1-T9 (`bench/tasks/*.yaml`, strict schema and loader in `bench/tasks.py`, T9 as three runs `T9:none/approve/reject`); one checker engine (`bench/checkers/engine.py`: read-only SQLite, exactly-one-row predicates, side effects against `allowed_changes` from the `/__admin/diff` tables, report checks over the provisional report contract); checker tests with a passing and failing states per run, a UI-built passing state and an extra-write failing state per writing run, T3 date forms, seed continuity, a real `/__admin/diff` agreement test; answer-key leak test extended to task values over `agent/` and `acme/knowledge/`; decisions D-096 to D-098 (and D-095 Day 5 note); risks N.109 to N.117 added and tested, N.4, N.13, N.28, N.29 tested | `bench/{__init__,tasks}.py`, `bench/checkers/{__init__,engine}.py`, `bench/tasks/T1-T9.yaml`, `tests/checkers/{test_engine,test_tasks}.py`, `tests/acme/test_knowledge.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 1062 passed, 0 failed (138 new: 67 in `test_tasks.py` incl. 50 checker cases, 57 in `test_engine.py`, 14 leak tests); 15 mutations (engine x7, task files x8) all killed | pending |
 
 ## Blockers and open questions
 
@@ -208,3 +222,13 @@ Day 1.9 (decisions D-094, D-095; awaiting author review):
   updated); it covers both channels and fires once, on the first eligible write that commits.
 - **Chaos targets `ops-agent` only** (D-094); the spec table did not restrict actors.
 - **`acme/chaos.py` is 280 lines** (about half docstring and comments), above the ~150 estimated in the risk table.
+
+Day 1.10 (decisions D-096 to D-098; awaiting author review):
+
+- **No per-task checker modules:** one engine plus YAML (D-096); the spec's "one module per task" line is replaced.
+- **Checkers read the SQLite file read-only**, not "via the admin read path"; the diff still comes from
+  `/__admin/diff` (D-096, D-097).
+- **`allowed_changes` has a concrete shape** (`added` maximum, `changed` columns); `audit_log` is implicit (D-097).
+- **T9 is one file with `variants`** keyed by approver; the spec schema had one `approver` field (D-097).
+- **`received_date` is not checked** for T1, T2, T6, T7: the email date and the entry date are both defensible.
+- **T8 does not check the scheduled date**: no SOP fixes it; Acme defaults it to the due date.

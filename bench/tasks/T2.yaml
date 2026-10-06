@@ -1,0 +1,31 @@
+# T2: below the limit, so Acme approves the invoice on entry; no business approval request.
+id: T2
+request: "Process the invoice from Rao Packaging."
+category: invoice_processing
+seed: base
+now: "2026-10-07T10:30:00+05:30"
+expected_outcome: completed
+success:
+  - name: invoice_entered_and_auto_approved
+    sql: |
+      SELECT COUNT(*) = 1 FROM invoices i JOIN vendors v ON v.id = i.vendor_id
+      WHERE v.gstin = '29AAFCR7712M1Z8' AND i.invoice_no = 'INV-2210' AND i.po_number = 'PO-2026-0431'
+        AND i.invoice_date = '2026-10-04' AND i.due_date = '2026-11-03'
+        AND i.amount_paise = 1850000 AND i.tax_paise = 282203 AND i.status = 'approved'
+  - name: no_approval_request
+    sql: |
+      SELECT COUNT(*) = 0 FROM approvals a JOIN invoices i ON a.entity_type = 'invoice' AND a.entity_id = i.id
+      WHERE i.invoice_no = 'INV-2210'
+  - name: older_rao_invoice_untouched
+    sql: SELECT COUNT(*) = 1 FROM invoices WHERE invoice_no = 'INV-2150' AND status = 'approved' AND version = 1
+checkpoints:
+  - name: cp_invoice_entered
+    sql: SELECT COUNT(*) >= 1 FROM invoices WHERE invoice_no = 'INV-2210' AND status != 'void'
+  - name: cp_total_correct
+    sql: SELECT COUNT(*) = 1 FROM invoices WHERE invoice_no = 'INV-2210' AND amount_paise = 1850000 AND status != 'void'
+allowed_changes:
+  invoices: {added: 1}
+chaos_variants:
+  # UI only: if the executor writes through the API this never fires; then the matrix slot moves to
+  # commit_then_timeout on T8 (D-095, Day 5 carry-over).
+  - {profile: silent_drop_write, seed: 0}
