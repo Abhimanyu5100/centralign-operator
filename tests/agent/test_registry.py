@@ -404,3 +404,29 @@ def test_a_four_character_secret_is_still_redacted_inside_text(tmp_path):
     result = call(registry_with(PolicyGate(), login_spec()), "login",
                   {"username": "u", "password": "abcd", "echo_secret": True}, ctx)
     assert result.data["nested"] == {"list": ["pw=***"]} and "abcd" not in _raw_log(ctx)
+
+
+# --- per-call side effect never exceeds the declared worst case (Day 2.R) --------------------------------------
+
+@pytest.mark.parametrize("declared,per_call,runs", [
+    ("read", "reversible_write", False), ("reversible_write", "irreversible_write", False),
+    ("irreversible_write", "external_comms", False), ("irreversible_write", "irreversible_write", True),
+    ("external_comms", "read", True), ("irreversible_write", "reversible_write", True),
+])
+def test_a_per_call_side_effect_stronger_than_declared_fails_closed(tmp_path, declared, per_call, runs):
+    ran = []
+
+    async def tool(args, ctx):
+        ran.append(args.text)
+        return ToolResult(ok=True)
+    extra = {"no_undo_reason": "test"} if declared in ("irreversible_write", "external_comms") else {}
+    extra |= {"undo": "void_invoice"} if declared == "reversible_write" else {}
+    stub = spec(name="stub", side_effect=declared, fn=tool, side_effect_of=lambda a: per_call, **extra)
+    gate, ctx = FixedGate(), ctx_for(tmp_path)
+    result = call(registry_with(gate, spec(), void_spec(), stub), "stub", {"text": "x"}, ctx)
+    if runs:
+        assert result.ok and ran == ["x"] and gate.seen[0].side_effect == per_call
+    else:
+        assert result.error_type == "tool_crashed" and "stronger than the declared worst case" in result.detail
+        assert ran == [] and gate.seen == []  # not gated, not run
+        assert event_types(ctx) == ["tool_call", "tool_result"]

@@ -70,11 +70,11 @@ Free-tier model risks (M.1–M.7) are in `model-plan.md`. Run statuses are defin
 | # | Problem | How it shows up | How the design handles it | How we prove it | Scope |
 | --- | --- | --- | --- | --- | --- |
 | 3.1 | Wrong or phantom tool | `triple_click` | Strict schemas; "did you mean X?" errors | Phantom-call unit test | build |
-| 3.2 | Bad arguments | "62,400.00", "20/10" | Pydantic validation and normalisers; errors returned as observations | Fuzzed argument tests | build |
+| 3.2 | Bad arguments | "62,400.00", "20/10" | Pydantic validation and normalisers; errors returned as observations | Parametrized bad-argument tests (`tests/agent/test_registry.py::test_bad_arguments_are_invalid_args_and_neither_gated_nor_run`, `tests/agent/test_normalise.py`) | build |
 | 3.3 | Browser timing | Click before load; toast missed | Role/name locators (auto-wait); network idle after submit | `slow_server` chaos (Day 3) | test |
 | 3.4 | Session expired | Redirect to login | Expiry detector + login tool; credentials in vault, never in LLM context | `session_expiry_at_step_N` chaos | test |
 | 3.5 | Double write | Retry after timeout duplicates | Read back before retrying any write; idempotency keys where Acme supports them | `commit_then_timeout` on IT-ticket creation and approval requests (no idempotency key, no natural uniqueness) | test |
-| 3.6 | Code tool damage | Deletes files, hits network | Code tool limited to extraction; subprocess with timeout and scratch dir | Timeout and scratch-dir unit test (network isolation: future) | build |
+| 3.6 | Code tool damage | Deletes files, hits network | No general code tool (D-121): no task needs one and a sandbox is the largest attack surface; PDF extraction and normalisers are local deterministic tools on the `code` channel. If one is ever built: subprocess with an explicit env, timeout and scratch dir | Timeout and scratch-dir unit test, when built | future |
 | 3.7 | Long op killed | Exceeds timeout | Background-job tool with polling | Slow-job test | future |
 | 3.8 | Wrong PDF field | PO number as invoice number | Field-level extraction with location; cross-checks; low confidence → ask | T7 decoy PO invoice | test |
 | 3.9 | Write bypasses audit | Direct DB write | Writes only via audited channel; gate denies raw DB writes and admin endpoints (ORG-004) | Adversarial `direct_db_or_admin` | test |
@@ -89,7 +89,7 @@ Free-tier model risks (M.1–M.7) are in `model-plan.md`. Run statuses are defin
 | 4.2 | Info missing from tree | Charts/images invisible | Screenshot on demand; vision read | Image-only value task (scanned PDF, Phase B stretch) | future |
 | 4.3 | Transient message missed | Toast gone | Post-action capture of alerts/toasts/dialogs | `toast_2s` fault (Day 3) | test |
 | 4.4 | UI success, backend failed | Banner but no row | Postconditions via a different channel | `silent_drop_write` fault | test |
-| 4.5 | Unstable element IDs | Element 37 moved | IDs from role+name+position hash, re-resolved each step | Re-render unit test | build |
+| 4.5 | Unstable element IDs | Element 37 moved | Refs from role + accessible name + position among same-named controls, re-resolved at action time; a submit's form target and a link's href are re-read before the click (D-117) | Re-render e2e test (`tests/e2e/test_browser.py::test_a_re_rendered_page_never_shifts_a_click_onto_another_control`, `test_a_same_name_link_inserted_before_the_target_is_refused`) | build |
 | 4.6 | Context overflow | Early facts forgotten | Compaction into run-memory facts; raw log on disk | 40-step task | future |
 | 4.7 | Untrusted text | "Ignore previous instructions" | Observed text wrapped as data with provenance; scanner flags payment/bank instructions | T6 | test |
 | 4.8 | Screenshots costly | Latency/cost up | Only on request or ambiguity; downscaled | Cost per task | future |

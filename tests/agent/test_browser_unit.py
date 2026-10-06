@@ -83,6 +83,7 @@ ELEMENTS = {
     "b4": Element("b4", "button", "Apply filters", 0, form=("GET", "/invoices")),
     "b5": Element("b5", "button", "Approve", 0, form=("POST", "/approvals/3/decide")),
     "b6": Element("b6", "button", "Sign out", 0, form=("POST", "/logout")),
+    "b7": Element("b7", "button", "Send", 0, form=("POST", "/mail/compose")),
 }
 
 
@@ -93,6 +94,7 @@ ELEMENTS = {
     ("b4", "read", ("GET", "/invoices")),
     ("b5", "irreversible_write", ("POST", "/approvals/3/decide")),  # a form the catalog does not list: worst case
     ("b6", "read", ("POST", "/logout")),
+    ("b7", "external_comms", ("POST", "/mail/compose")),  # the declared worst case must allow it (D-122)
     ("b9", "irreversible_write", None),  # an unknown ref: worst case (the click itself then fails)
 ])
 def test_the_gate_sees_each_clicks_own_side_effect_and_request(tmp_path, ref, effect, request_):

@@ -99,6 +99,49 @@ def test_a_click_whose_target_changed_since_the_observation_is_refused(acme):
     assert count(acme, f"SELECT COUNT(*) FROM invoices WHERE id = {second} AND status = 'void'") == 0
 
 
+INSERT_BEFORE = """([tag, text, href, outside]) => {
+    const target = [...document.querySelectorAll('button, a')].find(e => e.textContent.trim() === text);
+    const anchor = outside && target.closest('form') ? target.closest('form') : target;
+    const el = document.createElement(tag);
+    el.textContent = tag === 'span' ? 'Unrelated' : text;
+    if (href) el.setAttribute('href', href);
+    anchor.parentNode.insertBefore(el, anchor);
+}"""  # test-side page surgery: the agent itself never uses selectors
+
+
+@pytest.mark.parametrize("tag,outside,expect", [
+    ("span", False, "voided"),         # different role and name: the same ref still finds the real button
+    ("button", False, "voided"),       # same name, inside the same form: it sends exactly the request the gate saw
+    ("button", True, "refused"),       # same name, outside any form: it would send nothing the gate saw
+])
+def test_a_re_rendered_page_never_shifts_a_click_onto_another_control(acme, tag, outside, expect):
+    """Register 4.5: an element inserted before the target after the observation; the click hits the right control
+    (refs resolve by role, name and position among same-named controls, and the form target is re-read) or
+    refuses with "observe again"."""
+    async def body(run):
+        invoice_id = await pending_invoice(run)
+        page = await run.call("browser_open", {"path": f"/invoices/{invoice_id}"})
+        void = ref(page, "button", name="Void invoice")
+        await (await run.browser.page()).evaluate(INSERT_BEFORE, [tag, "Void invoice", None, outside])
+        return invoice_id, await run.call("browser_click", {"ref": void})
+    invoice_id, result = browse(acme, body)
+    voided = count(acme, f"SELECT COUNT(*) FROM invoices WHERE id = {invoice_id} AND status = 'void'")
+    if expect == "voided":
+        assert result.ok and voided == 1
+    else:
+        assert result.error_type == "precondition_failed" and "observe again" in result.detail and voided == 0
+
+
+def test_a_same_name_link_inserted_before_the_target_is_refused(acme):
+    async def body(run):
+        page = await run.call("browser_open", {"path": "/"})
+        invoices = ref(page, "link", name="Invoices")
+        await (await run.browser.page()).evaluate(INSERT_BEFORE, ["a", "Invoices", "/vendors", False])
+        return await run.call("browser_click", {"ref": invoices})
+    result = browse(acme, body)
+    assert result.error_type == "precondition_failed" and "no longer leads to /invoices" in result.detail
+
+
 def test_a_lost_session_renews_a_read_and_never_resubmits_a_form(acme):
     async def read(run):
         await run.call("browser_open", {"path": "/"})
@@ -179,3 +222,14 @@ def test_under_flaky_500_the_failed_submit_is_a_typed_server_error(acme):
     assert result.script.stopped_at == "submit"
     assert result.script.results["submit"].error_type == "server_error"
     assert count(acme, "SELECT COUNT(*) FROM invoices WHERE invoice_no = 'INV-1043'") == 0
+
+
+def test_no_secret_reaches_the_run_store_after_a_gui_run(acme):
+    """P.7: after a whole GUI run (with a session renewal), neither the agent's password nor the admin token
+    appears anywhere under runs/ (the SQLite run store, its WAL, the scratch files)."""
+    gui_oracle(acme, "session_expiry_at_step_6")
+    from agent.store import DEFAULT_PATH
+    blobs = [p.read_bytes() for p in DEFAULT_PATH.parent.rglob("*") if p.is_file()]
+    assert blobs
+    for secret in (acme.agent_password, acme.admin_token):
+        assert not any(secret.encode() in blob for blob in blobs)

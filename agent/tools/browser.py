@@ -270,6 +270,8 @@ def browser_tools(session: BrowserSession) -> list[ToolSpec]:
             if not now or (now[0].upper(), urlparse(now[1]).path or el.form[1]) != el.form:
                 return ToolResult.fail("precondition_failed", f"{args.ref} no longer submits {' '.join(el.form)}; "
                                        "observe again (the gate decided on what the page showed)")
+        if el.href is not None and await loc.get_attribute("href") != el.href:  # a re-rendered page (4.5)
+            return ToolResult.fail("precondition_failed", f"{args.ref} no longer leads to {el.href}; observe again")
         if el.role != "link" and not el.form:  # e.g. a checkbox: no navigation to wait for
             failed = await guarded(loc.click)
             return failed if isinstance(failed, ToolResult) else await observe(args, ctx)
@@ -314,7 +316,7 @@ def browser_tools(session: BrowserSession) -> list[ToolSpec]:
         ToolSpec(name="browser_observe", description="Observe the current page: controls with refs, text, messages.",
                  args_model=NoArgs, side_effect="read", channel="gui", fn=observe),
         ToolSpec(name="browser_click", description="Click a link or button by ref; a form submit may write.",
-                 args_model=RefArgs, side_effect="irreversible_write", channel="gui", fn=click,
+                 args_model=RefArgs, side_effect="external_comms", channel="gui", fn=click,  # worst case: a mail form
                  no_undo_reason="a form sent from the browser is undone, if at all, by the matching API undo tool",
                  side_effect_of=click_effect, request_of=click_request),
         ToolSpec(name="browser_fill", description="Type text into a text field by ref (nothing is sent until a submit).",

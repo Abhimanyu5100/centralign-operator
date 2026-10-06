@@ -35,6 +35,8 @@ AGENT_ERROR_TYPES = (
 )
 ERROR_TYPES = ACME_ERROR_TYPES + AGENT_ERROR_TYPES
 SIDE_EFFECTS = get_args(SideEffect)
+# Strength of a side effect class, weakest first; external_comms counts as the strongest (it cannot be recalled).
+STRENGTH = {"read": 0, "reversible_write": 1, "irreversible_write": 2, "external_comms": 3}
 
 
 class ToolResult(BaseModel):
@@ -92,7 +94,7 @@ class ToolSpec:
     transport_args: tuple[str, ...] = ()              # e.g. an idempotency key: left out of the fingerprint
     request_of: Callable[[Any], HttpRequest] | None = None   # the HTTP request the call will make, if known
     # A tool whose effect depends on its target (a GUI click: a link reads, a form submit writes) names it per call;
-    # `side_effect` is then the worst case, used when this fails (D-117).
+    # `side_effect` is then the declared worst case: a stronger answer fails closed, the tool does not run (D-117).
     side_effect_of: Callable[[Any], SideEffect] | None = None
 
     def llm_schema(self) -> dict[str, Any]:
@@ -220,6 +222,9 @@ class Registry:
             side_effect = spec.side_effect_of(parsed) if spec.side_effect_of else spec.side_effect
             if side_effect not in SIDE_EFFECTS:
                 raise RuntimeError(f"side_effect_of returned {side_effect!r}")
+            if STRENGTH[side_effect] > STRENGTH[spec.side_effect]:  # fail closed: never stronger than declared
+                raise RuntimeError(f"side_effect_of returned {side_effect!r}, stronger than the declared worst "
+                                   f"case {spec.side_effect!r}")
         except (TypeError, ValueError) as exc:  # ValidationError is a ValueError
             return self._log_attempt(ctx, name, args, secrets, ToolResult.fail("invalid_args", _explain(exc)), started)
         except Exception as exc:  # a bug in the spec's request_of
