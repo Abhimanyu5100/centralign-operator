@@ -15,11 +15,14 @@ Retries (register 3.5, 3.4): at most one per call, and only after a failure that
 - a write with an idempotency key: retry with the same key (derived from run_id + call fingerprint, so it is
   stable across retries and across calls); Acme replays the stored result if the first attempt committed;
 - a write without one: read back first (the catalog's `read_back`); if the write already happened, return that
-  row with `already_done: true`, else retry. A failed read-back means no retry, ever.
+  row with `already_done: true`, else retry. A failed read-back means no retry, ever. After an unknown outcome the
+  read-back keeps reading for up to READ_LAG_SECONDS before it decides "not written": a committed row can stay
+  invisible for a while (delayed_write, D-123, N.141).
 A keyless write whose outcome is still unknown is remembered per (run, fingerprint) with the ids that existed
 before it, so the next identical call reads back before writing again (N.130).
 """
 
+import asyncio
 import hashlib
 import string
 from collections.abc import Mapping
@@ -39,6 +42,8 @@ from agent.tools.registry import ACME_ERROR_TYPES, RunContext, ToolResult, ToolS
 
 CATALOG_PATH = Path(__file__).resolve().parents[2] / "acme" / "knowledge" / "api.yaml"
 DEFAULT_TIMEOUT_SECONDS = 20.0
+DEFAULT_READ_LAG_SECONDS = 6.0   # longer than Acme's longest read lag (delayed_write: 5 s); a test keeps it so
+POLL_SECONDS = 0.25
 UNKNOWN_OUTCOME = frozenset({"timeout", "connection_error", "server_error"})
 SESSION_LOST = frozenset({"session_expired", "login_required"})
 ARG_TYPES: dict[str, type] = {"string": str, "integer": int, "date": date, "boolean": bool}
@@ -76,6 +81,14 @@ class ReadBack(_Strict):
     expect: dict[str, str | int] = {}         # row field = literal; "$user" is the agent's login
 
 
+class Verify(_Strict):
+    """Layer 1 postcondition of a write (D-134): an independent read of the row it wrote, never its response."""
+    tool: str                                 # an API read tool
+    args: dict[str, str]                      # read-tool argument <- field of this write's result (its id)
+    fields: dict[str, str] = {}               # row field <- this write's argument (checked when it was given)
+    expect: dict[str, str | int] = {}         # row field = literal (an undo's target status)
+
+
 class Endpoint(_Strict):
     name: str
     description: str
@@ -90,6 +103,7 @@ class Endpoint(_Strict):
     transport_args: list[Literal["idempotency_key"]] = []
     sensitive_args: list[str] = []
     read_back: ReadBack | None = None
+    verify: Verify | None = None              # required for every write
     response: Literal["json", "file"] = "json"
     untrusted: str | None = None              # provenance origin of returned text, e.g. "mail:{mail_id}"
 
@@ -201,6 +215,16 @@ def _problems(ep: Endpoint, catalog: Catalog) -> list[str]:
         else:
             problems += [f"undo argument {a!r} is not an argument of {target.name}"
                          for a in ep.undo.args if a not in target.args]
+    if ep.verify is None:
+        problems.append("a write names its postcondition read (verify)")
+    else:
+        reader = catalog.get(ep.verify.tool)
+        if reader is None or reader.side_effect != "read":
+            problems.append(f"verify tool {ep.verify.tool!r} is not a read tool in the catalog")
+        else:
+            problems += [f"verify argument {a!r} is not an argument of {reader.name}"
+                         for a in ep.verify.args if a not in reader.args]
+        problems += [f"verify field {f!r} names no argument" for f in ep.verify.fields.values() if f not in ep.args]
     if "idempotency_key" not in ep.transport_args and ep.read_back is None:
         problems.append("a write without an idempotency key needs a read_back (register 3.5)")
     if ep.read_back:
@@ -297,6 +321,7 @@ class AcmeClient:
         self.session = catalog.session
         self.base_url = config.get("ACME_URL", "")
         self.timeout = float(config.get("ACME_HTTP_TIMEOUT_SECONDS") or DEFAULT_TIMEOUT_SECONDS)
+        self.read_lag = float(config.get("READ_LAG_SECONDS") or DEFAULT_READ_LAG_SECONDS)
         self._password = config.get(catalog.session.password_key, "")
         self._transport = transport
         self._http: httpx.AsyncClient | None = None
@@ -382,6 +407,20 @@ class AcmeClient:
         wanted |= {field: self.session.user if value == "$user" else value for field, value in rb.expect.items()}
         return [row for row in rows if all(_same(row.get(f), v) for f, v in wanted.items())]
 
+    async def _ours(self, ep: Endpoint, args: Mapping[str, Any], before: set[int], wait: bool) -> list | None:
+        """Rows showing this write happened (a new row not in `before`, or the target state), or None when the read
+        failed. With `wait`, read again until the read lag has passed before answering "not written"."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + (self.read_lag if wait else 0)
+        while True:
+            rows = await self._read_back(ep, args)
+            if rows is None:
+                return None
+            ours = rows if ep.read_back.kind == "target_state" else [r for r in rows if r["id"] not in before]
+            if ours or loop.time() >= deadline:
+                return ours
+            await asyncio.sleep(POLL_SECONDS)
+
     async def write(self, ep: Endpoint, args: Mapping[str, Any], ctx: RunContext) -> ToolResult:
         path, body = _parts(ep, args)
         call = fingerprint(ep.name, dict(args), tuple(ep.transport_args))
@@ -398,6 +437,10 @@ class AcmeClient:
                 return _done(rows[0], True, ["already in the target state before writing"])
             before = self._unresolved.get(memo, {row["id"] for row in rows})
             ours = [row for row in rows if row["id"] not in before]
+            if not ours and memo in self._unresolved:  # an earlier identical call's outcome is unknown: wait it out
+                ours = await self._ours(ep, args, before, wait=True)
+                if ours is None:
+                    return ToolResult.fail("connection_error", f"could not read back before {ep.name}; nothing written")
             if ours:
                 self._unresolved.pop(memo, None)
                 return _done(ours[0], True, ["an earlier call's write had committed"])
@@ -422,12 +465,11 @@ class AcmeClient:
                 self._unresolved[memo] = before
             if attempt == 2:
                 break
-            if ep.read_back:  # without a key, read back before the retry (register 3.5)
-                rows = await self._read_back(ep, args)
-                if rows is None:
+            if ep.read_back:  # without a key, read back before the retry (register 3.5), waiting out the read lag
+                ours = await self._ours(ep, args, before, wait=result.error_type in UNKNOWN_OUTCOME)
+                if ours is None:
                     attempts.append("read-back failed; not retried")
                     break
-                ours = rows if ep.read_back.kind == "target_state" else [r for r in rows if r["id"] not in before]
                 if ours:
                     self._unresolved.pop(memo, None)
                     return _done(ours[0], True, attempts + [f"read-back found {ep.read_back.tool} row {ours[0]['id']}"])

@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from agent.policy.models import FieldSourceUntrusted, PolicyFile, RecipientDomainNotIn
+from agent.policy.models import MAIL_ALLOWLIST, FieldSourceUntrusted, PolicyFile, RecipientDomainNotIn
 
 KNOWLEDGE_DIR = Path(__file__).resolve().parents[2] / "acme" / "knowledge"
 POLICIES_PATH = KNOWLEDGE_DIR / "policies.yaml"
@@ -51,8 +51,13 @@ def strict_yaml(text: str):
 
 
 def load_allowlist_domains(path: Path | str) -> frozenset[str]:
-    """Domains in an allowlist file (`internal_domain` plus `partner_domains`). Same file and same shape
-    Acme reads in `acme/mail.py` (D-064), with the same domain pattern; a test checks both agree.
+    """Domains in an allowlist file (`internal_domain` plus `partner_domains`)."""
+    return read_allowlist(path)[1]
+
+
+def read_allowlist(path: Path | str) -> tuple[str, frozenset[str]]:
+    """(internal domain, every domain) of an allowlist file. Same file and same shape Acme reads in
+    `acme/mail.py` (D-064), with the same domain pattern; a test checks both agree.
     A symlink is refused: the file must be a real file in the directory the policy file names it in."""
     path = Path(path)
     if path.is_symlink():
@@ -64,7 +69,7 @@ def load_allowlist_domains(path: Path | str) -> frozenset[str]:
     domains = [raw["internal_domain"], *raw["partner_domains"]]
     if not all(isinstance(d, str) and _DOMAIN.fullmatch(d) for d in domains):
         raise PolicyError(f"allowlist {path}: every domain must be lowercase like example.com")
-    return frozenset(domains)
+    return raw["internal_domain"], frozenset(domains)
 
 
 def load_policies(path: Path | str = POLICIES_PATH) -> PolicyFile:
@@ -73,11 +78,14 @@ def load_policies(path: Path | str = POLICIES_PATH) -> PolicyFile:
         policies = PolicyFile.model_validate(strict_yaml(_read(path)))
     except ValidationError as exc:
         raise PolicyError(f"{path.name} is invalid:\n{exc}") from exc
-    allowlists = {}  # each file a rule names is read once, here, and kept on the policy (no re-read later)
+    names = set()  # each file a rule needs is read once, here, and kept on the policy (no re-read later)
     for rule in policies.rules:
         for cond in rule.when:
-            if isinstance(cond, (RecipientDomainNotIn, FieldSourceUntrusted)) and cond.allowlist \
-                    and cond.allowlist not in allowlists:
-                allowlists[cond.allowlist] = load_allowlist_domains(path.parent / cond.allowlist)
-    policies.attach_allowlists(allowlists)
+            if isinstance(cond, RecipientDomainNotIn):
+                names.add(cond.allowlist)
+            elif isinstance(cond, FieldSourceUntrusted) and cond.exempt_recipient_domains == "internal":
+                names.add(MAIL_ALLOWLIST)
+    read = {name: read_allowlist(path.parent / name) for name in sorted(names)}
+    policies.attach_allowlists({n: domains for n, (_, domains) in read.items()},
+                               {n: internal for n, (internal, _) in read.items()})
     return policies

@@ -213,10 +213,19 @@ def test_the_vendor_master_contact_is_trusted_so_only_org005_holds(api):
     assert decision.policy_ids == ["ORG-005"]
 
 
-def test_an_allowlisted_address_seen_only_in_mail_is_exempt(api):
+def test_an_internal_address_seen_only_in_mail_is_exempt(api):
     facts = Facts(untrusted=frozenset({"priya.nair@acme.example"}))
     decision = decide(api("send_mail", {"to": "priya.nair@acme.example", **MAIL}, sop_id="onboard-employee"), facts)
     assert decision.effect == "allow"
+
+
+def test_a_partner_address_seen_only_in_untrusted_text_still_needs_approval_under_org007(api):
+    """D-144: only our own domain is exempt. ORG-005 lets partner mail through, so ORG-007 alone must hold it."""
+    facts = Facts(untrusted=frozenset({"orders@partner.example"}))
+    decision = decide(api("send_mail", {"to": "orders@partner.example", **MAIL}, sop_id="notify-vendor"), facts)
+    assert decision.effect == "require_approval" and decision.policy_ids == ["ORG-007"]
+    trusted = Facts(untrusted=facts.untrusted, trusted=frozenset({"orders@partner.example"}))
+    assert decide(api("send_mail", {"to": "orders@partner.example", **MAIL}, sop_id="notify-vendor"), trusted).effect == "allow"
 
 
 def test_an_account_number_from_a_document_on_a_payee_tool_is_held():

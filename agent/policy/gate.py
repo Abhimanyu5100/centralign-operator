@@ -27,7 +27,7 @@ from typing import Any, Literal, Protocol
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-from agent.policy.models import CONDITION_TYPES, PolicyFile, Rule
+from agent.policy.models import CONDITION_TYPES, MAIL_ALLOWLIST, PolicyFile, Rule
 from agent.policy.pathglob import path_matches
 from agent.policy.scanner import normalise_value
 
@@ -160,7 +160,7 @@ def _recipient_domain_not_in(c, call: ToolCall, view: _View) -> Note:
 
 
 def _field_source_untrusted(c, call: ToolCall, view: _View) -> Note:
-    exempt = view.policies.allowlist(c.allowlist) if c.allowlist else frozenset()
+    exempt = {view.policies.internal_domain(MAIL_ALLOWLIST)} if c.exempt_recipient_domains == "internal" else set()
     for arg in call.trust_sensitive:
         if call.args.get(arg) is None or _domain(call.args[arg]) in exempt:
             continue

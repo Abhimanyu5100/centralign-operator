@@ -53,13 +53,14 @@ ENDED = {"T4": "asked", "T5": "infeasible", "T9:none": "paused", "T9:reject": "b
 def test_every_oracle_passes_its_db_checker_with_chaos_off(acme, run_id):
     result = _oracle(acme, run_id)
     assert result.script.ended == ENDED.get(run_id, "done"), (result.script.ended, result.script.stopped_at)
+    assert result.verdict.status == result.run.expected_outcome, result.verdict.reasons  # the verifier agrees
     assert result.result.passed, [(c.name, c.detail) for c in result.result.checks if not c.ok]
     assert result.pending and result.pending[0].startswith("report: status")  # never counted as passed
 
 
 def test_commit_then_timeout_reads_back_instead_of_writing_twice(acme):
     result = _oracle(acme, "T3", chaos="commit_then_timeout", timeout=0.5)
-    assert result.chaos_fired is True and result.passed
+    assert result.chaos_fired is True and result.passed and result.verdict.status == "completed"
     laptop = result.script.results["laptop_ticket"]
     assert laptop.data["already_done"] is True and laptop.data["attempts"][0] == "attempt 1: timeout"
     assert result.script.results["accounts_ticket"].data["already_done"] is False
@@ -67,9 +68,22 @@ def test_commit_then_timeout_reads_back_instead_of_writing_twice(acme):
                         "WHERE e.email = 'priya.nair@acme.example'") == 2
 
 
+def test_t3_under_delayed_write_ends_with_two_tickets_and_completed(acme):
+    """D-123, N.141: every row the run inserts stays hidden from its reads for 5 s; the run still writes each ticket
+    once, and the verifier reads through the lag (some checks needed more than one read) to `completed`."""
+    result = _oracle(acme, "T3", chaos="delayed_write")
+    assert result.chaos_fired is True and result.passed
+    assert _count(acme, "SELECT COUNT(*) FROM it_tickets t JOIN employees e ON e.id = t.employee_id "
+                        "WHERE e.email = 'priya.nair@acme.example'") == 2
+    assert result.verdict.status == "completed", result.verdict.reasons
+    checks = [*result.verdict.postconditions, *(c for m in result.verdict.milestones for c in m.checks)]
+    assert max(c.reads for c in checks) > 1
+
+
 def test_flaky_500_leaves_one_invoice_and_one_approval(acme):
     result = _oracle(acme, "T1", chaos="flaky_500", chaos_seed=0)
     assert result.chaos_fired is True and result.passed
+    assert result.verdict.status == "awaiting_business_approval"
     assert result.script.results["submit_invoice"].data["attempts"] == ["attempt 1: server_error", "attempt 2: ok"]
     assert _count(acme, "SELECT COUNT(*) FROM invoices WHERE invoice_no = 'INV-1043'") == 1
     assert _count(acme, "SELECT COUNT(*) FROM approvals WHERE status = 'pending'") == 1
@@ -78,6 +92,7 @@ def test_flaky_500_leaves_one_invoice_and_one_approval(acme):
 def test_session_expiry_recovers_with_one_login(acme):
     result = _oracle(acme, "T8", chaos="session_expiry_at_step_5")
     assert result.chaos_fired is True and result.passed
+    assert result.verdict.status == "awaiting_business_approval"
 
 
 def test_rollback_on_the_live_server_restores_net_entity_state(acme):

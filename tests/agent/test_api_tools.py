@@ -274,3 +274,63 @@ def test_the_catalog_names_every_tool_the_registry_holds(sandbox):
     run = sandbox.run()
     assert {s.name for s in run.registry.specs()} == {e.name for e in load_catalog().tools} | {"extract_pdf_text", "browser_open", "browser_observe", "browser_click", "browser_fill", "browser_select",
         "ask_user", "declare_infeasible"}
+
+
+
+# --- read lag: an unknown outcome is read back for the read-lag window before "not written" (D-123, N.141) --------
+
+def _delayed(sandbox, monkeypatch, seconds: str = "1"):
+    monkeypatch.setenv("ACME_CHAOS_VISIBILITY_SECONDS", seconds)
+    sandbox.admin_call("POST", "/__admin/chaos", profile="delayed_write", seed=0)
+
+
+def test_a_lagged_row_is_found_by_polling_and_not_written_twice(sandbox, monkeypatch):
+    employee = _employee(sandbox)
+    _delayed(sandbox, monkeypatch)
+    transport = sandbox.faults(Fault("POST", TICKETS, "after"))  # committed, the client hears a timeout
+    run = sandbox.run(transport)
+    run.client.read_lag = 3.0
+    result = drive(run, lambda run: run.call("create_it_ticket", {"type": "laptop", "employee_id": employee}))
+    assert result.ok and result.data["already_done"] is True
+    assert transport.calls("POST", TICKETS) == 1 and transport.calls("GET", TICKETS) >= 3  # polled through the lag
+    assert _count(sandbox, "SELECT COUNT(*) FROM it_tickets WHERE employee_id = ?", employee) == 1
+
+
+def test_without_waiting_out_the_lag_the_same_case_would_write_twice(sandbox, monkeypatch):
+    """The mechanism matters: with no read-lag window the read-back misses the hidden row and sends again."""
+    employee = _employee(sandbox)
+    _delayed(sandbox, monkeypatch)
+    transport = sandbox.faults(Fault("POST", TICKETS, "after"))
+    run = sandbox.run(transport)
+    run.client.read_lag = 0.0
+    drive(run, lambda run: run.call("create_it_ticket", {"type": "laptop", "employee_id": employee}))
+    assert transport.calls("POST", TICKETS) == 2
+    assert _count(sandbox, "SELECT COUNT(*) FROM it_tickets WHERE employee_id = ?", employee) == 2
+
+
+def test_a_session_loss_is_retried_without_waiting_for_the_read_lag(sandbox):
+    """A 401 means Acme wrote nothing: re-login, read back without waiting, retry. Only an unknown outcome waits."""
+    import time
+    from agent.tools.api import Reply
+    from agent.tools.registry import ToolResult
+    employee = _employee(sandbox)
+    run = sandbox.run()
+    run.client.read_lag = 30.0  # the test would take 30 s if a 401 waited out the lag
+    send, lost = run.client._send, []
+
+    async def first_post_loses_the_session(method, path, **kwargs):
+        if method == "POST" and path == TICKETS and not lost:
+            lost.append(path)
+            return Reply(ToolResult.fail("session_expired", "Session expired"))
+        return await send(method, path, **kwargs)
+    run.client._send = first_post_loses_the_session
+    started = time.perf_counter()
+    result = drive(run, lambda run: run.call("create_it_ticket", {"type": "laptop", "employee_id": employee}))
+    assert result.ok and result.data["attempts"][:2] == ["attempt 1: session_expired", "logged in again"]
+    assert time.perf_counter() - started < 10
+
+
+def test_the_default_read_lag_is_longer_than_acmes_longest_read_lag():
+    from acme import chaos
+    from agent.tools.api import DEFAULT_READ_LAG_SECONDS
+    assert DEFAULT_READ_LAG_SECONDS > chaos.DEFAULT_VISIBILITY_SECONDS

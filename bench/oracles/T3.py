@@ -2,7 +2,7 @@
 resolved by email, "Monday" = 2026-10-12 (now is Wednesday 2026-10-07), two IT tickets, an internal welcome email.
 The decoy Priya Natarajan is seen in the employee search and left alone."""
 
-from agent.plan import Plan
+from agent.plan import Milestone, Plan, Predicate, Ref
 from agent.scripted import Step
 from bench.oracles import Oracle, item
 
@@ -25,4 +25,19 @@ STEPS = [
     Step("list_mail", {"folder": "outbox"}, name="outbox_read_back"),
 ]
 
-RUNS = {"T3": Oracle(STEPS, Plan(sop_id="onboard-employee"))}
+EMAIL = "priya.nair@acme.example"
+PLAN = Plan(sop_id="onboard-employee", milestones=[
+    Milestone(id="M1", target="Priya Nair's record, onboarding, with HR's details and Monday's start date",
+              sop_step="OE-3", predicates=[Predicate(
+                  read="find_employees", args={"q": "Priya Nair"}, where={"email": EMAIL},
+                  expect={"role": "Software Engineer", "department": "Engineering", "start_date": "2026-10-12",
+                          "status": "onboarding"})]),
+    *[Milestone(id=f"M{n}", target=f"an open {kind} ticket for her", sop_step="OE-4", after=["M1"], predicates=[
+        Predicate(read="list_it_tickets", args={"employee": Ref(ref="M1")}, where={"type": kind},
+                  expect={"status": "open"})]) for n, kind in ((2, "laptop"), (3, "accounts"))],
+    Milestone(id="M4", target="one internal welcome email to her with the start date", sop_step="OE-5", after=["M1"],
+              predicates=[Predicate(read="list_mail", args={"folder": "outbox"}, where={"to_addr": EMAIL}),
+                          Predicate(read="read_mail", args={"mail_id": Ref(ref="M4")},
+                                    contains={"body": ["12 Oct 2026"]})]),
+])
+RUNS = {"T3": Oracle(STEPS, PLAN)}

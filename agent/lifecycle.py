@@ -9,6 +9,11 @@ tool through `registry.call`, so every compensation passes the gate and is logge
 arguments come only from this run's write results: a row the run did not create is never touched. Every undo
 tool reads back first (`target_state`), so an entity that is already void or cancelled is reported
 `already_done` and rolling back twice is safe. Writes with no undo (sent mail) are listed, not hidden.
+
+A browser submit returns a page, not a row, so GUI writes are found in Acme's audit log instead (D-128): rows
+INSERTED by the run's account through the `ui` channel since the run's start mark, newest first, each undone by
+the undo of the API write that creates that entity. That audit read is logged, so the gate's facts count those rows
+as created by the run and ORG-008 lets their undo through. It assumes one run per account at a time (X.7).
 """
 
 import json
@@ -22,13 +27,14 @@ import httpx
 from agent.config import load_config
 from agent.plan import Plan
 from agent.policy.approvals import ApprovalStore
-from agent.policy.facts import RunFacts
+from agent.policy.facts import RunFacts, inserted
 from agent.policy.gate import PolicyGate
 from agent.policy.loader import load_policies
 from agent.store import RunStore
 from agent.tools.api import AcmeClient, load_catalog
 from agent.tools.browser import BrowserSession
 from agent.tools.registry import Gate, Registry, RunContext, ToolResult, build_registry
+from agent.verifier.side_effects import read_audit
 
 WRITES = ("reversible_write", "irreversible_write", "external_comms")
 
@@ -114,13 +120,16 @@ class Rollback:
 
 
 async def rollback(run: Run) -> Rollback:
-    report, seen = Rollback(), set()
+    report, seen, gui = Rollback(), set(), False
     undo_tools = {spec.undo for spec in run.registry.specs() if spec.undo}
     for tool, data in reversed(run_writes(run.ctx.store.events(run.run_id))):
         spec = run.registry.get(tool)
         if spec is None or tool in undo_tools:  # an earlier rollback's own compensations
             continue
-        if spec.side_effect != "reversible_write":  # incl. GUI writes: undone through their API twin later (D-117)
+        if spec.channel == "gui":  # a page, not a row: found in the audit log below (D-128)
+            gui = True
+            continue
+        if spec.side_effect != "reversible_write":
             report.not_compensable.append({"tool": tool, "reason": spec.no_undo_reason, "id": data.get("id")})
             continue
         try:
@@ -128,11 +137,37 @@ async def rollback(run: Run) -> Rollback:
         except KeyError as exc:
             report.undone.append({"tool": spec.undo, "ok": False, "detail": f"{tool} result lacks {exc}"})
             continue
-        key = (undo_tool, json.dumps(args, sort_keys=True))
-        if key in seen:  # the same row written twice (an idempotent replay) is undone once
-            continue
-        seen.add(key)
-        result = await run.call(undo_tool, args)
-        report.undone.append({"tool": undo_tool, "args": args, "ok": result.ok, "error_type": result.error_type,
-                              "already_done": bool(result.data.get("already_done")), "detail": result.detail})
+        await _undo(run, report, seen, undo_tool, args)
+    if gui:
+        await _undo_gui_rows(run, report, seen)
     return report
+
+
+async def _undo(run: Run, report: Rollback, seen: set, undo_tool: str, args: dict[str, Any]) -> None:
+    key = (undo_tool, json.dumps(args, sort_keys=True))
+    if key in seen:  # the same row written twice (an idempotent replay) is undone once
+        return
+    seen.add(key)
+    result = await run.call(undo_tool, args)
+    report.undone.append({"tool": undo_tool, "args": args, "ok": result.ok, "error_type": result.error_type,
+                          "already_done": bool(result.data.get("already_done")), "detail": result.detail})
+
+
+async def _undo_gui_rows(run: Run, report: Rollback, seen: set) -> None:
+    catalog = run.client.catalog
+    mark = next((e["payload"]["audit_since"] for e in run.ctx.store.events(run.run_id) if e["type"] == "run_start"),
+                None)
+    if mark is None:
+        report.undone.append({"tool": "rollback", "ok": False, "detail": "no start mark: GUI rows cannot be found"})
+        return
+    rows = await read_audit(run, mark)
+    ours = [r for r in rows if r["actor"] == catalog.session.user and r["channel"] == "ui" and inserted(r)]
+    for row in reversed(ours):
+        creator = next((ep for ep in catalog.tools if ep.entity == row["entity_type"] and ep.side_effect != "read"
+                        and not ep.path_params), None)
+        if creator is None or creator.undo is None:
+            reason = creator.no_undo_reason if creator else "no API tool creates this entity"
+            report.not_compensable.append({"tool": f"browser {row['action']}", "reason": reason, "id": row["entity_id"]})
+            continue
+        undo_tool, args = catalog.undo_call(creator.name, {"id": row["entity_id"]})
+        await _undo(run, report, seen, undo_tool, args)

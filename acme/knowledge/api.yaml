@@ -11,6 +11,8 @@
 #   tool + args        the read tool, and its arguments taken from this call's arguments
 #   match / expect     row field <- this call's argument / row field = literal ($user = the agent's login)
 # response: file saves the bytes in the run's scratch folder; untrusted: provenance origin for returned text.
+# verify (every write): the postcondition read the verifier makes (D-134): read tool, its args <- fields of the
+#   write's result, row fields <- the write's args, and expected literals (an undo's status).
 # entity: what the tool reads or writes (D-131); trust_sensitive_args: payee, bank details, vendor identity,
 # recipients and amounts, which ORG-007 holds when their value came only from untrusted text (D-133).
 # Paths and args mirror acme/api.py; tests/agent/test_catalog.py checks every route exists with that method.
@@ -231,6 +233,7 @@ tools:
     path: /api/invoices
     side_effect: reversible_write
     entity: invoice
+    verify: {tool: get_invoice, args: {invoice_id: id}, fields: {vendor_id: vendor_id, invoice_no: invoice_no, po_number: po_number, invoice_date: invoice_date, due_date: due_date, amount_paise: amount_paise, tax_paise: tax_paise}}
     undo: {tool: void_invoice, args: {invoice_id: id}}
     transport_args: [idempotency_key]
     args:
@@ -249,6 +252,7 @@ tools:
     path: /api/approvals
     side_effect: reversible_write
     entity: approval
+    verify: {tool: get_approval, args: {approval_id: id}, fields: {entity_type: entity_type, entity_id: entity_id}}
     undo: {tool: withdraw_approval, args: {approval_id: id}}
     read_back:
       kind: new_row
@@ -266,6 +270,7 @@ tools:
     path: /api/payments
     side_effect: reversible_write
     entity: payment
+    verify: {tool: get_payment, args: {payment_id: id}, fields: {invoice_id: invoice_id, scheduled_date: scheduled_date}}
     undo: {tool: cancel_payment, args: {payment_id: id}}
     transport_args: [idempotency_key]
     args:
@@ -278,6 +283,7 @@ tools:
     path: /api/employees
     side_effect: reversible_write
     entity: employee
+    verify: {tool: get_employee, args: {employee_id: id}, fields: {name: name, email: email, role: role, department: department, manager_id: manager_id, start_date: start_date}}
     undo: {tool: cancel_employee, args: {employee_id: id}}
     read_back:
       kind: new_row
@@ -298,6 +304,7 @@ tools:
     path: /api/it-tickets
     side_effect: reversible_write
     entity: it_ticket
+    verify: {tool: get_it_ticket, args: {ticket_id: id}, fields: {type: type, employee_id: employee_id}}
     undo: {tool: cancel_it_ticket, args: {ticket_id: id}}
     read_back:
       kind: new_row
@@ -315,6 +322,7 @@ tools:
     path: /api/mail/send
     side_effect: external_comms
     entity: mail
+    verify: {tool: read_mail, args: {mail_id: id}, fields: {to_addr: to, subject: subject, body: body}}
     trust_sensitive_args: [to]
     no_undo_reason: sent mail cannot be recalled
     transport_args: [idempotency_key]
@@ -335,6 +343,7 @@ tools:
     path: /api/invoices/{invoice_id}/void
     side_effect: irreversible_write
     entity: invoice
+    verify: {tool: get_invoice, args: {invoice_id: id}, expect: {status: void}}
     no_undo_reason: a void invoice cannot be restored; enter it again instead
     read_back: {kind: target_state, tool: get_invoice, args: {invoice_id: invoice_id}, expect: {status: void}}
     args:
@@ -346,6 +355,7 @@ tools:
     path: /api/approvals/{approval_id}/withdraw
     side_effect: irreversible_write
     entity: approval
+    verify: {tool: get_approval, args: {approval_id: id}, expect: {status: withdrawn}}
     no_undo_reason: a withdrawn request cannot be reopened; request approval again instead
     read_back: {kind: target_state, tool: get_approval, args: {approval_id: approval_id}, expect: {status: withdrawn}}
     args:
@@ -357,6 +367,7 @@ tools:
     path: /api/payments/{payment_id}/cancel
     side_effect: irreversible_write
     entity: payment
+    verify: {tool: get_payment, args: {payment_id: id}, expect: {status: cancelled}}
     no_undo_reason: a cancelled payment request cannot be reopened; create a new one instead
     read_back: {kind: target_state, tool: get_payment, args: {payment_id: payment_id}, expect: {status: cancelled}}
     args:
@@ -368,6 +379,7 @@ tools:
     path: /api/employees/{employee_id}/cancel
     side_effect: irreversible_write
     entity: employee
+    verify: {tool: get_employee, args: {employee_id: id}, expect: {status: cancelled}}
     no_undo_reason: a cancelled onboarding cannot be reopened; create the record again instead
     read_back: {kind: target_state, tool: get_employee, args: {employee_id: employee_id}, expect: {status: cancelled}}
     args:
@@ -379,6 +391,7 @@ tools:
     path: /api/it-tickets/{ticket_id}/cancel
     side_effect: irreversible_write
     entity: it_ticket
+    verify: {tool: get_it_ticket, args: {ticket_id: id}, expect: {status: cancelled}}
     no_undo_reason: a cancelled ticket cannot be reopened; open a new one instead
     read_back: {kind: target_state, tool: get_it_ticket, args: {ticket_id: ticket_id}, expect: {status: cancelled}}
     args:

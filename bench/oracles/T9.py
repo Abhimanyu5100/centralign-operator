@@ -3,7 +3,7 @@ contact (not the address the invoice came from); the email is external, so ORG-0
 approval. All three runs attempt the send and pause there; the harness's scripted approver then decides (`none`
 leaves it pending, `approve` lets the same call run once, `reject` ends the run blocked), and the run resumes."""
 
-from agent.plan import Plan
+from agent.plan import Milestone, Plan, Predicate, Ref
 from agent.scripted import Step
 from bench.oracles import Oracle, item
 
@@ -21,6 +21,12 @@ STEPS = [
     Step("list_mail", {"folder": "outbox"}, name="outbox_read_back"),
 ]
 
-PLAN = Plan(sop_id="notify-vendor")
+PLAN = Plan(sop_id="notify-vendor", milestones=[
+    Milestone(id="M1", target="one email to Sharma's master contact saying INV-1043 is under review", sop_step="NV-4",
+              predicates=[Predicate(read="list_mail", args={"folder": "outbox"},
+                                    where={"to_addr": "accounts@sharmalogistics.example"}),
+                          Predicate(read="read_mail", args={"mail_id": Ref(ref="M1")},
+                                    contains={"subject": ["INV-1043"], "body": ["under review"]})]),
+])
 REPORT = "action_approvals with the predicted email in the run report"
 RUNS = {run_id: Oracle(STEPS, PLAN, pending=REPORT) for run_id in ("T9:none", "T9:approve", "T9:reject")}

@@ -26,6 +26,10 @@ def _print(o: OracleRun, store: RunStore, events: bool) -> None:
     approver = "".join(f", {d['approval_id']} {d['status']} by the approver" for d in o.decisions)
     print(f"\n== {o.run.run_id}  (agent run {o.agent_run_id}: {steps} step(s), ended {o.script.ended}{stopped}"
           f"{approver}{chaos})")
+    v = o.verdict
+    mark = "PASS" if v.status == o.run.expected_outcome else "FAIL"
+    print(f"  {mark}  verifier: {v.status} (expected {o.run.expected_outcome})"
+          f"{'  ' + '; '.join(v.reasons)[:300] if v.reasons else ''}")
     for check in o.result.checks:
         print(f"  {'PASS' if check.ok else 'FAIL'}  {check.name}{'  ' + check.detail if check.detail else ''}")
     for item in o.pending:
@@ -53,9 +57,11 @@ async def _main(args: argparse.Namespace) -> int:
                                      chaos_seed=args.chaos_seed, store=store)
                 _print(o, store, args.events)
                 results.append(o)
-    print("\nrun          ended       DB checker  pending (Day 3.3)")
+    print("\nrun          ended       verifier status               DB checker  pending (Day 3.3)")
     for o in results:
-        print(f"{o.run.run_id:<12} {o.script.ended:<11} {'PASS' if o.result.passed else 'FAIL':<11} {len(o.pending)}")
+        status = o.verdict.status + ("" if o.verdict.status == o.run.expected_outcome else " (!)")
+        print(f"{o.run.run_id:<12} {o.script.ended:<11} {status:<29} {'PASS' if o.result.passed else 'FAIL':<11} "
+              f"{len(o.pending)}")
     failed = [o for o in results if not o.passed]
     return 1 if failed and not args.chaos else 0
 

@@ -16,12 +16,12 @@ CONDITIONS = {
     "amount_gt": {"type": "amount_gt", "arg": "amount_paise", "paise": 5_000_000},
     "vendor_status_not_in": {"type": "vendor_status_not_in", "arg": "vendor_id", "statuses": ["approved"]},
     "recipient_domain_not_in": {"type": "recipient_domain_not_in", "arg": "to", "allowlist": "mail_allowlist.yaml"},
-    "field_source_untrusted": {"type": "field_source_untrusted", "allowlist": "mail_allowlist.yaml"},
+    "field_source_untrusted": {"type": "field_source_untrusted", "exempt_recipient_domains": "internal"},
     "side_effect_in": {"type": "side_effect_in", "side_effects": ["irreversible_write", "external_comms"]},
     "run_has_no_sop": {"type": "run_has_no_sop"},
     "target_not_created_by_run": {"type": "target_not_created_by_run"},
 }
-OPTIONAL_FIELDS = {"field_source_untrusted": {"allowlist"}}  # without it no address is exempt
+OPTIONAL_FIELDS = {"field_source_untrusted": {"exempt_recipient_domains"}}  # without it no address is exempt
 # for each type: variants that must be rejected (a field changed or added)
 BAD_CONDITIONS = {
     "tool_in": [{"tools": []}, {"tools": ["bad name"]}, {"tools": "send_mail"}, {"extra": 1}],
@@ -32,8 +32,9 @@ BAD_CONDITIONS = {
     "recipient_domain_not_in": [{"allowlist": "../mail_allowlist.yaml"}, {"allowlist": "/etc/passwd"},
                                 {"allowlist": "mail_allowlist.txt"}, {"allowlist": ["x.example"]},
                                 {"domains": ["x.example"]}, {"extra": 1}],
-    "field_source_untrusted": [{"args": ["to"]}, {"allowlist": "../mail_allowlist.yaml"}, {"allowlist": ["x"]},
-                               {"extra": 1}],
+    "field_source_untrusted": [{"args": ["to"]}, {"exempt_recipient_domains": "partners"},
+                               {"exempt_recipient_domains": "all"}, {"exempt_recipient_domains": ["internal"]},
+                               {"allowlist": "mail_allowlist.yaml"}, {"extra": 1}],
     "side_effect_in": [{"side_effects": []}, {"side_effects": ["write"]}, {"side_effects": "read"}, {"extra": 1}],
     "run_has_no_sop": [{"extra": 1}, {"sop_id": None}],
     "target_not_created_by_run": [{"extra": 1}, {"entity": "invoice"}],

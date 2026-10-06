@@ -73,12 +73,16 @@ class RecipientDomainNotIn(_Strict):
     allowlist: KnowledgeFile
 
 
+MAIL_ALLOWLIST = "mail_allowlist.yaml"  # the one recipient allowlist (D-064); "internal" names its internal_domain
+
+
 class FieldSourceUntrusted(_Strict):
     """A trust-sensitive argument of the call (the tool declares which, D-131) has a value seen in untrusted text
-    (mail, documents, pages) and in nothing trusted (D-133). An email address in a domain of `allowlist` is
-    exempt: it cannot reach anyone outside what that allowlist already allows."""
+    (mail, documents, pages) and in nothing trusted (D-133). With `exempt_recipient_domains: internal`, an email
+    address in the company's own domain (the `internal_domain` of mail_allowlist.yaml) is exempt: untrusted text
+    can then steer mail only to our own mailboxes. Partner domains are never exempt (D-144)."""
     type: Literal["field_source_untrusted"]
-    allowlist: KnowledgeFile | None = None
+    exempt_recipient_domains: Literal["internal"] | None = None
 
 
 class SideEffectIn(_Strict):
@@ -173,6 +177,7 @@ class PolicyFile(_Strict):
     schema_version: Literal[0]
     rules: list[Rule] = Field(min_length=1)
     _allowlists: dict[str, frozenset[str]] = PrivateAttr(default_factory=dict)
+    _internal: dict[str, str] = PrivateAttr(default_factory=dict)
 
     @field_validator("schema_version", mode="before")
     @classmethod
@@ -182,10 +187,17 @@ class PolicyFile(_Strict):
             raise ValueError("schema_version must be the integer 0")
         return value
 
-    def attach_allowlists(self, domains: dict[str, frozenset[str]]) -> None:
-        """Called once by the loader with the allowlist files it validated, so the gate uses exactly the
-        domains that were checked at load time and never re-reads a file that may have changed."""
+    def attach_allowlists(self, domains: dict[str, frozenset[str]], internal: dict[str, str] | None = None) -> None:
+        """Called once by the loader with the allowlist files it validated (all their domains, and each file's
+        internal domain), so the gate uses exactly what was checked at load time and never re-reads a file."""
         self._allowlists.update(domains)
+        self._internal.update(internal or {})
+
+    def internal_domain(self, name: str) -> str:
+        try:
+            return self._internal[name]
+        except KeyError:
+            raise KeyError(f"no rule needs the internal domain of {name!r}") from None
 
     def allowlist(self, name: str) -> frozenset[str]:
         try:

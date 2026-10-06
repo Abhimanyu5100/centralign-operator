@@ -44,6 +44,12 @@ def calls(events: list[dict[str, Any]]) -> list[tuple[dict[str, Any], dict[str, 
     return pairs
 
 
+def inserted(audit_row: dict[str, Any]) -> bool:
+    """An audit row that created its record: Acme's audit API gives `before: null` for an insert. A row without
+    the key is not taken as one (a missing field must never widen what the run is allowed to undo)."""
+    return "before" in audit_row and audit_row["before"] is None
+
+
 def _rows(data: dict[str, Any]) -> list[dict[str, Any]]:
     items = data.get("items")
     return [r for r in items if isinstance(r, dict)] if isinstance(items, list) else [data]
@@ -87,7 +93,7 @@ class RunFacts:
                 created.add((entity, data["id"]))
             if entity == "audit" and mark is not None:
                 created |= {(r["entity_type"], r["entity_id"]) for r in _rows(data)
-                            if r.get("actor") == user and r.get("before_json") is None and r.get("id", 0) > mark}
+                            if r.get("actor") == user and inserted(r) and r.get("id", 0) > mark}
 
         untrusted: set[str] = set()
         trusted = set(values(self.store.run(run_id)["request"]))

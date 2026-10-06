@@ -200,6 +200,7 @@ def test_the_t1_gui_oracle_passes_the_checker(acme, chaos):
     assert result.result.passed, [(c.name, c.detail) for c in result.result.checks if not c.ok]
     assert result.chaos_fired in (None, True)
     assert "submit_redo" not in result.script.results  # nothing to redo
+    assert result.verdict.status == "awaiting_business_approval", result.verdict.reasons
 
 
 def test_the_t1_gui_oracle_detects_a_silent_drop_and_redoes_the_write_once(acme):
@@ -210,6 +211,23 @@ def test_the_t1_gui_oracle_detects_a_silent_drop_and_redoes_the_write_once(acme)
     assert "INV-1043 – " not in result.script.results["read_back"].data["view"]  # ... the list disagreed
     assert result.script.results["submit_redo"].ok
     assert count(acme, "SELECT COUNT(*) FROM invoices WHERE invoice_no = 'INV-1043'") == 1
+    # the run recovered, so the target states hold; the dropped submit is still reported (layer 3, 4.4)
+    assert result.verdict.status == "awaiting_business_approval", result.verdict.reasons
+    assert result.verdict.notes == ["claimed but not in the audit log: browser_click"]
+
+
+def test_a_silent_drop_the_run_does_not_redo_is_failed_by_the_verifier(acme):
+    """Register 4.4, 5.3, 6.1: the toast said saved, nothing was stored, and the agent stopped there. Layer 2 reads
+    the invoice through the API (a different channel from the GUI write) and does not find it."""
+    from bench.oracles import Oracle
+    gui = oracle_for("T1", "gui")
+    upto = next(i for i, step in enumerate(gui.steps) if step.key == "read_back")
+    task = tasks.load("T1")
+    result = asyncio.run(run_oracle(acme, task, tasks.runs(task)[0], Oracle(gui.steps[:upto + 1], gui.plan),
+                                    chaos="silent_drop_write"))
+    assert result.chaos_fired is True and result.verdict.status == "failed"
+    assert "milestone M1 not met" in result.verdict.reasons[0]
+    assert result.verdict.notes == ["claimed but not in the audit log: browser_click"]
 
 
 def test_under_delayed_write_an_early_redo_is_refused_as_a_duplicate_not_written_twice(acme):
@@ -217,6 +235,9 @@ def test_under_delayed_write_an_early_redo_is_refused_as_a_duplicate_not_written
     assert result.script.stopped_at == "submit_redo"
     assert result.script.results["submit_redo"].error_type == "conflict"
     assert count(acme, "SELECT COUNT(*) FROM invoices WHERE invoice_no = 'INV-1043'") == 1
+    # the verifier waits the lag out: the invoice is found (M1), the approval the run never requested is not (M2)
+    m1, m2 = result.verdict.milestones
+    assert m1.ok and m1.checks[0].reads > 1 and not m2.ok and result.verdict.status == "failed"
 
 
 def test_under_flaky_500_the_failed_submit_is_a_typed_server_error(acme):
@@ -224,6 +245,33 @@ def test_under_flaky_500_the_failed_submit_is_a_typed_server_error(acme):
     assert result.script.stopped_at == "submit"
     assert result.script.results["submit"].error_type == "server_error"
     assert count(acme, "SELECT COUNT(*) FROM invoices WHERE invoice_no = 'INV-1043'") == 0
+    assert result.verdict.status == "failed" and result.verdict.side_effects.wrote is False
+
+
+def test_a_gui_run_is_rolled_back_through_the_api_undo_tools(acme):
+    """D-128, N.142: the GUI writes are found as audit inserts by the run's account since its start mark and undone
+    through the API (newest first), past the policy gate (ORG-008 sees them as created by the run)."""
+    from agent.lifecycle import rollback
+    from agent.scripted import run_script
+    task = tasks.load("T1")
+    acme.admin("POST", "/__admin/reset", seed=task.seed, now=task.now)
+    snapshot = acme.admin("POST", "/__admin/snapshot")["snapshot"]
+    oracle = oracle_for("T1", "gui")
+    run = start_run(task.request, datetime.fromisoformat(task.now), config=acme.agent_config(), plan=oracle.plan)
+
+    async def body():
+        try:
+            assert (await run_script(run, oracle.steps)).ended == "done"
+            return await rollback(run), await rollback(run)
+        finally:
+            await run.close()
+    first, second = asyncio.run(body())
+    diff = acme.admin("GET", "/__admin/diff", since=snapshot)["tables"]
+    assert first.ok and [u["tool"] for u in first.undone] == ["withdraw_approval", "void_invoice"]
+    assert second.ok and all(u["already_done"] for u in second.undone)
+    assert {t: [r["status"] for r in c["added"]] for t, c in diff.items() if t != "audit_log"} == {
+        "invoices": ["void"], "approvals": ["withdrawn"]}
+    assert all(not c["changed"] and not c["removed"] for c in diff.values())
 
 
 def test_no_secret_reaches_the_run_store_after_a_gui_run(acme):

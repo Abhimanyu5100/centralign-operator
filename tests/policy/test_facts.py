@@ -6,6 +6,7 @@ import pytest
 from agent.policy.facts import RunFacts
 from agent.store import RunStore
 from agent.tools.api import load_catalog
+from tests.agent.acme_fixtures import drive, sandbox  # noqa: F401  (sandbox is a fixture)
 from tests.agent.agent_fixtures import NOW
 
 CATALOG = load_catalog()
@@ -101,16 +102,34 @@ def test_created_rows_come_from_creating_writes_and_from_audit_inserts_after_the
     log("void_invoice", {"id": 4})                          # an undo changes an existing row: not created
     log("create_it_ticket", {"id": 7}, ok=False)            # failed: nothing created
     log("list_audit", {"items": [
-        {"id": 99, "actor": "ops-agent", "before_json": None, "entity_type": "employee", "entity_id": 1},   # before
-        {"id": 101, "actor": "ops-agent", "before_json": None, "entity_type": "approval", "entity_id": 30},  # GUI insert
-        {"id": 102, "actor": "ops-agent", "before_json": "{}", "entity_type": "invoice", "entity_id": 3},    # update
-        {"id": 103, "actor": "meera", "before_json": None, "entity_type": "approval", "entity_id": 31}],     # not ours
+        {"id": 99, "actor": "ops-agent", "before": None, "entity_type": "employee", "entity_id": 1},   # before
+        {"id": 101, "actor": "ops-agent", "before": None, "entity_type": "approval", "entity_id": 30},  # GUI insert
+        {"id": 102, "actor": "ops-agent", "before": {"status": "draft"}, "entity_type": "invoice", "entity_id": 3},    # update
+        {"id": 103, "actor": "meera", "before": None, "entity_type": "approval", "entity_id": 31}],     # not ours
         "has_more": False, "next_since": 103})
     assert facts().created == {("invoice", 50), ("approval", 30)}
 
 
 def test_without_a_start_mark_the_audit_log_names_no_created_rows(run):
     store, run_id, log, mark, facts = run
-    log("list_audit", {"items": [{"id": 101, "actor": "ops-agent", "before_json": None, "entity_type": "approval",
+    log("list_audit", {"items": [{"id": 101, "actor": "ops-agent", "before": None, "entity_type": "approval",
                                   "entity_id": 30}], "has_more": False, "next_since": 101})
     assert facts().created == frozenset()
+
+
+def test_created_rows_are_read_from_acmes_real_audit_shape(sandbox):
+    """Against Acme's real audit API: the run's insert counts, its update of a row it did not create does not."""
+    from agent.scripted import Step, run_script
+    sandbox.admin_call("POST", "/__admin/reset", seed="t9", now="2026-10-07T10:30:00+05:30")
+    seeded = sandbox.rows("SELECT id FROM approvals WHERE status = 'pending' AND requested_by = 'ops-agent'")[0][0]
+    employee = sandbox.rows("SELECT id FROM employees WHERE status = 'active' ORDER BY id")[0][0]
+    run = sandbox.run()  # allow-all gate: ORG-008 would (rightly) hold the withdrawal of a seeded approval
+    steps = [Step("create_it_ticket", {"type": "laptop", "employee_id": employee}),
+             Step("withdraw_approval", {"approval_id": seeded}),
+             Step("list_audit", {"since": 0, "limit": 1000})]
+    result = drive(run, lambda run: run_script(run, steps))
+    created = RunFacts(sandbox.store, CATALOG).of(run.run_id).created
+    ticket = result.results["create_it_ticket"].data["id"]
+    assert ("it_ticket", ticket) in created and ("approval", seeded) not in created
+    rows = result.results["list_audit"].data["items"]
+    assert rows and all("before" in r and "before_json" not in r for r in rows)  # the shape the code relies on

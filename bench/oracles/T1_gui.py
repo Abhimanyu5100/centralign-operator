@@ -10,7 +10,8 @@ list: under `silent_drop_write` the success toast shows but no row exists, so it
 """
 
 from agent.scripted import Step
-from bench.oracles import INVOICE, Oracle, ref, shows
+from bench.oracles import Oracle, ref, shows
+from bench.oracles.T1 import PLAN
 
 FIELDS = [("Invoice number", "INV-1043"), ("PO number", "PO-2026-0412"), ("Invoice date", "2026-10-03"),
           ("Due date", "2026-11-02"), ("Total including tax (INR)", "62400.00"), ("Tax (INR)", "9518.64")]
@@ -55,4 +56,4 @@ STEPS = [
     Step("browser_click", lambda r: {"ref": ref(r["invoice"], "button", name="Request approval")}, name="request"),
 ]
 
-RUNS = {"T1": Oracle(STEPS, INVOICE)}
+RUNS = {"T1": Oracle(STEPS, PLAN)}  # the API run's target states: rows are found by business keys

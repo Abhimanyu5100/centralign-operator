@@ -5,67 +5,61 @@ If this file disagrees with git, git wins for what is committed.
 
 ## Now
 
-- **Last updated:** 2026-10-06 20:36 IST
-- **Day / phase / part:** Day 3 (Phase A), part 3.1 (policy) built, not yet committed → Day 3.2 next
-- **Currently doing:** Day 3.1 awaits author review and commit. **One item needs the author's OK:** D-136, the
-  allowlist exemption in ORG-007 (without it, D-133 makes ORG-007 hold T3's internal welcome email).
-- **Day 3 plan:** `docs/day3-plan.md`, approved 2026-10-06 with all eight decisions as recommended and four author
-  changes (D-125 to D-135). Split: 3.1 policy (done), 3.2 verifier and recovery, 3.3 report and bench, 3.4
-  packaging and skills. The author-owned designs are A1 gate, A2 scanner, A3 verifier in that file.
-- **Running agent/ total (D-115):** 2,244 non-blank lines (2,769 raw) in `agent/**/*.py`, +644 in 3.1 against an
-  estimate of +460 (the gate is 179, facts 90, approvals 90, scanner 92; registry +50, browser +25). Projection for
-  the end of Day 3: about 2,680, which leaves about 800 for Days 4-6 under the 3,500 ceiling.
-- **Next step:** Day 3.2, verifier and recovery (plan section (c) 3.2 and design A3): `agent/plan.py` milestones and
-  predicates; `agent/verifier/` (postconditions, milestone predicates as independent reads with polling, audit-log
-  side effects grouped by `ts`, `decide_status`); `agent/failures.py`; read-back polling in the API tool (D-123);
-  GUI rollback from the audit log (D-128); hand-written plans for every oracle; the T3 `delayed_write` run.
-  `agent/verifier/` is author-owned: design A3 is approved; keep diffs small and explain each.
+- **Last updated:** 2026-10-06 22:33 IST
+- **Day / phase / part:** Day 3 (Phase A), part 3.2 (verifier and recovery) built, not yet committed → Day 3.3 next
+- **Currently doing:** Day 3.2 awaits author review and commit. It includes D-144 (the author's narrowing of D-136:
+  ORG-007 exempts only our own domain) and the acme-spec policy and adversarial tables.
+- **Day 3 plan:** `docs/day3-plan.md` (approved; D-125 to D-135, then D-136 to D-153 while building). Split: 3.1
+  policy (b04ddba), 3.2 verifier and recovery (built), 3.3 report and bench, 3.4 packaging and skills.
+- **Running agent/ total (D-115):** 2,755 non-blank lines (3,384 raw) in `agent/**/*.py`: +511 in 3.2 against an
+  estimate of +320 (verifier 3 files 316, plan.py 65, failures.py 44, read-lag polling in api.py +39, GUI rollback
+  +30). **Projection:** about 2,880 at the end of Day 3 (3.3 report about +125, 3.4 none), which leaves about 620
+  under the 3,500 ceiling for Days 4-6 against about 800 estimated (LLM client and cassettes, feasibility gate,
+  planner, executor, judge). Author decision needed by Day 4: trim (api.py 430 and browser.py 313 are the largest),
+  raise the ceiling, or cut governed learning first (the cut order).
+- **Next step:** Day 3.3, report and bench (plan section (c) 3.3): `agent/report.py` (the D-098 contract with the
+  status only from the `verifier_result` event); the contract test for T4, T5, T6 and T9 x3 through `engine.check`;
+  `bench/run_bench.py` and `make bench` (every oracle chaos off, the YAML chaos variants at seed 0, the adversarial
+  section, results in `bench/results/<timestamp>.{json,md}` with pass/fail, pass^k scaffold, CuP (D-130),
+  unexplained side effects, correct refusals, chaos fired, verifier-vs-diff agreement).
 - **Carried over:**
-  - **Author OK (3.1):** D-136, ORG-007 exempts email addresses in allowlisted domains (`field_source_untrusted`
-    `allowlist: mail_allowlist.yaml`). Alternatives: drop the exemption and give T3 an approver, or treat internal
-    senders' mail as trusted.
-  - **Day 3.2 (D-123, N.141):** read-back polls for at least the maximum read lag before deciding "not written";
-    the T3 run under `delayed_write` ends with exactly two tickets and the verifier says `completed`. Until the
-    bench harness (3.3) exists, `delayed_write` is never paired with T3 or T8 in chaos runs.
-  - **Day 3.2 (D-128, N.142):** roll back a GUI run through the API undo tools, finding the run's rows as audit
-    inserts by the run's actor through the `ui` channel since the `run_start` mark; test over the T1 GUI run.
-  - **Day 3.2 (D-135, N.154, N.162):** the verifier-side test that a cascading write (void plus approval
-    withdrawals) is one write; layer 3 must match a call to ANY row of its `ts` group (Acme writes the withdrawals
-    before the void, `test_every_service_write_is_exactly_one_audit_ts_group_cascades_included`).
-  - **Day 3.2:** the failure classifier recognises ORG-002 refusals (409 `conflict`) by the policy id in the detail,
-    not by `error_type` (D-091, D-100); a plain 409 is not a refusal; `outcome_unknown: true` (D-108) means "read
-    back before writing again", never a refusal.
-  - **Day 3.3:** the report generator emits the D-098 contract; `action_approvals[].predicted` flattens the filed
-    approval's `predicted.args` (so `predicted.to` exists) next to `request`, `side_effect` and `effect`; the
-    contract test runs T4, T5, T6 and T9 through `report_checks`; `bench/run_oracle.py` passes the report to
-    `engine.check` and the PENDING lines become real checks (D-112).
+  - **Day 3.3 report:** `side_effects[]` needs `table` (D-098): map the audit `entity_type` (invoice, approval,
+    payment, employee, it_ticket, mail, vendor) to Acme's table names; `action_approvals[].predicted` flattens the
+    filed approval's `predicted.args` next to `request`, `side_effect` and `effect`; list `Verdict.notes`
+    (claimed-but-not-audited writes) and the classified failures (`agent/failures.py`).
   - **Day 3.3 harness:** chaos fired column from `GET /__admin/chaos/events`, non-fired runs listed apart (D-095);
-    T9 as three run ids (done in 3.1 through the scripted approver); bench and `make adversarial` runs should use
-    their own run store so their held calls do not crowd the inbox (N.164).
+    verifier-vs-diff agreement from `Verdict.side_effects.rows` against the `/__admin/diff` tables; the bench and
+    `make adversarial` use their own run store so their held calls do not crowd the inbox (N.164); the harness
+    refuses a `delayed_write` variant for T3 or T8; report each run's verifier wall time (N.167).
+  - **Day 4 decision (N.166):** SOP step PI-6 (attach the source PDF) is a GUI-only irreversible form with no known
+    target, so ORG-008 holds it on every invoice once the executor follows the SOP. Options: give a GUI submit a
+    target from its form path (`/invoices/{invoice_id}/attach-source` -> the run's own invoice), or classify the
+    attach form as reversible. The oracles never attach, so nothing fails today.
+  - **Day 4 decision:** the line budget (see Running agent/ total).
   - **Day 4:** the GUI channel's failures are typed like the API's (`timeout` with `outcome_unknown`,
     `session_expired` with `session_renewed`, `server_error` from a 500 page); the GUI oracle does not retry a 500,
     the executor's classifier does (two strikes, read back first).
-  - **Day 4:** the API tool already retries once and returns `outcome_unknown: true` with its `attempts` (D-108). The
-    executor's two-strikes rule counts those attempts, and after `outcome_unknown` it reads back before any new write.
-  - **Day 4:** `run_id` never enters LLM prompts or cassette hash keys (D-106). The derived idempotency key contains
-    a hash of `run_id`; it is a transport arg, sent as a header and never shown to the LLM (D-108).
-  - **Day 4:** the executor calls `Run.begin()` (the audit start mark) before its first step, as `run_script` does.
+  - **Day 4:** the executor uses `agent/failures.classify` for every failed result: two strikes count the API tool's
+    own `attempts` (D-108), and after `read_back_first` it reads back before any new write.
+  - **Day 4:** `run_id` never enters LLM prompts or cassette hash keys (D-106); the derived idempotency key is a
+    transport arg, never shown to the LLM (D-108).
+  - **Day 4:** the executor calls `Run.begin()` before its first step and `verify(run)` at the end, as the harness
+    does; the planner emits `agent/plan.Plan` (business keys and `{ref: Mn}`, N.156).
   - **Day 5:** `silent_drop_write` is UI-only; if the executor writes through the API, the T2 matrix slot moves to
-    `commit_then_timeout` on T8 (approval request) (D-095).
+    `commit_then_timeout` on T8 (approval request) (D-095). `rolled_back` as a verifier status arrives with "rollback
+    if rejected".
   - **Day 6:** the README (started in 3.1 with "Known limitations" only) gets setup, demo, results and tools used.
   - `iyer_INV-3301.pdf` stays unreferenced by T1-T9 (Phase B stretch); the scanner corpus test reads it.
 - **RESUME PROMPT:**
   ```
-  Read CLAUDE.md and docs/progress.md, then docs/day3-plan.md (approved; decisions D-125 to D-143) and
-  docs/failure-register.md. Day 3.1 is built: the policy gate evaluator over policies.yaml ORG-001 to ORG-009
-  (agent/policy/gate.py), run facts (facts.py), the ORG-006 scanner (scanner.py), single-use action approvals
-  (approvals.py), the approval inbox (ui/app.py, make ui), ask_user / declare_infeasible, pause and resume in the
-  scripted agent, and bench/adversarial (make adversarial). Build Day 3.2: the verifier (agent/plan.py milestones
-  and predicates, agent/verifier/ with its three layers and polling, decide_status), the failure classifier
-  (agent/failures.py), read-back polling in the API tool (D-123), GUI rollback from the audit log (D-128), plans for
-  every oracle, and the T3 delayed_write run. agent/verifier/ is author-owned: design A3 in docs/day3-plan.md is
-  approved; keep diffs small and explain each one. Show the risk table first, stop after the part, and run
-  /checkpoint. Do not commit or push.
+  Read CLAUDE.md and docs/progress.md, then docs/day3-plan.md (approved; decisions D-125 to D-153) and
+  docs/failure-register.md. Day 3.1 (policy gate, scanner, approvals, inbox, adversarial) and Day 3.2 (agent/plan.py,
+  the verifier in agent/verifier/ with its three layers and decide_status, agent/failures.py, read-lag polling, GUI
+  rollback from the audit log, plans for every oracle) are built. Build Day 3.3: agent/report.py (the D-098 contract,
+  status only from the verifier_result event), the report contract test for T4, T5, T6 and T9 through engine.check,
+  and the AcmeBench harness bench/run_bench.py with make bench (every oracle chaos off, the YAML chaos variants at
+  seed 0, the adversarial section, results in bench/results/<timestamp>.{json,md} with the columns in the plan).
+  Show the risk table first, stop after the part, and run /checkpoint. Do not commit or push.
   ```
 
 ## Done log
@@ -91,11 +85,12 @@ If this file disagrees with git, git wins for what is committed.
 | 2026-10-06 | 2.2 | Endpoint catalog `acme/knowledge/api.yaml` (30 tools: reads, writes, undo tools; session, API-prefix allowlist) with a load-time validator; API tools generated from it (`agent/tools/api.py`: strict args models, `request_of` = real method and path, `AcmeClient` per run with login from config, typed errors, httpx timeout -> `timeout`, one retry only after an unknown outcome or lost session, derived idempotency keys, `new_row` / `target_state` read-back, unresolved-write memory, `already_done` + `attempts`); `GET /api/files`; downloads into `runs/<run_id>/files/`, `extract_pdf_text` with a downloaded-file precondition; provenance on mail and PDF text; normalisers (paise, ISO dates, next weekday, GSTIN, name candidates); run lifecycle and rollback from the event log; scripted agent; oracles T1-T9 (T9 x3) and `make oracle` (in-process Acme by default); short-secret redaction; isolation scans for API path literals and subprocesses; judge-only import rule (D-109); decisions D-107 to D-114; risks N.129 to N.137 | `acme/knowledge/api.yaml`, `agent/tools/{api,files,registry}.py`, `agent/{normalise,lifecycle,scripted}.py`, `acme/api.py`, `bench/{live,run_oracle}.py`, `bench/oracles/*`, `Makefile`, `tests/agent/{acme_fixtures,test_api_tools,test_catalog,test_lifecycle,test_normalise,test_agent_isolation,test_registry}.py`, `tests/e2e/test_oracles.py`, `tests/acme/test_pdfs.py`, `tests/checkers/test_engine.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 1345 passed, 0 failed (1211 before; 134 new); `make test-e2e`: 15 passed (live server: 11 oracle runs chaos off, `commit_then_timeout` T3, `flaky_500` T1, session expiry T8, live rollback); `make oracle TASK=all`: 11/11 DB checkers pass, report checks PENDING (Day 3); 16 mutations (read-back, key derivation, business-error retry, baseline, memo, target state, provenance, read re-login, timeout mapping, rollback order, undo-tool skip, short-secret redaction, scripted stop, download precondition, validator rule, comma grouping) all killed (one survived first and its test was strengthened) | 3fbefab |
 | 2026-10-06 | 2.3 | Browser tool (`agent/tools/browser.py`: Chromium per run with an allowlisted env, pruned aria-snapshot view with refs and an 8,000-char cap, role + accessible name actions, per-call side effect and form request for the gate via `ToolSpec.side_effect_of` and catalog `ui_forms`, stale-target refusal, GUI session renewal without resubmitting, Playwright timeouts typed); `login_page` and `ui_forms` in the catalog; scripted `Step.when`; T1 GUI oracle with read-back and one redo; `make oracle CHANNEL=gui`; Acme served as a child process by the harness; four chaos profiles (`slow_server`, `toast_2s`, `field_moved`, `delayed_write`, D-116) with `chaos_hidden`; leak fix (form hint 12500.00) and leak test over templates and form messages; agent line target 3,500 (D-115); manual walk and Day 4 carry-over recorded; decisions D-115 to D-120; risks N.138 to N.143; N.92, N.126, N.127 tested | `agent/tools/{browser,api,registry}.py`, `agent/{config,lifecycle,scripted,normalise}.py`, `acme/{chaos,db,web,ui,api,money,forms}.py`, `acme/templates/{base,_macros,error,invoice_form}.html`, `acme/knowledge/api.yaml`, `bench/{live,run_oracle}.py`, `bench/oracles/{__init__,T1_gui}.py`, `Makefile`, `.env.example`, `CLAUDE.md`, `tests/agent/{test_browser_unit,test_agent_isolation,test_api_tools,test_catalog}.py`, `tests/e2e/{test_browser,test_oracles}.py`, `tests/acme/{test_chaos,test_knowledge,test_money_and_forms,test_ui}.py`, `tests/checkers/test_engine.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 1395 passed, 0 failed (1345 before; 50 new); `make test-e2e`: 29 passed (14 new: browser view, cap, stale target, GUI session, toast capture, slow write, T1 GUI oracle off/rename/field_moved/toast/silent drop/delayed write/flaky, harness env); 19 mutations (browser env, launch env, click effect and request, quoted lines, stale check, no-resubmit, refs for buttons, outcome_unknown, session detection, ui_forms validation, four chaos effects, field order guarantee, old hint, `when`) all killed (one survived first; test added) | 49dedd1 |
 | 2026-10-06 | 2.R | Day 2 review fixes (`/day-review 2`, author calls): register 3.6 to `future`, no general code tool, `code.py` out of the CLAUDE.md layout (D-121); registry invariant: a per-call side effect stronger than the declared worst case fails closed, `browser_click` worst case `external_comms` (D-122); a link's href is re-read before a click; re-render e2e tests (register 4.5); register 3.2 proof reworded; P.7 secret grep over `runs/` after a GUI run; CLAUDE.md Commands `make oracle` line and Day 3 row (chaos profiles done Day 2.3); D-123 (`delayed_write` never with T3/T8 until polling; N.141 a Day 3 must-do) and D-124 (GUI rollback through API undo tools, N.142) with carry-overs | `agent/tools/{registry,browser}.py`, `tests/agent/{test_registry,test_browser_unit}.py`, `tests/e2e/test_browser.py`, `CLAUDE.md`, `docs/{failure-register,decisions,risk-log,progress}.md` | `make test`: 1402 passed, 0 failed (1395 before; 7 new); `make test-e2e`: 34 passed (29 before; 5 new: re-render x3, same-name link, P.7 secret grep); 4 mutations (strength check, href re-read, a password leaked into an observation, `browser_click` worst case) all killed (the last survived first; a mail-form case was added) | 7938f85 |
-| 2026-10-06 | 3.1 | Day 3 plan (`docs/day3-plan.md`, approved: D-125 to D-135) and part 1, policy: the gate evaluator over every rule (strictest effect wins, every matching id cited, approvals lift holds once and never denies, any error is GATE-ERROR); three new condition types (`side_effect_in`, `run_has_no_sop`, `target_not_created_by_run`); ORG-005 widened to external comms, new ORG-007 (provenance), ORG-008 (irreversible change to a record the run did not create), ORG-009 (no SOP); run facts from the run's own log (untrusted/trusted values with taint laundering closed, vendor status, created rows); ORG-006 scanner with masked excerpts; append-only single-use action approvals filed by the registry with a predicted outcome; GUI form fields visible to the gate and re-checked at click time; off-site targets denied; `ask_user` / `declare_infeasible`; scripted pause / resume / blocked; `Run.begin` audit start mark; oracles carry plans (SOP), T4 asks, T5 declines, T9 pauses; approval inbox `ui/app.py` (`make ui`) and the bench's scripted approver; eight adversarial scripts (`make adversarial`); Acme test for one audit `ts` per write; README limitations; decisions D-125 to D-143; risks N.144 to N.164 | `agent/policy/{gate,facts,scanner,approvals,models,loader}.py`, `agent/{plan,scripted,lifecycle,store}.py`, `agent/tools/{registry,api,browser,ask}.py`, `acme/knowledge/{policies,api}.yaml`, `ui/{__init__,app}.py`, `ui/templates/inbox.html`, `bench/{live,run_oracle,approver}.py`, `bench/adversarial/*`, `bench/oracles/*`, `Makefile`, `README.md`, `CLAUDE.md`, `tests/policy/{test_gate,test_facts,test_scanner,test_approvals,test_schema,test_policies_file}.py`, `tests/agent/{test_scripted,test_gate_interface,test_registry,test_browser_unit,test_agent_isolation,test_lifecycle,test_api_tools,test_catalog,acme_fixtures,agent_fixtures}.py`, `tests/ui/test_inbox.py`, `tests/e2e/{test_adversarial,test_oracles,test_browser}.py`, `tests/acme/test_services.py`, `docs/{day3-plan,decisions,risk-log,failure-register,progress}.md` | `make test`: 1577 passed, 0 failed (1402 before); `make test-e2e`: 46 passed, 0 failed (34 before; 12 new: 8 adversarial scripts, the spec list, T9 approval order, GUI form fields seen and a changed form refused); `make oracle TASK=all`: 11/11 DB checkers pass through the real gate with the expected endings (T4 asked, T5 infeasible, T9 paused / done / blocked); `make adversarial`: 8/8 stopped as expected; 22 mutations (gate x8, facts x3, scanner x2, registry x3, browser, approvals x2, inbox token, resume after rejection, ORG-009 removed) all killed (the IFSC case mutant survived first; a test was added); the laundering script fails without D-133 | pending |
+| 2026-10-06 | 3.1 | Day 3 plan (`docs/day3-plan.md`, approved: D-125 to D-135) and part 1, policy: the gate evaluator over every rule (strictest effect wins, every matching id cited, approvals lift holds once and never denies, any error is GATE-ERROR); three new condition types (`side_effect_in`, `run_has_no_sop`, `target_not_created_by_run`); ORG-005 widened to external comms, new ORG-007 (provenance), ORG-008 (irreversible change to a record the run did not create), ORG-009 (no SOP); run facts from the run's own log (untrusted/trusted values with taint laundering closed, vendor status, created rows); ORG-006 scanner with masked excerpts; append-only single-use action approvals filed by the registry with a predicted outcome; GUI form fields visible to the gate and re-checked at click time; off-site targets denied; `ask_user` / `declare_infeasible`; scripted pause / resume / blocked; `Run.begin` audit start mark; oracles carry plans (SOP), T4 asks, T5 declines, T9 pauses; approval inbox `ui/app.py` (`make ui`) and the bench's scripted approver; eight adversarial scripts (`make adversarial`); Acme test for one audit `ts` per write; README limitations; decisions D-125 to D-143; risks N.144 to N.164 | `agent/policy/{gate,facts,scanner,approvals,models,loader}.py`, `agent/{plan,scripted,lifecycle,store}.py`, `agent/tools/{registry,api,browser,ask}.py`, `acme/knowledge/{policies,api}.yaml`, `ui/{__init__,app}.py`, `ui/templates/inbox.html`, `bench/{live,run_oracle,approver}.py`, `bench/adversarial/*`, `bench/oracles/*`, `Makefile`, `README.md`, `CLAUDE.md`, `tests/policy/{test_gate,test_facts,test_scanner,test_approvals,test_schema,test_policies_file}.py`, `tests/agent/{test_scripted,test_gate_interface,test_registry,test_browser_unit,test_agent_isolation,test_lifecycle,test_api_tools,test_catalog,acme_fixtures,agent_fixtures}.py`, `tests/ui/test_inbox.py`, `tests/e2e/{test_adversarial,test_oracles,test_browser}.py`, `tests/acme/test_services.py`, `docs/{day3-plan,decisions,risk-log,failure-register,progress}.md` | `make test`: 1577 passed, 0 failed (1402 before); `make test-e2e`: 46 passed, 0 failed (34 before; 12 new: 8 adversarial scripts, the spec list, T9 approval order, GUI form fields seen and a changed form refused); `make oracle TASK=all`: 11/11 DB checkers pass through the real gate with the expected endings (T4 asked, T5 infeasible, T9 paused / done / blocked); `make adversarial`: 8/8 stopped as expected; 22 mutations (gate x8, facts x3, scanner x2, registry x3, browser, approvals x2, inbox token, resume after rejection, ORG-009 removed) all killed (the IFSC case mutant survived first; a test was added); the laundering script fails without D-133 | b04ddba |
+| 2026-10-06 | 3.2 | D-144 (ORG-007 exempts only the internal domain; `exempt_recipient_domains: internal`) and part 2, verifier and recovery: `agent/plan.py` (Predicate / Milestone / Plan with business keys and `{ref: Mn}`, a backward-only DAG, `plan_problems`); the verifier (`agent/verifier/`): layer 1 postconditions from the catalog's `verify` read per write, layer 2 milestone predicates through API reads polled through `READ_LAG_SECONDS`, absence believed only after the window, layer 3 audit rows since the start mark grouped by `ts` and matched to the run's writes (any row of a group), `decide_status` as a pure table, `unverified` on crash or timeout, a `verifier_result` event; the failure classifier `agent/failures.py`; read-lag polling in the keyless read-back after an unknown outcome (D-123); GUI rollback from audit inserts (D-128); milestone plans for every oracle; the harness verifies every run; acme-spec policy and adversarial tables; audit-insert bug fixed (N.165); decisions D-144 to D-153; risks N.165 to N.167 | `agent/verifier/{__init__,predicates,side_effects}.py`, `agent/{plan,failures,lifecycle,config}.py`, `agent/policy/{facts,gate,loader,models}.py`, `agent/tools/api.py`, `acme/knowledge/{api,policies}.yaml`, `.env.example`, `bench/{live,run_oracle}.py`, `bench/oracles/*`, `tests/agent/{test_verifier,test_plan,test_failures,test_api_tools,acme_fixtures}.py`, `tests/policy/{test_facts,test_gate,test_loader,test_schema}.py`, `tests/e2e/{test_browser,test_oracles}.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 1677 passed, 0 failed (1577 before); `make test-e2e`: 49 passed, 0 failed (46 before; new: T3 under `delayed_write`, GUI rollback, silent drop without redo is `failed`; verifier status asserted on every oracle and chaos run); `make oracle TASK=all` and `CHANNEL=gui`: every run's verifier status equals its `expected_outcome`; `make adversarial`: 8/8; 21 mutations (status table x2, verifier x4, predicates x4, layer 3 x3, API polling x2, audit insert, classifier x2, plan refs, ORG-007 partners exempt) plus the GUI rollback on e2e, all killed | pending |
 
 ## Blockers and open questions
 
-- **Author OK needed (3.1):** D-136, the ORG-007 exemption for addresses in allowlisted domains (see Now). Built as the default because the alternatives change T3's expected outcome or trust internal mail.
+- **Author decisions needed by Day 4:** the line budget (see Now) and SOP step PI-6 under ORG-008 (N.166).
 - The `TestClient` import prints a Starlette deprecation warning about `httpx` (it wants `httpx2`).
   Harmless for now; revisit if it becomes an error on a Starlette upgrade.
 - Dev-only default passwords live in `acme/auth.py` (overridable by env); fine for the sandbox, to be
@@ -142,11 +137,23 @@ Day 2.3 (2026-10-06; decisions D-116 to D-119):
 - **`ToolSpec.side_effect_of`** extends the 2.1 registry contract: a tool may name its side effect per call; the
   static `side_effect` is the worst case (D-117). `ToolCall` and the gate are unchanged.
 
+Day 3.2 (2026-10-06; decisions D-144 to D-153):
+
+- **Layer 1 reads the catalog's `verify` spec** (one per write, D-146) instead of `ToolSpec.postconditions`, which
+  stays in the registry contract unused.
+- **A claimed-but-not-audited write is a note, not a failure** (D-148): the plan's A3 table listed it under
+  `failed`. A run that read back and redid a silently dropped GUI submit reached its target states; when the write
+  mattered, its postcondition (API) or a milestone (GUI) fails the run. `Verdict.notes` holds these.
+- **No plan or no milestones gives `unverified`** even when nothing was written, unless an ask, a refusal, a pause
+  or a rejection decides the status (D-148): nothing to check is never `completed` (6.10).
+- **GUI rollback undoes API writes first, then GUI rows** (each newest first), not one merged order (D-128).
+- **`make test` takes about 29 s** (19 s before): the verifier and polling tests wait out short read lags.
+- **3.2 is over its line estimate** (+511 against +320), see Now.
+
 Day 3.1 (2026-10-06; decisions D-125 to D-143):
 
 - **Policies:** ORG-005 matches every `external_comms` call (any channel) instead of two request paths; ORG-007,
-  ORG-008 and ORG-009 are new (D-126, D-133, D-136). acme-spec's policy table still lists ORG-001 to ORG-006; it is
-  updated with the 3.2 checkpoint together with the verifier wording.
+  ORG-008 and ORG-009 are new (D-126, D-133, D-136, D-144). acme-spec's policy table was updated in 3.2.
 - **Interfaces beyond D-131:** `ToolCall.target` (the existing record an undo changes, from the catalog's single
   integer path id) and `ToolSpec.target_of` (D-137); `GateArgs` returned by `gate_args_of`; the session gains
   `creator_fields` in `api.yaml` (D-133).

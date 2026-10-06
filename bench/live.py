@@ -34,6 +34,7 @@ from acme.seed import reset
 from agent.config import load_config
 from agent.lifecycle import Run as AgentRun, start_run
 from agent.scripted import ScriptResult, resume_script, run_script
+from agent.verifier import Verdict, verify
 from agent.store import RunStore
 from bench.approver import decide
 from bench.checkers import engine
@@ -132,6 +133,7 @@ class OracleRun:
     pending: list[str] = field(default_factory=list)  # what only the Day 3.3 report can show
     chaos_fired: bool | None = None
     decisions: list[dict[str, Any]] = field(default_factory=list)  # what the scripted approver decided
+    verdict: Verdict | None = None                                  # the verifier's status and evidence (3.2)
 
     @property
     def passed(self) -> bool:
@@ -152,6 +154,7 @@ async def run_oracle(acme: Acme, task: Task, run: Run, oracle: Oracle, *, chaos:
         if script.ended == "paused":  # the approver decides in the inbox, then the run resumes
             decisions = await asyncio.to_thread(decide, agent.ctx.store.path, agent.run_id, run.approver)
             script = await resume_script(agent, oracle.steps, script)
+        verdict = await verify(agent)
     finally:
         await agent.close()
     diff = acme.admin("GET", "/__admin/diff", since=snapshot)["tables"]
@@ -159,4 +162,4 @@ async def run_oracle(acme: Acme, task: Task, run: Run, oracle: Oracle, *, chaos:
     pending = [f"report: status == {run.expected_outcome}"] + [f"report: {rc.path}" for rc in run.report_checks]
     pending += [oracle.pending] if oracle.pending else []
     fired = acme.admin("GET", "/__admin/chaos/events")["fired"] if chaos else None
-    return OracleRun(run, agent.run_id, script, result, pending, fired, decisions)
+    return OracleRun(run, agent.run_id, script, result, pending, fired, decisions, verdict)

@@ -88,10 +88,10 @@ rules:
     enforced_by: runtime
     effect: require_approval
     when:
-      - {type: field_source_untrusted, allowlist: mail_allowlist.yaml}
+      - {type: field_source_untrusted, exempt_recipient_domains: internal}
     message: >-
       A payee, bank detail, recipient or payment amount seen only in an email, a document or a page, and in no
-      trusted record, needs an action approval. An address on the mail allowlist is exempt.
+      trusted record, needs an action approval. Only an address in our own domain is exempt, never a partner's.
 
   - id: ORG-008
     level: org

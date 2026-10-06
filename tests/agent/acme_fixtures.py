@@ -24,7 +24,8 @@ from tests.agent.agent_fixtures import NOW, AllowAllGate
 
 ADMIN = {"X-Admin-Token": "test-admin-token"}
 PASSWORD = "test-agent-password"
-CONFIG = {"ACME_URL": "http://acme.test", "ACME_PASSWORD_OPS_AGENT": PASSWORD, "ACME_HTTP_TIMEOUT_SECONDS": "5"}
+CONFIG = {"ACME_URL": "http://acme.test", "ACME_PASSWORD_OPS_AGENT": PASSWORD, "ACME_HTTP_TIMEOUT_SECONDS": "5",
+          "READ_LAG_SECONDS": "0.3"}  # short: these Acme apps have no read lag unless a test turns delayed_write on
 
 
 @dataclass

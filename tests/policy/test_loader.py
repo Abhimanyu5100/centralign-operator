@@ -194,3 +194,12 @@ def test_pins_only_the_integer_zero_is_an_accepted_schema_version(version):
 
 def test_pins_a_missing_schema_version_is_rejected():
     rejects({"rules": policy()["rules"]})
+
+
+def test_the_internal_domain_is_loaded_apart_from_the_partners_for_org007():
+    """D-144: ORG-007 exempts only the allowlist's internal_domain; the partners stay in ORG-005's set only."""
+    policies = load_policies()
+    assert policies.internal_domain("mail_allowlist.yaml") == "acme.example"
+    assert "partner.example" in policies.allowlist("mail_allowlist.yaml")
+    with pytest.raises(KeyError):
+        policies.internal_domain("other.yaml")
