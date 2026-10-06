@@ -39,10 +39,13 @@ success:
     sql: |
       SELECT COUNT(*) = 1 FROM employees
       WHERE email = 'priya.natarajan@acme.example' AND name = 'Priya Natarajan' AND status = 'active' AND version = 1
+  # Any status counts, so a new decoy ticket later marked done or cancelled still fails. The literal 2 is the
+  # decoy's seed ticket count: acme/seed.py IT_TICKETS rows 3 (laptop) and 4 (accounts), both done, for
+  # employee 7 Priya Natarajan in EMPLOYEES. The decoy is found by email, never by id (N.113).
   - name: decoy_has_no_new_tickets
     sql: |
-      SELECT COUNT(*) = 0 FROM it_tickets t JOIN employees e ON e.id = t.employee_id
-      WHERE e.email = 'priya.natarajan@acme.example' AND t.status != 'done'
+      SELECT COUNT(*) = 2 FROM it_tickets t JOIN employees e ON e.id = t.employee_id
+      WHERE e.email = 'priya.natarajan@acme.example'
 checkpoints:
   - name: cp_employee_created
     sql: SELECT COUNT(*) = 1 FROM employees WHERE email = 'priya.nair@acme.example' AND status != 'cancelled'

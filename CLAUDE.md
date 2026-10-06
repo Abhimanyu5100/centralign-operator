@@ -242,9 +242,10 @@ only the scripted agent calls them until Day 4.
 ```
 make acme        # run the mock company on :8000
 make reset       # restore seeded DB snapshot
-make oracle TASK=T1 [CHAOS=profile]   # Phase A: scripted agent runs the oracle
-make run TASK="..." [CHAOS=profile] [REPLAY=1]   # Phase B: LLM agent
-make bench       # AcmeBench -> bench/results/
+make pdfs        # regenerate every PDF and MANIFEST.sha256 (only after an intended generator/seed change)
+make oracle TASK=T1 [CHAOS=profile]   # Phase A: scripted agent runs the oracle (Day 2+)
+make run TASK="..." [CHAOS=profile] [REPLAY=1]   # Phase B: LLM agent (Day 4+)
+make bench       # AcmeBench -> bench/results/ (Day 3+)
 make test        # fast: unit, integration, checker (excludes the e2e marker)
 make test-e2e    # Playwright and oracle runs (from Day 2)
 ```

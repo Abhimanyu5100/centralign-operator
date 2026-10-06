@@ -28,8 +28,8 @@ Free-tier model risks (M.1–M.7) are in `model-plan.md`. Run statuses are defin
 | 0.2 | Agent overfits Acme's page structure | Breaks when a label moves | No Acme selectors in agent code; Acme knowledge in SOPs/data; chaos renames labels | `rename_submit_button` and `field_moved` chaos runs (randomised label seed: future) | test |
 | 0.3 | State leaks between runs | Repeated runs disagree | `reset` restores seeded snapshot with the frozen `now`; fresh browser context per run | DB hash identical at each run start | build |
 | 0.4 | Chaos is random | Failure not reproducible on camera | Named, seeded fault profiles | Same seed reproduces the same fault | build |
-| 0.5 | Checkers wrong | Scores lie | Checkers are SQL over end state (+ report checks), each unit-tested pass and fail | `pytest bench/checkers` green | build |
-| 0.6 | Real systems or credentials used | Violates JD rule | Localhost only; fake data; local mailbox | Config and code point only at localhost (egress-blocked run container: future) | build |
+| 0.5 | Checkers wrong | Scores lie | Checkers are SQL over end state (+ report checks), each unit-tested pass and fail | `pytest tests/checkers` green | build |
+| 0.6 | Real systems or credentials used | Violates JD rule | Localhost only; fake data; local mailbox | Config and code point only at localhost: `tests/test_no_real_systems.py` (Acme URLs in `.env.example` are localhost; nothing in `acme/` imports a network client) (egress-blocked run container: future) | build |
 | 0.7 | Evaluators cannot start it | Judged unrunnable | `docker compose up` / `make demo`; pinned versions; Playwright browsers in image | Fresh clone on a second machine (Day 6) | test |
 | 0.8 | Environment eats the schedule | Day 3 with no agent | Hard cap Day 1; three modules; plain HTML; four chaos profiles moved to Day 3 | End-of-day: tasks doable by hand | test |
 | 0.9 | Tasks too easy | One obvious path; no autonomy visible | Unstated SOP steps; cross-source; impossible and ambiguous variants | Task list vs JD capability list | test |

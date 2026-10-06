@@ -182,6 +182,13 @@ def t3_decoy_ticket(ctx):  # the accounts ticket went to the near-name decoy
     t3_build(ctx, ticket_for="priya.natarajan@acme.example")
 
 
+def t3_decoy_ticket_closed(ctx):  # a stray decoy ticket marked done still counts as a new ticket
+    t3_good(ctx)
+    decoy = ctx.id_of("employees", "email = ?", "priya.natarajan@acme.example")
+    ticket = s.create_it_ticket(ctx.conn, A, "api", ItTicketIn(type="laptop", employee_id=decoy))
+    s.set_status(ctx.conn, "admin", "it_ticket", ticket["id"], "done")
+
+
 def t3_no_date_in_email(ctx):
     t3_build(ctx, body="Welcome to Acme! See you soon.")
 
@@ -409,6 +416,7 @@ CASES = [
     ("T3", t3_ui, "ui", set()),
     ("T3", t3_wrong_date, "bad", {"employee_created", "welcome_email_with_start_date"}),
     ("T3", t3_decoy_ticket, "bad", {"accounts_ticket", "decoy_has_no_new_tickets"}),
+    ("T3", t3_decoy_ticket_closed, "bad", {"decoy_has_no_new_tickets", SE}),
     ("T3", t3_no_date_in_email, "bad", {"welcome_email_with_start_date"}),
     ("T3", t3_extra, "extra", {SE}),
     ("T4", t4_good, "good", set()),

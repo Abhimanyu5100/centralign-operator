@@ -5,10 +5,11 @@ If this file disagrees with git, git wins for what is committed.
 
 ## Now
 
-- **Last updated:** 2026-10-06 11:21 IST
-- **Day / phase / part:** Day 1 (Phase A), part 10 done (not yet committed): all Day 1 parts built → Day 2 next
-- **Currently doing:** waiting for author review of Day 1.10 (task YAMLs, checker engine, checker tests) and the
-  author's manual browser walk of T1-T9 (Day 1 definition of done; steps are in the Day 1.10 report)
+- **Last updated:** 2026-10-06 11:48 IST
+- **Day / phase / part:** Day 1 (Phase A), part R (review fixes) built, not yet committed → Day 2 next
+- **Currently doing:** Day 1.R review fixes are built and await author review and commit; the author's manual
+  browser walk of T1-T9 (Day 1 definition of done; steps are in the Day 1.10 report, limits under "Manual walk"
+  in Blockers) is still pending
 - **Next step:** Day 2 part 1: the tool registry with the uniform contract (`agent/tools/registry.py`: name, JSON
   schema, one-line description, `side_effect`, `channel`, preconditions, postconditions, `undo`; typed results
   `{ok, error_type, detail, data}`), the pass-through `PolicyGate` with its final interface, the run store with the
@@ -51,10 +52,13 @@ If this file disagrees with git, git wins for what is committed.
   - Day 3: the general provenance rule ORG-007 (`field_source_untrusted`).
   - Day 3: the evaluator reads the allowlist with `PolicyFile.allowlist(name)`, never from disk (D-082).
   - Day 2: if a `tool_in` rule is ever added, add the registry-name test with it (N.77).
+  - **Day 3:** the failure classifier recognises ORG-002 refusals (409 `conflict`) by the policy ID in the detail, not
+    by `error_type` (D-091, D-100); add a classifier test with a 409 `conflict` carrying `ORG-002` (on create and on
+    approve) that must classify as a policy refusal, and a plain 409 `conflict` without it that must not.
   - `iyer_INV-3301.pdf` stays unreferenced by T1-T9 (Phase B stretch).
 - **RESUME PROMPT:**
   ```
-  Read CLAUDE.md and docs/progress.md, then docs/acme-spec.md. Day 1 is built: Acme (acme/: services, auth, UI, API,
+  Read CLAUDE.md and docs/progress.md, then docs/acme-spec.md. Day 1 and its review fixes (1.R) are built: Acme (acme/: services, auth, UI, API,
   idempotency, mailbox, PDFs, admin endpoints, the five Day 1 chaos profiles), knowledge in acme/knowledge/, the
   policy schema, loader and path-glob matcher in agent/policy/, and AcmeBench task files T1-T9 in bench/tasks/ with
   one checker engine in bench/checkers/engine.py (tests in tests/checkers/; `make test` is the fast suite). Build
@@ -83,30 +87,37 @@ If this file disagrees with git, git wins for what is committed.
 | 2026-10-06 | 1.7 | Company knowledge: four SOPs (process-invoice, onboard-employee, schedule-payment, notify-vendor) with stable step IDs and a documented format; `policies.yaml` ORG-001 to ORG-006 (DRAFT, schema v0); policy schema and strict loader in `agent/policy/` (six condition types incl. `request_matches`, five `acme_check` kinds, deny/require_approval only); SOP parser as the planner contract; ORG-006 pinned inside Acme (no payment amount, payee or bank field, no bank route); register 1.3 and acme-spec updated | `acme/knowledge/sops/*`, `acme/knowledge/policies.yaml`, `acme/mail.py` (one word: `fullmatch`), `agent/__init__.py`, `agent/policy/{__init__,models,loader}.py`, `tests/policy/*` (incl. `test_loader.py`), `tests/acme/{sop_format,test_knowledge,test_payment_amount}.py`, `docs/{acme-spec,decisions,failure-register,risk-log,progress}.md` | `make test`: 712 passed (new: 167 in `tests/policy`, 63 in `test_knowledge.py`, 9 in `test_payment_amount.py`); mutation-checked (wrong limit, widened role set, wrong model fields, missing allowlist, planted vendor leak, bad route, bad policy ID, duplicate step ID, and ten loader mutations all fail); review fixes D-082 and D-083 included | 077edb2 |
 | 2026-10-06 | 1.8 | Admin endpoints behind `X-Admin-Token` (one check in `require_login` for the whole `/__admin` prefix; unset env closes them): reset (seed, now), snapshot, state_hash, diff (row-level, id order, entity tables only), chaos get/set with a stored profile and `wired` flag; snapshots and chaos tables dropped by reset; ORG-002 inside Acme for payments (create refuses, approve refuses, reject allowed); segment-aware `agent/policy/pathglob.py` with path normalisation (decode once, collapse slashes, reject `.`/`..`, case-insensitive, invalid path fails closed) and the policy rules rewritten to it; masking fix (last four digits only above eight digits); typed JSON errors on `/__admin`; decisions D-084 to D-093; risks N.82 and N.83 closed, N.90 to N.101 added | `acme/{admin,chaos,web,app,db,services}.py`, `agent/policy/{pathglob,models}.py`, `acme/knowledge/policies.yaml`, `.env.example`, `Makefile`, `tests/acme/{test_admin,test_org002_payments,test_auth}.py`, `tests/policy/{test_pathglob,acme_checks,test_policies_file,test_schema}.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 891 passed, 0 failed (179 new: 70 admin, 13 ORG-002, 96 pathglob); ten mutations (token guard, prefix guard, both ORG-002 checks, mask, snapshot ids, drop of the new tables, three matcher changes) all killed; curl walk against a live server verified; seed hashes and MANIFEST.sha256 unchanged | 6874984 |
 | 2026-10-06 | 1.9 | The five Day 1 chaos profiles (`rename_submit_button`, `session_expiry_at_step_N`, `flaky_500`, `commit_then_timeout`, `silent_drop_write`): one module `acme/chaos.py`; API writes meet chaos in `_write`, UI writes in `ChaosRoute` (route class of the UI router), session expiry in `require_login`, the label in `invoice_submit_label`; deterministic SHA-256 schedule over attempt numbers; retry of the same attempt never faulted; once-per-activation faults; ops-agent only, admin exempt; silent drop through a `DISCARD_COMMITS` context variable honoured by `db.transaction`; `chaos_attempts` and `chaos_events` tables (dropped by reset); `GET /__admin/chaos/events` with `fired`; Day 3 profiles refused with a typed 422; decisions D-094, D-095; risks N.18, N.19, N.98, N.102 to N.108 tested | `acme/{chaos,db,api,ui,web,auth,admin}.py`, `.env.example`, `tests/acme/{test_chaos,conftest,test_admin}.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 924 passed, 0 failed (33 new in `test_chaos.py`); 13 mutations (drop ignored, retry dedupe, actor check x2, once-only, expiry off by one, attempts kept, events survive reset, redirect rewrite, route class, API after_write, schedule, fingerprint) all killed; curl walk against a live server verified every profile | bb43e7c |
-| 2026-10-06 | 1.10 | AcmeBench tasks T1-T9 (`bench/tasks/*.yaml`, strict schema and loader in `bench/tasks.py`, T9 as three runs `T9:none/approve/reject`); one checker engine (`bench/checkers/engine.py`: read-only SQLite, exactly-one-row predicates, side effects against `allowed_changes` from the `/__admin/diff` tables, report checks over the provisional report contract); checker tests with a passing and failing states per run, a UI-built passing state and an extra-write failing state per writing run, T3 date forms, seed continuity, a real `/__admin/diff` agreement test; answer-key leak test extended to task values over `agent/` and `acme/knowledge/`; decisions D-096 to D-098 (and D-095 Day 5 note); risks N.109 to N.117 added and tested, N.4, N.13, N.28, N.29 tested | `bench/{__init__,tasks}.py`, `bench/checkers/{__init__,engine}.py`, `bench/tasks/T1-T9.yaml`, `tests/checkers/{test_engine,test_tasks}.py`, `tests/acme/test_knowledge.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 1062 passed, 0 failed (138 new: 67 in `test_tasks.py` incl. 50 checker cases, 57 in `test_engine.py`, 14 leak tests); 15 mutations (engine x7, task files x8) all killed | pending |
+| 2026-10-06 | 1.10 | AcmeBench tasks T1-T9 (`bench/tasks/*.yaml`, strict schema and loader in `bench/tasks.py`, T9 as three runs `T9:none/approve/reject`); one checker engine (`bench/checkers/engine.py`: read-only SQLite, exactly-one-row predicates, side effects against `allowed_changes` from the `/__admin/diff` tables, report checks over the provisional report contract); checker tests with a passing and failing states per run, a UI-built passing state and an extra-write failing state per writing run, T3 date forms, seed continuity, a real `/__admin/diff` agreement test; answer-key leak test extended to task values over `agent/` and `acme/knowledge/`; decisions D-096 to D-098 (and D-095 Day 5 note); risks N.109 to N.117 added and tested, N.4, N.13, N.28, N.29 tested | `bench/{__init__,tasks}.py`, `bench/checkers/{__init__,engine}.py`, `bench/tasks/T1-T9.yaml`, `tests/checkers/{test_engine,test_tasks}.py`, `tests/acme/test_knowledge.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 1062 passed, 0 failed (138 new: 67 in `test_tasks.py` incl. 50 checker cases, 57 in `test_engine.py`, 14 leak tests); 15 mutations (engine x7, task files x8) all killed | e02013e |
+| 2026-10-06 | 1.R | Day 1 review fixes: register 0.5 proof path (`tests/checkers`); CLAUDE.md Commands lists `make pdfs` and marks oracle/run/bench by day; acme-spec PDF generator path and `iyer_INV-3301.pdf`; register 0.6 proof test (Acme URLs in `.env.example` are localhost, no outbound network client imported in `acme/`); T3 `decoy_has_no_new_tickets` now means no new tickets (seed count 2, any status, D-099); manual-walk limits for T6/T9 noted | `CLAUDE.md`, `docs/{acme-spec,failure-register,decisions,risk-log,progress}.md`, `tests/test_no_real_systems.py`, `bench/tasks/T3.yaml`, `tests/checkers/test_tasks.py` | `make test`: 1065 passed, 0 failed (1062 before; 3 new); mutations: `import smtplib` / `from urllib import request` in `acme/mail.py` and a non-local `ACME_URL` each fail the 0.6 test; the old T3 SQL fails the new closed-ticket case; a wrong seed literal fails every T3 good case | pending |
 
 ## Blockers and open questions
 
-- Interpretations made in the Oct 5 decisions pass, not yet explicitly confirmed by the author:
-  - The agent (not Acme) creates the business approval request via `POST /api/approvals` for over-limit
-    invoices and payment requests.
-  - T6 `expected_outcome` is `completed` (security finding in the report, not an exception).
-  - T7 Patel total set to ₹41,300 (below limit).
-  - "8 core tasks" = T1–T8; T9 runs outside the pass^3 matrix.
-  - `.env.example`: Groq qwen ID replaced by `GROQ_COMPACTION_MODEL=openai/gpt-oss-20b`.
-  - Payment requests in `cancelled` or `rejected` state do not block voiding an approved invoice (D-034).
 - The `TestClient` import prints a Starlette deprecation warning about `httpx` (it wants `httpx2`).
   Harmless for now; revisit if it becomes an error on a Starlette upgrade.
 - Dev-only default passwords live in `acme/auth.py` (overridable by env); fine for the sandbox, to be
   listed in the README limitations with CSRF and the missing `Secure` flag (D-046).
 
-- **Author to confirm (part 8):** rejecting a payment whose vendor is no longer approved is still allowed; only
-  approving is refused (D-091). A 409 `conflict` with `ORG-002` in the detail is used for the refusal because
-  `ERROR_TYPES` is frozen (D-058); the Day 2 classifier must key off the policy ID.
+- **Manual walk (T1-T9 by hand) limits until Day 3:** T6's security finding (ORG-006, the injected transfer
+  text) lives in the run report, which the Day 3 report generator produces; by hand only the invoice entry and the
+  absence of a payment or bank change can be shown. T9's action-approval inbox is a runtime feature (Day 3); by
+  hand only the send itself via `/mail/compose` is possible, not the pause, the predicted-outcome card or the
+  approve/reject decision.
 - **Starting the server for the harness:** `export ACME_ADMIN_TOKEN=...` before `make acme`; unset means every
   admin route is 403.
 
 ## Deviations from spec
+
+Author-confirmed on 2026-10-06 (decision D-100; no longer open):
+
+- The agent (not Acme) creates the business approval request via `POST /api/approvals` for over-limit invoices and
+  payment requests.
+- T6 `expected_outcome` is `completed` (security finding in the report, not an exception).
+- T7 Patel total is ₹41,300 (below the limit).
+- "8 core tasks" = T1-T8; T9 runs outside the pass^3 matrix.
+- `.env.example`: the Groq qwen ID is replaced by `GROQ_COMPACTION_MODEL=openai/gpt-oss-20b`.
+- Payment requests in `cancelled` or `rejected` state do not block voiding an approved invoice (D-034).
+- Rejecting a payment whose vendor is no longer approved is still allowed; only approving is refused (D-091). The
+  refusal is a 409 `conflict` with `ORG-002` in the detail because `ERROR_TYPES` is frozen (D-058).
 
 (Record here any place where the built code differs from `docs/acme-spec.md` or `CLAUDE.md`,
 with the reason, and add a decision row in `docs/decisions.md`.)
@@ -232,3 +243,8 @@ Day 1.10 (decisions D-096 to D-098; awaiting author review):
 - **T9 is one file with `variants`** keyed by approver; the spec schema had one `approver` field (D-097).
 - **`received_date` is not checked** for T1, T2, T6, T7: the email date and the entry date are both defensible.
 - **T8 does not check the scheduled date**: no SOP fixes it; Acme defaults it to the due date.
+
+Day 1.R (decision D-099; awaiting author review):
+
+- **No new deviations.** The acme-spec PDF section now matches the code (D-070, `iyer_INV-3301.pdf`), so the two Day 1.6
+  spec-name deviations above are resolved in the spec text.
