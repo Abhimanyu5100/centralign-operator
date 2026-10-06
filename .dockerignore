@@ -1,0 +1,16 @@
+# Never in the image: secrets, local environments, run data, git metadata, caches (P.7, N.30).
+.env
+.env.*
+!.env.example
+.venv/
+.git/
+.githooks/
+.claude/
+runs/
+bench/results/*.json
+bench/results/*.md
+acme/data/acme.db*
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/

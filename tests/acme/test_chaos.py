@@ -523,3 +523,28 @@ def test_every_implemented_profile_has_an_effect_test():
     assert set(EFFECT_TESTS) == set(chaos.WIRED_PROFILES) | {"session_expiry_at_step_N"}
     assert set(chaos.WIRED_PROFILES) == set(chaos.PROFILES)
     assert all(callable(t) and t.__name__.startswith("test_") for t in EFFECT_TESTS.values())
+
+
+def test_a_hold_cut_short_by_shutdown_ends_quietly_with_one_log_line(db_file, admin, caplog):
+    """Bench shutdown noise: when the server stops while commit_then_timeout holds a response, the task is cancelled
+    mid-sleep. The write already committed, so the hold ends cleanly: one warning line, no CancelledError."""
+    import asyncio
+    import logging
+
+    from acme import chaos
+    from acme.db import connect
+    set_chaos(admin, "commit_then_timeout")
+    conn = connect(db_file)
+    attempt = chaos.Attempt(chaos.active(conn), "ops-agent", "api", "POST", "/api/it-tickets", 1, delay=30.0)
+
+    async def shutdown_mid_hold():
+        task = asyncio.create_task(chaos.after_write(conn, attempt, committed=True))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        return await task  # raises CancelledError if the hold did not end cleanly
+
+    with caplog.at_level(logging.WARNING, logger="acme.chaos"):
+        assert asyncio.run(asyncio.wait_for(shutdown_mid_hold(), 5)) is None
+    conn.close()
+    lines = [r.getMessage() for r in caplog.records if r.name == "acme.chaos"]
+    assert lines == ["chaos commit_then_timeout: the held response to POST /api/it-tickets was cut short by shutdown"]

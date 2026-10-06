@@ -145,8 +145,28 @@ def test_the_bench_runs_end_to_end_and_writes_its_results(acme, tmp_path):
     from agent.store import RunStore
     from bench.run_bench import bench, save
     result = asyncio.run(bench(acme, k=2, only={"T8"}, store=RunStore(tmp_path / "bench.db")))
-    assert result["pass_k"] == {"T8": True} and len(result["rows"]) == 3
-    assert result["summary"]["chaos_fired"] == "1/1" and result["summary"]["adversarial_stopped"] == "8/8"
+    assert result["pass_k"] == {"T8": True} and len(result["rows"]) == 4  # 2 tries, 2 chaos variants
+    assert result["summary"]["chaos_fired"] == "2/2" and result["summary"]["adversarial_stopped"] == "8/8"
     assert all(r["agreement"] and r["cup"] for r in result["rows"])
     saved = save(result, tmp_path)
     assert saved.is_file() and saved.with_suffix(".json").is_file() and "| T8 |" in saved.read_text()
+
+
+def test_the_bench_prints_no_traceback_and_a_held_t3_write_takes_seconds_not_minutes(tmp_path):
+    """Bench shutdown noise (D-162): the bench's own Acme holds a commit_then_timeout response for 5 s and its agent
+    gives up after 3 s, so T3 under that profile finishes in seconds; the bench ends right after that run, while the
+    hold is still asleep: the server lets the hold finish (graceful shutdown longer than the hold), so nothing is
+    cancelled and nothing is printed. (If a hold is cancelled anyway, chaos logs one line: tests/acme/test_chaos.py.)"""
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    done = subprocess.run([sys.executable, "-m", "bench.run_bench", "--only", "T3", "--no-adversarial",
+                           "--results", str(tmp_path)], cwd=root, capture_output=True, text=True, timeout=120)
+    output = done.stdout + done.stderr
+    assert done.returncode == 0, output[-2000:]
+    assert "Traceback" not in output and "CancelledError" not in output and "Cancel 1 running task" not in output
+    rows = json.loads(next(tmp_path.glob("*.json")).read_text())["rows"]
+    held = next(r for r in rows if r["chaos"] == "commit_then_timeout:0")
+    assert held["passed"] and held["chaos_fired"] and held["seconds"] < 8

@@ -35,6 +35,7 @@ Day 2.3 profiles (D-116), same insertion points:
 
 import asyncio
 import hashlib
+import logging
 import os
 import random
 import re
@@ -52,11 +53,14 @@ from acme import auth, clock
 from acme.db import DISCARD_COMMITS, ENTITY_TABLES, connect, transaction
 from acme.services import AcmeError, Invalid
 
+log = logging.getLogger("acme.chaos")
 PROFILES = ("rename_submit_button", "flaky_500", "commit_then_timeout", "silent_drop_write",
             "slow_server", "toast_2s", "field_moved", "delayed_write")
 STEP_PROFILE = re.compile(r"session_expiry_at_step_([1-9][0-9]{0,2})")  # N = 1..999 authenticated requests
 NONE = "none"
 WIRED_PROFILES: frozenset[str] = frozenset(PROFILES)  # session_expiry_at_step_N is wired too (pattern)
+# Profiles that act only on pages and forms: an API-only run can never trigger them (N.169, D-161).
+UI_ONLY = frozenset({"rename_submit_button", "silent_drop_write", "toast_2s", "field_moved"})
 
 TARGET_ACTOR = "ops-agent"
 FLAKY_RATE = 0.3
@@ -249,7 +253,11 @@ async def after_write(conn: sqlite3.Connection, attempt: Attempt | None, *, comm
             record(conn, a.current, "write_delayed", a.actor, a.channel, a.method, a.path, a.number)
     elif a.delay and committed:
         record(conn, a.current, a.delay_effect, a.actor, a.channel, a.method, a.path, a.number)
-        await asyncio.sleep(a.delay)  # the event loop keeps serving other clients meanwhile (N.106)
+        try:
+            await asyncio.sleep(a.delay)  # the event loop keeps serving other clients meanwhile (N.106)
+        except asyncio.CancelledError:  # the server is shutting down mid-hold; the write already committed
+            log.warning("chaos %s: the held response to %s %s was cut short by shutdown", a.current.profile,
+                        a.method, a.path)
 
 
 def _table(entity_type: str) -> str:

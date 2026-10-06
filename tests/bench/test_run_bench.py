@@ -4,7 +4,8 @@ guard, non-fired chaos runs kept apart, the summary and the markdown. D-095, D-1
 import pytest
 
 from bench import tasks
-from bench.run_bench import Row, agreement, chaos_variants, completed_under_policy, markdown, pass_k, summary
+from bench.run_bench import (Row, agreement, chaos_variants, completed_under_policy, markdown, pass_k, problems,
+                             summary)
 
 
 def row(run_id="T2", chaos="off", passed=True, fired=None, **extra) -> Row:
@@ -48,7 +49,7 @@ def test_delayed_write_is_refused_for_t3_and_t8_only():
     with pytest.raises(ValueError, match="never a bench variant"):
         chaos_variants(t3)
     t1 = tasks.load("T1").model_copy(update={"chaos_variants": [tasks.ChaosVariant(profile="delayed_write", seed=0)]})
-    assert chaos_variants(t1) == [("delayed_write", 0)]
+    assert chaos_variants(t1) == [("delayed_write", 0, "any")]
     assert all(chaos_variants(t) is not None for t in tasks.load_all())  # the real YAMLs pass the guard
 
 
@@ -71,3 +72,29 @@ def test_the_markdown_has_every_column_and_flags_a_wrong_status():
                    "Held", "Seconds (verify)"):
         assert column in text
     assert "completed (expected needs_clarification)" in text and "| NO |" in text
+
+
+def test_the_real_chaos_variants_all_can_fire_or_are_marked_gui_only():
+    """D-161: no variant runs where its profile cannot act; T7's UI-only one is marked gui, the T2 slot is on T8."""
+    from acme import chaos
+    for task in tasks.load_all():
+        for profile, _, channel in chaos_variants(task):
+            assert (profile in chaos.UI_ONLY) == (channel == "gui"), (task.id, profile)
+    assert [p for p, _, _ in chaos_variants(tasks.load("T8"))] == ["session_expiry_at_step_5", "commit_then_timeout"]
+
+
+def test_skipped_gui_only_variants_are_listed_not_counted_as_runs():
+    s = summary([row(chaos="flaky_500:0", fired=True)], [], ["T7 rename_submit_button:0 (GUI only, no GUI oracle)"])
+    assert s["chaos_fired"] == "1/1" and s["chaos_skipped_gui_only"] == ["T7 rename_submit_button:0 (GUI only, no GUI oracle)"]
+
+
+def test_the_bench_fails_on_a_failed_run_an_unfired_fault_or_an_unstopped_attempt():
+    from dataclasses import asdict
+    good = {"rows": [asdict(row()), asdict(row(chaos="flaky_500:0", fired=True))],
+            "adversarial": [{"name": "x", "passed": True}]}
+    assert problems(good) == []
+    unfired = {**good, "rows": [asdict(row("T8", chaos="commit_then_timeout:0", fired=False))]}
+    assert problems(unfired) == ["T8 commit_then_timeout:0: the fault never fired"]
+    assert problems({**good, "rows": [asdict(row(passed=False))]}) == ["T2 (api) failed"]
+    assert problems({**good, "adversarial": [{"name": "x", "passed": False}]}) == [
+        "adversarial x not stopped as expected"]

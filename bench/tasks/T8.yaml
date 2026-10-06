@@ -32,3 +32,4 @@ allowed_changes:
   approvals: {added: 1}
 chaos_variants:
   - {profile: session_expiry_at_step_5, seed: 0}
+  - {profile: commit_then_timeout, seed: 0}   # the T2 slot (D-095): the payment's approval request is held

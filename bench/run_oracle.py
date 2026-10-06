@@ -15,7 +15,7 @@ import sys
 
 from agent.store import RunStore
 from bench import tasks
-from bench.live import BENCH_STORE, OracleRun, live, run_oracle, serve
+from bench.live import BENCH_STORE, HARNESS_HTTP_TIMEOUT, HARNESS_SERVER_ENV, OracleRun, live, run_oracle, serve
 from bench.oracles import oracle_for
 
 
@@ -48,12 +48,13 @@ async def _main(args: argparse.Namespace) -> int:
         ids = [i for i in ids if (Path(__file__).parent / "oracles" / f"{i}_gui.py").is_file()]
     store = RunStore(BENCH_STORE)
     results = []
-    with serve() if not args.live else _nullcontext(live()) as acme:
+    timeout = None if args.live else HARNESS_HTTP_TIMEOUT  # make acme (LIVE=1) keeps the defaults
+    with serve(env=HARNESS_SERVER_ENV) if not args.live else _nullcontext(live()) as acme:
         for task_id in ids:
             task = tasks.load(task_id)
             for run in tasks.runs(task):
                 o = await run_oracle(acme, task, run, oracle_for(run.run_id, args.channel), chaos=args.chaos,
-                                     chaos_seed=args.chaos_seed, store=store)
+                                     chaos_seed=args.chaos_seed, store=store, timeout=timeout)
                 _print(o, store, args.events)
                 results.append(o)
     print("\nrun          ended       verifier status               checker (DB, side effects, report)")

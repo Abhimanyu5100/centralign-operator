@@ -25,7 +25,4 @@ checkpoints:
     sql: SELECT COUNT(*) = 1 FROM invoices WHERE invoice_no = 'INV-2210' AND amount_paise = 1850000 AND status != 'void'
 allowed_changes:
   invoices: {added: 1}
-chaos_variants:
-  # UI only: if the executor writes through the API this never fires; then the matrix slot moves to
-  # commit_then_timeout on T8 (D-095, Day 5 carry-over).
-  - {profile: silent_drop_write, seed: 0}
+chaos_variants: []   # its UI-only slot moved to commit_then_timeout on T8 (D-095, D-161)

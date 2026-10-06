@@ -64,6 +64,7 @@ class ReportCheck(_Strict):
 class ChaosVariant(_Strict):
     profile: str
     seed: int = Field(0, ge=0)
+    channel: Literal["any", "gui"] = "any"   # gui: run only with a GUI oracle (a UI-only profile, D-161)
 
     @field_validator("profile")
     @classmethod
@@ -73,6 +74,12 @@ class ChaosVariant(_Strict):
         except Invalid as exc:
             raise ValueError(exc.message) from exc
         return value
+
+    @model_validator(mode="after")
+    def _ui_only_needs_the_gui(self) -> "ChaosVariant":
+        if self.profile in chaos.UI_ONLY and self.channel != "gui":
+            raise ValueError(f"{self.profile} acts only on pages: mark the variant channel: gui (D-161)")
+        return self
 
 
 AllowedChanges = dict[str, TableChange]

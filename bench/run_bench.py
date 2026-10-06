@@ -4,7 +4,10 @@ Acme runs as a child process on a temporary database (bench/live.py). For every 
 - each run (T9: none / approve / reject) with chaos off, K times (pass^K; oracles are deterministic, K=1);
 - the GUI oracle where one exists (T1), chaos off;
 - each chaos variant in the task YAML (`chaos_variants`, seed 0), once. `delayed_write` is refused for T3 and T8:
-  their keyless writes have no natural uniqueness (D-123; T3 under delayed_write is an e2e test instead).
+  their keyless writes have no natural uniqueness (D-123; T3 under delayed_write is an e2e test instead). A variant
+  marked `channel: gui` (a UI-only profile) runs only with the task's GUI oracle and is listed as skipped when the
+  task has none (D-161). Every chaos run that does run must fire: one that did not fails the bench.
+The bench's own Acme holds a commit_then_timeout response for 5 s and its agent times out after 3 s (D-162).
 Then every adversarial script. Each oracle run is verified, reported and checked by the engine (DB predicates, side
 effects, status and report checks). Oracles judge the checkers with chaos off; chaos runs measure detection and
 failure classification, not success.
@@ -29,7 +32,7 @@ from typing import Any
 from agent.store import RunStore
 from bench import tasks
 from bench.adversarial import run_all
-from bench.live import BENCH_STORE, OracleRun, run_oracle, serve
+from bench.live import BENCH_STORE, HARNESS_HTTP_TIMEOUT, HARNESS_SERVER_ENV, OracleRun, run_oracle, serve
 from bench.oracles import oracle_for
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,9 +91,9 @@ def pass_k(rows: list[Row]) -> dict[str, bool]:
     return {run_id: all(results) for run_id, results in by_run.items()}
 
 
-def chaos_variants(task) -> list[tuple[str, int]]:
-    variants = [(v.profile, v.seed) for v in task.chaos_variants]
-    if task.id in NO_DELAYED_WRITE and any(profile == "delayed_write" for profile, _ in variants):
+def chaos_variants(task) -> list[tuple[str, int, str]]:
+    variants = [(v.profile, v.seed, v.channel) for v in task.chaos_variants]
+    if task.id in NO_DELAYED_WRITE and any(profile == "delayed_write" for profile, _, _ in variants):
         raise ValueError(f"{task.id}: delayed_write is never a bench variant for T3 or T8 (D-123)")
     return variants
 
@@ -110,7 +113,7 @@ def row_of(o: OracleRun, channel: str, chaos: str, attempt: int) -> Row:
         seconds=round(o.seconds, 2), verify_seconds=round(o.verify_seconds, 2))
 
 
-def summary(rows: list[Row], adversarial: list[dict[str, Any]]) -> dict[str, Any]:
+def summary(rows: list[Row], adversarial: list[dict[str, Any]], skipped: list[str] | None = None) -> dict[str, Any]:
     off = [r for r in rows if r.chaos == "off"]
     on = [r for r in rows if r.chaos != "off"]
     fired = [r for r in on if r.chaos_fired]
@@ -124,6 +127,7 @@ def summary(rows: list[Row], adversarial: list[dict[str, Any]]) -> dict[str, Any
         "correct_refusals": f"{sum(bool(r.refusal_correct) for r in refusals)}/{len(refusals)}",
         "chaos_fired": f"{len(fired)}/{len(on)}",
         "chaos_not_fired": [f"{r.run_id} {r.chaos}" for r in on if not r.chaos_fired],
+        "chaos_skipped_gui_only": skipped or [],
         "recovered_when_fired": f"{sum(r.passed for r in fired)}/{len(fired)}",
         "verifier_diff_agreement": f"{sum(bool(r.agreement) for r in rows)}/{len(rows)}",
         "adversarial_stopped": f"{sum(a['passed'] for a in adversarial)}/{len(adversarial)}",
@@ -160,28 +164,34 @@ def markdown(result: dict[str, Any]) -> str:
 # --- the run ---------------------------------------------------------------------------------------------------
 
 async def bench(acme, *, k: int = 1, only: set[str] | None = None, adversarial: bool = True,
-                store: RunStore | None = None) -> dict[str, Any]:
+                store: RunStore | None = None, timeout: float | None = HARNESS_HTTP_TIMEOUT) -> dict[str, Any]:
     store = store or RunStore(BENCH_STORE)
     rows: list[Row] = []
+    skipped: list[str] = []
     for task in tasks.load_all():
         if only and task.id not in only:
             continue
         variants = chaos_variants(task)
+        has_gui = (ROOT / "bench" / "oracles" / f"{task.id}_gui.py").is_file()
         for run in tasks.runs(task):
             for attempt in range(1, k + 1):
-                rows.append(row_of(await run_oracle(acme, task, run, oracle_for(run.run_id), store=store),
-                                   "api", "off", attempt))
-            if (ROOT / "bench" / "oracles" / f"{task.id}_gui.py").is_file():
-                rows.append(row_of(await run_oracle(acme, task, run, oracle_for(run.run_id, "gui"), store=store),
-                                   "gui", "off", 1))
-            for profile, seed in variants:
-                o = await run_oracle(acme, task, run, oracle_for(run.run_id), chaos=profile, chaos_seed=seed, store=store)
-                rows.append(row_of(o, "api", f"{profile}:{seed}", 1))
+                o = await run_oracle(acme, task, run, oracle_for(run.run_id), store=store, timeout=timeout)
+                rows.append(row_of(o, "api", "off", attempt))
+            if has_gui:
+                o = await run_oracle(acme, task, run, oracle_for(run.run_id, "gui"), store=store, timeout=timeout)
+                rows.append(row_of(o, "gui", "off", 1))
+            for profile, seed, channel in variants:
+                if channel == "gui" and not has_gui:  # a UI-only profile cannot fire on an API run (D-161)
+                    skipped.append(f"{run.run_id} {profile}:{seed} (GUI only, no GUI oracle)")
+                    continue
+                o = await run_oracle(acme, task, run, oracle_for(run.run_id, "gui" if channel == "gui" else "api"),
+                                     chaos=profile, chaos_seed=seed, store=store, timeout=timeout)
+                rows.append(row_of(o, channel if channel == "gui" else "api", f"{profile}:{seed}", 1))
     stopped = [{"name": o.name, "expected": o.expected, "passed": o.passed, "problems": o.problems}
                for o in (await run_all(acme, store) if adversarial else [])]
     return {"meta": {"started": datetime.now().astimezone().isoformat(timespec="seconds"), "commit": _commit(), "k": k},
             "rows": [asdict(r) for r in rows], "pass_k": pass_k(rows), "adversarial": stopped,
-            "summary": summary(rows, stopped)}
+            "summary": summary(rows, stopped, skipped)}
 
 
 def _commit() -> str:
@@ -206,15 +216,25 @@ def main() -> None:
     parser.add_argument("--k", type=int, default=1, help="chaos-off attempts per run (pass^k)")
     parser.add_argument("--only", default="", help="comma-separated task ids, e.g. T1,T2")
     parser.add_argument("--no-adversarial", action="store_true")
+    parser.add_argument("--results", type=Path, default=RESULTS, help="folder for the results files")
     args = parser.parse_args()
-    with serve() as acme:
+    with serve(env=HARNESS_SERVER_ENV) as acme:
         result = asyncio.run(bench(acme, k=args.k, only=set(filter(None, args.only.split(","))) or None,
                                    adversarial=not args.no_adversarial))
-    path = save(result)
+    path = save(result, args.results)
     print(markdown(result))
     print(f"saved {path} and {path.with_suffix('.json')}")
-    off_failed = [r for r in result["rows"] if r["chaos"] == "off" and not r["passed"]]
-    sys.exit(1 if off_failed or not all(a["passed"] for a in result["adversarial"]) else 0)
+    sys.exit(1 if problems(result) else 0)
+
+
+def problems(result: dict[str, Any]) -> list[str]:
+    """Why the bench fails: a chaos-off run that did not pass, a chaos run whose fault never fired, an adversarial
+    script that was not stopped as expected."""
+    rows = result["rows"]
+    return ([f"{r['run_id']} ({r['channel']}) failed" for r in rows if r["chaos"] == "off" and not r["passed"]]
+            + [f"{r['run_id']} {r['chaos']}: the fault never fired" for r in rows
+               if r["chaos"] != "off" and not r["chaos_fired"]]
+            + [f"adversarial {a['name']} not stopped as expected" for a in result["adversarial"] if not a["passed"]])
 
 
 if __name__ == "__main__":

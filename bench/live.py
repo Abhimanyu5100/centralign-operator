@@ -46,6 +46,10 @@ ADMIN_HEADER = "X-Admin-Token"
 ROOT = Path(__file__).resolve().parents[1]
 # Bench, oracle and adversarial runs keep their own run store, so `make ui` (runs/runs.db) shows only real runs (N.164).
 BENCH_STORE = ROOT / "runs" / "bench.db"
+# The harness's own Acme holds a commit_then_timeout response for 5 s, and its agent gives up after 3 s, so the
+# timeout is seen fast and every hold ends long before the server shuts down (`make acme` keeps its 120 s, D-162).
+HARNESS_SERVER_ENV = {"ACME_CHAOS_TIMEOUT_DELAY_SECONDS": "5"}
+HARNESS_HTTP_TIMEOUT = 3.0
 
 
 @dataclass(frozen=True)
@@ -88,9 +92,11 @@ def serve(db_path: Path | None = None, env: Mapping[str, str] | None = None) -> 
         port = _free_port()
         child_env = {**os.environ, "ACME_DB": str(path), "ACME_ADMIN_TOKEN": token,
                      "ACME_PASSWORD_OPS_AGENT": password, **(env or {})}
+        # On shutdown, let a commit_then_timeout hold finish instead of cancelling it mid-sleep (D-162).
+        graceful = int(float((env or {}).get("ACME_CHAOS_TIMEOUT_DELAY_SECONDS", 0))) + 1
         server = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "--factory", "acme.app:create_app", "--host", "127.0.0.1",
-             "--port", str(port), "--log-level", "warning", "--timeout-graceful-shutdown", "1"],
+             "--port", str(port), "--log-level", "warning", "--timeout-graceful-shutdown", str(graceful)],
             env=child_env, cwd=ROOT)
         url = f"http://127.0.0.1:{port}"
         try:
@@ -99,7 +105,7 @@ def serve(db_path: Path | None = None, env: Mapping[str, str] | None = None) -> 
         finally:
             server.terminate()
             try:
-                server.wait(10)
+                server.wait(graceful + 10)
             except subprocess.TimeoutExpired:
                 server.kill()
 

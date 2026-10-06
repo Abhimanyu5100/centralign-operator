@@ -27,4 +27,4 @@ checkpoints:
 allowed_changes:
   invoices: {added: 1}
 chaos_variants:
-  - {profile: rename_submit_button, seed: 0}   # outside the D-020 matrix
+  - {profile: rename_submit_button, seed: 0, channel: gui}   # UI-only: runs only with a GUI oracle (D-161)

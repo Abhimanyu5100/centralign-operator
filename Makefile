@@ -1,13 +1,15 @@
 # Targets are added as each Day 1 part lands (acme: part 3; oracle/run/bench: later days).
 SEED ?= base
 NOW ?= 2026-10-07T10:30:00+05:30
+# Docker serves on 0.0.0.0 (docker-compose.yml); on a laptop Acme stays on localhost.
+HOST ?= 127.0.0.1
 
 .PHONY: acme reset pdfs test test-e2e oracle ui adversarial bench
 
 acme:  ## (export ACME_ADMIN_TOKEN first to enable /__admin/*; unset = closed) make sure the PDFs exist, reset to SEED at NOW, then serve Acme on http://localhost:8000 (one worker: SQLite + logical clock)
 	uv run python -m acme.pdfs
 	uv run python -m acme.seed --seed $(SEED) --now $(NOW)
-	uv run uvicorn --factory acme.app:create_app --host 127.0.0.1 --port 8000
+	uv run uvicorn --factory acme.app:create_app --host $(HOST) --port 8000
 
 reset:  ## regenerate missing PDFs (warns on drift, never overwrites), rebuild acme.db for SEED (base | t8 | t9) at NOW; prints the state hash
 	uv run python -m acme.pdfs

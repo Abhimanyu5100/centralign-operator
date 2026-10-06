@@ -1,0 +1,29 @@
+# `docker compose up` serves Acme on http://localhost:8000.
+# `docker compose run --rm runner make bench` runs AcmeBench and writes bench/results/<timestamp>.{json,md}.
+#
+# The admin token lives only in the acme service's environment (unset closes every /__admin route, D-089). The
+# runner never gets it: `make bench` starts its own Acme as a child process on a temporary database with a random
+# token (D-112, D-119), so its checkers read the database that server writes (N.31) and the agent never holds the
+# token (N.92).
+services:
+  acme:
+    build: .
+    image: centralign-operator
+    command: ["make", "acme", "HOST=0.0.0.0"]
+    ports:
+      - "8000:8000"
+    environment:
+      ACME_ADMIN_TOKEN: ${ACME_ADMIN_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  runner:
+    image: centralign-operator
+    build: .
+    profiles: ["tools"]          # not started by `docker compose up`; run it on demand
+    command: ["make", "bench"]
+    volumes:
+      - ./bench/results:/app/bench/results

@@ -245,7 +245,7 @@ only the scripted agent calls them until Day 4.
 ## Commands (fill in as they exist)
 
 ```
-make acme        # run the mock company on :8000
+make acme [HOST=0.0.0.0]   # run the mock company on :8000 (localhost unless HOST is given)
 make reset       # restore seeded DB snapshot
 make pdfs        # regenerate every PDF and MANIFEST.sha256 (only after an intended generator/seed change)
 make oracle TASK=T1|all [CHANNEL=gui] [CHAOS=profile CHAOS_SEED=0] [LIVE=1] [EVENTS=1] [HEADED=1]
@@ -256,6 +256,8 @@ make ui          # action-approval inbox on 127.0.0.1:8100 (approve or reject he
 make adversarial # every bench/adversarial script against an in-process Acme (each must be stopped as expected)
 make test        # fast: unit, integration, checker (excludes the e2e marker)
 make test-e2e    # Playwright and oracle runs (from Day 2)
+docker compose up                           # Acme in Docker on :8000 (ACME_ADMIN_TOKEN from the shell or .env; unset = closed)
+docker compose run --rm runner make bench   # AcmeBench in Docker -> bench/results/ (its own Acme, no token needed)
 ```
 
 ## Testing

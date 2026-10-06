@@ -210,11 +210,18 @@ def test_the_status_list_matches_claude_md():
     assert tuple(documented) == tasks.Status.__args__
 
 
-def test_chaos_variants_follow_d095():
-    variants = {t.id: [(v.profile, v.seed) for v in t.chaos_variants] for t in tasks.load_all()}
-    assert variants == {"T1": [("flaky_500", 0)], "T2": [("silent_drop_write", 0)], "T3": [("commit_then_timeout", 0)],
-                        "T4": [], "T5": [], "T6": [], "T7": [("rename_submit_button", 0)],
-                        "T8": [("session_expiry_at_step_5", 0)], "T9": []}
+def test_chaos_variants_follow_d095_and_d161():
+    variants = {t.id: [(v.profile, v.seed, v.channel) for v in t.chaos_variants] for t in tasks.load_all()}
+    assert variants == {"T1": [("flaky_500", 0, "any")], "T2": [], "T3": [("commit_then_timeout", 0, "any")],
+                        "T4": [], "T5": [], "T6": [], "T7": [("rename_submit_button", 0, "gui")],
+                        "T8": [("session_expiry_at_step_5", 0, "any"), ("commit_then_timeout", 0, "any")], "T9": []}
+
+
+@pytest.mark.parametrize("profile", ["rename_submit_button", "silent_drop_write", "toast_2s", "field_moved"])
+def test_a_ui_only_profile_must_be_marked_gui(profile):
+    with pytest.raises(ValueError, match="channel: gui"):
+        tasks.ChaosVariant(profile=profile, seed=0)
+    assert tasks.ChaosVariant(profile=profile, seed=0, channel="gui").channel == "gui"
 
 
 def all_sql() -> list[tuple[str, str, str]]:
