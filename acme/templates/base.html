@@ -35,7 +35,8 @@
     <form method="post" action="/logout"><button type="submit">Sign out</button></form>
   </nav>
   {% endif %}
-  {% if flash %}<div role="status" id="toast">{{ flash }}</div>{% endif %}
+  {% if flash %}<div role="status" id="toast" data-transient>{{ flash }}</div>{% endif %}
+  {% if toast_ms %}<script>setTimeout(function () { document.querySelectorAll("[data-transient]").forEach(function (e) { e.remove(); }); }, {{ toast_ms|int }});</script>{% endif %}
   <main>
     {% block content %}{% endblock %}
   </main>

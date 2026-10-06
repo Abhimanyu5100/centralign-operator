@@ -28,7 +28,7 @@ def _with(change) -> dict:
 def test_the_real_catalog_loads_and_its_registry_validates():
     catalog = load_catalog()
     registry = build_registry()
-    assert len(catalog.tools) >= 25 and len(registry.specs()) == len(catalog.tools) + 1
+    assert len(catalog.tools) >= 25 and len(registry.specs()) == len(catalog.tools) + 6  # + extract_pdf_text and five browser tools
     registry.validate()
 
 
@@ -70,6 +70,9 @@ def test_every_acme_write_route_the_agent_may_use_is_in_the_catalog():
     (lambda t, r: r["tools"].append(copy.deepcopy(t["list_files"])), "duplicate tool name"),
     (lambda t, r: t["read_mail"].update(untrusted="mail:{message}"), "untrusted origin"),
     (lambda t, r: t["list_files"].update(extra_field=1), "extra"),
+    (lambda t, r: r["ui_forms"][0].update(same_as="void_invoice"), "not a tool with the same side effect"),
+    (lambda t, r: r["ui_forms"][0].update(path="/api/invoices"), "outside the API prefix"),
+    (lambda t, r: r["ui_forms"][0].update(side_effect="maybe"), "side_effect"),
 ])
 def test_the_validator_rejects_an_inconsistent_catalog(change, message):
     with pytest.raises(ValidationError, match=message):
@@ -103,3 +106,10 @@ def test_every_write_says_how_a_retry_stays_safe():
 def test_no_tool_or_path_names_the_admin_routes_or_the_database():
     text = json.dumps(RAW).lower()
     assert "__admin" not in text and "acme.db" not in text and "acme/data" not in text
+
+
+def test_every_ui_post_route_except_the_approvers_is_classified():
+    pages = {path for method, path in _routes() if method == "POST" and not path.startswith(("/api/", "/__admin"))}
+    listed = {f.path.replace("{", "").replace("}", "") for f in load_catalog().ui_forms}
+    unlisted = {p for p in pages if p.replace("{", "").replace("}", "") not in listed}
+    assert unlisted == {"/approvals/{approval_id}/decide"}  # never the agent's: unknown, so an irreversible write

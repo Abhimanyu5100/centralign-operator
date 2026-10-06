@@ -2,5 +2,5 @@
 {% block title %}Error {{ status_code if status_code else '' }}{% endblock %}
 {% block content %}
 <h1>Something went wrong</h1>
-<p role="alert">{{ message }}</p>
+<p role="alert" data-transient>{{ message }}</p>
 {% endblock %}

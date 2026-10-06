@@ -94,3 +94,9 @@ def test_rollback_on_the_live_server_restores_net_entity_state(acme):
     assert {t: [r["status"] for r in c["added"]] for t, c in diff.items() if t != "audit_log"} == {
         "invoices": ["void"], "approvals": ["withdrawn"]}
     assert all(not c["changed"] and not c["removed"] for c in diff.values())
+
+
+def test_the_harness_process_never_holds_the_admin_token(acme):
+    # the token lives only in the Acme child's env, so the agent and the Playwright driver cannot inherit it (N.92)
+    import os
+    assert os.environ.get("ACME_ADMIN_TOKEN") != acme.admin_token

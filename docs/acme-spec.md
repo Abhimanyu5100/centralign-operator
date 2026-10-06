@@ -242,7 +242,7 @@ list as the API (403 `forbidden`, 404 `not_found`, 422 `invalid_input` or `inval
 | `POST /__admin/snapshot` | `201 {snapshot, state_hash, now}`; `snapshot` is a random id, valid until the next reset |
 | `GET /__admin/state_hash` | `{state_hash, now}`: meta and every entity table; not sessions, idempotency keys, snapshots or chaos |
 | `GET /__admin/diff?since=<snapshot>` | `{since, snapshot_now, now, snapshot_state_hash, state_hash, unchanged, tables}`; `tables` holds only tables that changed, each `{added: [rows], removed: [rows], changed: [{id, before, after}]}`, all in id order. No paging, no cap. Unknown or pre-reset id: 404 |
-| `POST /__admin/chaos?profile=&seed=` | `{profile, seed, active, params, wired}`; `profile=none` clears. `session_expiry_at_step_N` takes N from 1 to 999. A Day 3 profile (`slow_server`, `toast_2s`, `field_moved`, `delayed_write`) is a typed 422 until it is built. Setting a profile restarts its attempt numbering |
+| `POST /__admin/chaos?profile=&seed=` | `{profile, seed, active, params, wired}`; `profile=none` clears. `session_expiry_at_step_N` takes N from 1 to 999. Since Day 2.3 all nine profiles are wired (the Day 3 typed 422 is gone, D-116); formerly a Day 3 profile was a typed 422 until it is built. Setting a profile restarts its attempt numbering |
 | `GET /__admin/chaos` | the same shape |
 | `GET /__admin/chaos/events` | the same shape plus `fired` (the active profile injected a fault since it was set), `fired_count`, `first_fired_at` and `items`: every injected fault since reset, in order, as `{id, profile, seed, effect, actor, channel, method, path, attempt, logical_now}`. Reset clears it (D-095) |
 
@@ -259,10 +259,10 @@ in the rows themselves and in the audit log; the last four digits show only for 
 | `flaky_500` | 30% of first write attempts return 500 (`server_error`) before anything is written; a retry of the same attempt (same Idempotency-Key or body) passes | Transient retry | Day 1 |
 | `commit_then_timeout` | The first committed IT-ticket creation or approval request (API or UI) is held `ACME_CHAOS_TIMEOUT_DELAY_SECONDS` (default 120 s) after the commit. Once per activation | 3.5 double write | Day 1 |
 | `silent_drop_write` | The first UI write is rolled back whole (row, audit row, idempotency record) while the 303 and the success toast still say saved; the redirect goes to the section list. UI only, once per activation | 4.4, 6.1 | Day 1 |
-| `slow_server` | 1.5–3 s latency on writes | 3.3 | Day 3 |
-| `toast_2s` | Error toast disappears after 2 s | 4.3 | Day 3 |
-| `field_moved` | Alternate invoice-form layout | 2.5 | Day 3 |
-| `delayed_write` | Write becomes visible after 5 s | 6.9 | Day 3 |
+| `slow_server` | Every ops-agent write (API or UI) that commits is held before its response for a seeded latency `b + b·u`, `b` = `ACME_CHAOS_SLOW_SECONDS` (default 1.5), `u` in [0, 1) from SHA-256 of (profile, seed, attempt number): 1.5–3 s by default. Every write, not once. Event `response_slowed` | 3.3 | Day 2.3 (D-116) |
+| `toast_2s` | On every ops-agent UI page, the one-shot toast (`role=status`) and the page-level error (`role=alert` above a form, or on the error page) are removed from the page `ACME_CHAOS_TOAST_MS` (default 2000) ms after it loads; field errors stay. Event `toast_shortened` whenever such a page is served. No randomness (the seed is recorded only) | 4.3 | Day 2.3 (D-116) |
+| `field_moved` | The invoice form renders its eight fields in a seeded permutation (never the default order) and puts the submit button above the fields; labels, names and behaviour unchanged. Event `layout_moved` per form served | 2.5, 0.2 | Day 2.3 (D-116) |
+| `delayed_write` | Read lag: each row a committed ops-agent write inserts (API or UI) stays invisible to ops-agent GET requests (API and pages) for `ACME_CHAOS_VISIBILITY_SECONDS` (default 5) of wall time; writes see it at once (a duplicate is still refused). Inserted rows only; updates are visible at once. Every write. Event `write_delayed` | 6.9 | Day 2.3 (D-116) |
 
 Rules for every profile (D-094): one active profile at most; only the operator under test (`ops-agent`) is
 faulted, never `meera`, `admin` or `/__admin/*` traffic, and admin calls touch no counter. Which write attempts
@@ -271,6 +271,11 @@ in order of first sight since the profile was set; seed 0 fails attempts 1, 2 an
 does not use up a once-per-activation fault. Chaos state lives in `chaos`, `chaos_attempts` and
 `chaos_events`: outside the state hash and the diff, dropped by reset, so the harness sets chaos after reset.
 API writes meet chaos in `api._write`; UI writes in `chaos.ChaosRoute`, the route class of the UI router.
+The Day 2.3 profiles use the same points: `slow_server` and the recording half of `delayed_write` in `after_write`
+(both channels); `toast_2s` in `ChaosRoute` (every UI request, GET included); `field_moved` in the invoice form
+render, like `rename_submit_button`; the hiding half of `delayed_write` in `require_login` for GET requests (one
+point for both channels, like session expiry): it installs TEMP views that shadow the entity tables on that
+request's own connection only, so writes, other users and admin calls see every row.
 
 ## Tasks (`bench/tasks/*.yaml`)
 

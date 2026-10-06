@@ -3,12 +3,12 @@
 import re
 from decimal import Decimal
 
-AMOUNT_HELP = "Enter the amount in rupees without commas, for example 62400.00"
+AMOUNT_HELP = "Enter the amount in rupees without commas, for example 12500.00"
 _AMOUNT = re.compile(r"^\d{1,12}(\.\d{1,2})?$")
 
 
 def parse_rupees(text: str) -> int:
-    """'62400.50' -> 6240050. Raises ValueError (message = what to type instead) on anything else:
+    """'12500.50' -> 1250050. Raises ValueError (message = what to type instead) on anything else:
     commas, currency signs, exponents, signs, more than two decimals."""
     value = text.strip()
     if not _AMOUNT.match(value):

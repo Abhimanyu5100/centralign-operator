@@ -22,6 +22,26 @@ session:
   password_key: ACME_PASSWORD_OPS_AGENT   # config key; the value never enters a tool argument or the LLM context
   idempotency_header: Idempotency-Key
   replay_header: Idempotent-Replayed
+  login_page: /login      # the browser lands here (a 303 with ?next=) when its session is gone
+
+# How the browser tool classifies a form submit (method POST) before the click (Day 2.3, D-117): the form's
+# action path ({x} = one path segment), its side effect, and the API tool that makes the same write (for
+# read-back and undo; its side effect must match). Any form not listed counts as an irreversible write.
+ui_forms:
+  - {path: /invoices/new, side_effect: reversible_write, same_as: submit_invoice}
+  - {path: "/invoices/{invoice_id}/request-approval", side_effect: reversible_write, same_as: request_approval}
+  - {path: "/invoices/{invoice_id}/attach-source", side_effect: irreversible_write}
+  - {path: "/invoices/{invoice_id}/void", side_effect: irreversible_write, same_as: void_invoice}
+  - {path: "/approvals/{approval_id}/withdraw", side_effect: irreversible_write, same_as: withdraw_approval}
+  - {path: /payments/new, side_effect: reversible_write, same_as: create_payment}
+  - {path: "/payments/{payment_id}/request-approval", side_effect: reversible_write, same_as: request_approval}
+  - {path: "/payments/{payment_id}/cancel", side_effect: irreversible_write, same_as: cancel_payment}
+  - {path: /employees/new, side_effect: reversible_write, same_as: create_employee}
+  - {path: "/employees/{employee_id}/cancel", side_effect: irreversible_write, same_as: cancel_employee}
+  - {path: /it-tickets/new, side_effect: reversible_write, same_as: create_it_ticket}
+  - {path: "/it-tickets/{ticket_id}/cancel", side_effect: irreversible_write, same_as: cancel_it_ticket}
+  - {path: /mail/compose, side_effect: external_comms, same_as: send_mail}
+  - {path: /logout, side_effect: read}   # ends the browser's own session; no company state changes
 
 tools:
   # --- reads -------------------------------------------------------------------------------------------------

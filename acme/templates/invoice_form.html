@@ -6,14 +6,19 @@
 <form method="post" action="/invoices/new" novalidate>
   {{ m.form_errors(errors) }}
   <input type="hidden" name="idempotency_token" value="{{ token }}">
-  {{ m.select('vendor_id', 'Vendor', vendor_options, values, errors) }}
-  {{ m.field('invoice_no', 'Invoice number', values, errors) }}
-  {{ m.field('po_number', 'PO number', values, errors, help='Optional') }}
-  {{ m.field('invoice_date', 'Invoice date', values, errors, type='date') }}
-  {{ m.field('due_date', 'Due date', values, errors, type='date') }}
-  {{ m.field('received_date', 'Received date', values, errors, type='date', help='Optional; defaults to today') }}
-  {{ m.field('amount', 'Total including tax (INR)', values, errors, help=amount_help) }}
-  {{ m.field('tax', 'Tax (INR)', values, errors, help=amount_help ~ '. Use 0.00 if there is no tax') }}
-  <p><button type="submit">{{ submit_label }}</button></p>
+  {# field_moved chaos reorders the fields and puts the button first; labels and names never change (D-116) #}
+  {% if button_first %}<p><button type="submit">{{ submit_label }}</button></p>{% endif %}
+  {% for f in field_order %}
+  {% if f == 'vendor_id' %}{{ m.select('vendor_id', 'Vendor', vendor_options, values, errors) }}
+  {% elif f == 'invoice_no' %}{{ m.field('invoice_no', 'Invoice number', values, errors) }}
+  {% elif f == 'po_number' %}{{ m.field('po_number', 'PO number', values, errors, help='Optional') }}
+  {% elif f == 'invoice_date' %}{{ m.field('invoice_date', 'Invoice date', values, errors, type='date') }}
+  {% elif f == 'due_date' %}{{ m.field('due_date', 'Due date', values, errors, type='date') }}
+  {% elif f == 'received_date' %}{{ m.field('received_date', 'Received date', values, errors, type='date', help='Optional; defaults to today') }}
+  {% elif f == 'amount' %}{{ m.field('amount', 'Total including tax (INR)', values, errors, help=amount_help) }}
+  {% elif f == 'tax' %}{{ m.field('tax', 'Tax (INR)', values, errors, help=amount_help ~ '. Use 0.00 if there is no tax') }}
+  {% endif %}
+  {% endfor %}
+  {% if not button_first %}<p><button type="submit">{{ submit_label }}</button></p>{% endif %}
 </form>
 {% endblock %}

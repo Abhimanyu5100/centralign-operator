@@ -29,6 +29,23 @@ def item(result: ToolResult, **fields: Any) -> dict[str, Any]:
     return found[0]
 
 
-def oracle_for(run_id: str) -> Oracle:
+def ref(result: ToolResult, role: str, *, name: str | None = None, contains: str | None = None,
+        target: str | None = None) -> str:
+    """The ref of the one observed element with this role (and exact name, part of the name, or target such as
+    "POST /path"). Zero or two matches is an oracle bug."""
+    found = [e for e in result.data["elements"] if e["role"] == role and (name is None or e["name"] == name)
+             and (contains is None or contains in e["name"]) and (target is None or e["target"] == target)]
+    if len(found) != 1:
+        raise LookupError(f"expected one {role} with name={name!r} contains={contains!r} target={target!r}, "
+                          f"found {len(found)}")
+    return found[0]["ref"]
+
+
+def shows(result: ToolResult, role: str, contains: str) -> bool:
+    return any(e["role"] == role and contains in e["name"] for e in result.data["elements"])
+
+
+def oracle_for(run_id: str, channel: str = "api") -> Oracle:
     task_id = run_id.partition(":")[0]
-    return importlib.import_module(f"bench.oracles.{task_id}").RUNS[run_id]
+    module = task_id if channel == "api" else f"{task_id}_{channel}"
+    return importlib.import_module(f"bench.oracles.{module}").RUNS[run_id]

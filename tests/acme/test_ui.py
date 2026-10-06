@@ -118,7 +118,7 @@ def test_comma_amount_gets_the_exact_hint_and_the_form_keeps_what_was_typed(db, 
     r = post_invoice(agent, amount="1,00,000", invoice_no="INV-KEEP")
     assert r.status_code == 422 and count(db, "invoices") == before
     page = Page(r.text)
-    assert ("Total including tax: Enter the amount in rupees without commas, for example 62400.00") in page.alerts
+    assert ("Total including tax: Enter the amount in rupees without commas, for example 12500.00") in page.alerts
     assert 'id="amount-error"' in r.text and 'aria-invalid="true"' in r.text
     assert 'value="INV-KEEP"' in r.text and 'value="1,00,000"' in r.text
 

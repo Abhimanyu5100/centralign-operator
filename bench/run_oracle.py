@@ -1,4 +1,4 @@
-"""`make oracle TASK=T1 [CHAOS=profile] [CHAOS_SEED=0] [LIVE=1] [EVENTS=1]`: reset Acme, set chaos, run the
+"""`make oracle TASK=T1 [CHANNEL=gui] [CHAOS=profile] [CHAOS_SEED=0] [LIVE=1] [EVENTS=1]`: reset Acme, set chaos, run the
 task's oracle through the scripted agent, then the task's checker; print pass/fail per predicate.
 
 By default Acme runs in-process on a temporary database (bench/live.py); LIVE=1 targets `make acme` (needs
@@ -7,6 +7,7 @@ as passed. Exit code 1 when a chaos-off oracle stops early or fails a DB check.
 """
 
 import argparse
+from pathlib import Path
 import asyncio
 import json
 import sys
@@ -38,13 +39,15 @@ def _print(o: OracleRun, store: RunStore, events: bool) -> None:
 
 async def _main(args: argparse.Namespace) -> int:
     ids = [t.id for t in tasks.load_all()] if args.task == "all" else [args.task]
+    if args.channel == "gui":  # only tasks with a GUI oracle
+        ids = [i for i in ids if (Path(__file__).parent / "oracles" / f"{i}_gui.py").is_file()]
     store = RunStore()
     results = []
     with serve() if not args.live else _nullcontext(live()) as acme:
         for task_id in ids:
             task = tasks.load(task_id)
             for run in tasks.runs(task):
-                o = await run_oracle(acme, task, run, oracle_for(run.run_id), chaos=args.chaos,
+                o = await run_oracle(acme, task, run, oracle_for(run.run_id, args.channel), chaos=args.chaos,
                                      chaos_seed=args.chaos_seed, store=store)
                 _print(o, store, args.events)
                 results.append(o)
@@ -73,6 +76,7 @@ def main() -> None:
     parser.add_argument("--chaos", default=None)
     parser.add_argument("--chaos-seed", type=int, default=0)
     parser.add_argument("--live", action="store_true")
+    parser.add_argument("--channel", choices=["api", "gui"], default="api", help="gui: bench/oracles/<task>_gui.py")
     parser.add_argument("--events", action="store_true", help="print the agent run's event log")
     sys.exit(asyncio.run(_main(parser.parse_args())))
 

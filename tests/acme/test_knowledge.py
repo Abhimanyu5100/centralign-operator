@@ -2,6 +2,7 @@
 
 The parser in sop_format.py is the contract the planner's SOP-coverage check is written against."""
 
+import ast
 import re
 from collections import Counter
 
@@ -289,6 +290,9 @@ def task_terms() -> set[str]:
                 terms.add(p.name)
                 terms |= {lit.strip("%") for lit in re.findall(r"'([^']*)'", p.sql)}
                 terms |= set(re.findall(r"\b\d{5,}\b", p.sql))
+                for paise in map(int, re.findall(r"\b(?:amount|tax)_paise\s*=\s*(\d+)", p.sql)):
+                    rupees, rest = divmod(paise, 100)  # the same amount as a person or a form would type it
+                    terms |= {f"{rupees}.{rest:02d}", f"{rupees:,}", indian(rupees)} - {str(rupees)}
             for rc in run.report_checks:
                 terms |= set(rc.contains_all or []) | set(rc.text_contains or []) | ({rc.equals} if rc.equals else set())
     allowed = acme_words()
@@ -311,6 +315,29 @@ def test_task_terms_cover_every_kind_of_answer_and_spare_acme_words():
             "invoice_fields_correct", "INV-778A", "XXXXXXXX6602"} <= terms
     assert not {"pending_approval", "approved", "ops-agent", "ORG-006", "finance_manager", "outbox", "laptop",
                 "needs_clarification"} & terms
+
+
+def ui_texts() -> dict[str, str]:
+    """What Acme's pages show besides data: every template, and the message strings (not docstrings) of the modules
+    that word form help and errors. A task value here leaks the answer to whoever reads the page (Day 2.3)."""
+    texts = {str(p.relative_to(ROOT)): p.read_text() for p in sorted((ROOT / "acme" / "templates").glob("*.html"))}
+    for module in ("money.py", "forms.py"):
+        tree = ast.parse((ROOT / "acme" / module).read_text())
+        docs = {id(n.body[0].value) for n in ast.walk(tree) if isinstance(n, (ast.Module, ast.FunctionDef, ast.ClassDef))
+                and n.body and isinstance(n.body[0], ast.Expr) and isinstance(n.body[0].value, ast.Constant)}
+        texts[f"acme/{module}"] = "\n".join(n.value for n in ast.walk(tree) if isinstance(n, ast.Constant)
+                                             and isinstance(n.value, str) and id(n) not in docs)
+    return texts
+
+
+def test_no_page_template_or_form_message_holds_a_task_answer():
+    texts = ui_texts()
+    assert len(texts) >= 20 and "acme/money.py" in texts
+    assert {k: task_leaks(v) for k, v in texts.items() if task_leaks(v)} == {}
+
+
+def test_the_ui_text_check_catches_the_old_amount_hint():
+    assert task_leaks("Enter the amount in rupees without commas, for example 62400.00") == ["62400.00"]
 
 
 def test_no_file_under_agent_or_knowledge_holds_a_task_answer():

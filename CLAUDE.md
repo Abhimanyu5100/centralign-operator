@@ -173,7 +173,8 @@ docs/                 # problem statement, research notes, failure register, ris
 - Tool results are typed: `{ok: bool, error_type: str | None, detail: str, data: dict}`.
 - Every run writes an append-only event log (tool call, policy decision, approval, LLM call, verifier result).
 - Tests: `pytest`. Every checker and policy rule has a passing and a failing test.
-- Keep it small: target 2,000–3,000 lines of agent code. Prefer deleting code to adding abstraction.
+- Keep it small: target 2,000–3,000 lines of agent code, about 3,500 at most if needed (D-115); every checkpoint
+  reports the running `agent/` total. Prefer deleting code to adding abstraction.
 - Stop after each working slice and show what changed. The author reviews with `git diff` and commits.
   Claude Code never runs `git commit` or `git push`.
 

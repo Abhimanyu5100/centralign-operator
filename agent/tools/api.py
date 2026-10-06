@@ -101,15 +101,32 @@ class Session(_Strict):
     password_key: str
     idempotency_header: str
     replay_header: str
+    login_page: str                           # where the browser lands when its session is gone
+
+
+class UiForm(_Strict):
+    path: str                                 # the form's action, {x} = one path segment
+    side_effect: SideEffect
+    same_as: str | None = None                # the API tool that makes the same write
+
+    def matches(self, path: str) -> bool:
+        mine, theirs = self.path.strip("/").split("/"), path.strip("/").split("/")
+        return len(mine) == len(theirs) and all(m == t or m.startswith("{") for m, t in zip(mine, theirs))
 
 
 class Catalog(_Strict):
     schema_version: Literal[0]
     session: Session
     tools: list[Endpoint]
+    ui_forms: list[UiForm] = []
 
     def get(self, name: str) -> Endpoint | None:
         return next((ep for ep in self.tools if ep.name == name), None)
+
+    def form_effect(self, path: str) -> SideEffect:
+        """What submitting a form to `path` does; a form the catalog does not know is an irreversible write."""
+        form = next((f for f in self.ui_forms if f.matches(path)), None)
+        return form.side_effect if form else "irreversible_write"
 
     @model_validator(mode="after")
     def _consistent(self) -> "Catalog":
@@ -118,6 +135,12 @@ class Catalog(_Strict):
         for ep in self.tools:
             problems += [f"{ep.name}: {p}" for p in _problems(ep, self)]
         problems += _path_problems(self.session.login_path, self.session.api_prefix)
+        for form in self.ui_forms:
+            twin = self.get(form.same_as) if form.same_as else None
+            if form.path.startswith(self.session.api_prefix) or not form.path.startswith("/"):
+                problems.append(f"ui form {form.path!r} must be a page path outside the API prefix")
+            if form.same_as and (twin is None or twin.side_effect != form.side_effect):
+                problems.append(f"ui form {form.path!r}: same_as {form.same_as!r} is not a tool with the same side effect")
         if problems:
             raise ValueError("; ".join(problems))
         return self
@@ -289,11 +312,14 @@ class AcmeClient:
         replayed = response.headers.get(self.session.replay_header, "").lower() == "true"
         return Reply(_typed(response), response.content, replayed)
 
+    def login_body(self) -> dict[str, str]:
+        """The agent's login form, for this client and the run's browser session; never logged, never a tool arg."""
+        return {"username": self.session.user, "password": self._password}
+
     async def login(self) -> ToolResult:
         if not self._password:
             return ToolResult.fail("invalid_credentials", f"{self.session.password_key} is not set in the agent config")
-        reply = await self._send(self.session.login_method, self.session.login_path,
-                                 body={"username": self.session.user, "password": self._password})
+        reply = await self._send(self.session.login_method, self.session.login_path, body=self.login_body())
         self._logged_in = reply.result.ok
         return reply.result
 

@@ -76,7 +76,7 @@ async def _write(request: Request, conn: sqlite3.Connection, actor: str, service
     response = ok(row, status, detail)
     if replayed:
         response.headers["Idempotent-Replayed"] = "true"
-    await chaos.after_write(conn, attempt, committed=not replayed)
+    await chaos.after_write(conn, attempt, committed=not replayed, wall=request.app.state.time_fn())
     return response
 
 

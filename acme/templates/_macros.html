@@ -1,6 +1,6 @@
 {# Every control has a <label for>; errors sit beside the field and are linked with aria-describedby (N.42, N.47). #}
 {% macro form_errors(errors) %}
-  {% if errors.get('') %}<p role="alert">{{ errors[''] }}</p>{% endif %}
+  {% if errors.get('') %}<p role="alert" data-transient>{{ errors[''] }}</p>{% endif %}
 {% endmacro %}
 
 {% macro field(name, label, values, errors, type='text', help=None) %}

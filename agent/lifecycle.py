@@ -20,6 +20,7 @@ from agent.config import load_config
 from agent.policy.gate import PolicyGate
 from agent.store import RunStore
 from agent.tools.api import AcmeClient, load_catalog
+from agent.tools.browser import BrowserSession
 from agent.tools.registry import Registry, RunContext, ToolResult, build_registry
 
 WRITES = ("reversible_write", "irreversible_write", "external_comms")
@@ -30,6 +31,7 @@ class Run:
     ctx: RunContext
     registry: Registry
     client: AcmeClient
+    browser: BrowserSession
 
     @property
     def run_id(self) -> str:
@@ -39,17 +41,21 @@ class Run:
         return await self.registry.call(tool, dict(args), self.ctx)
 
     async def close(self) -> None:
+        await self.browser.close()
         await self.client.aclose()
 
 
 def start_run(request: str, now: datetime, *, store: RunStore | None = None, config: Mapping[str, str] | None = None,
               gate: PolicyGate | None = None, transport: httpx.AsyncBaseTransport | None = None) -> Run:
     """`now` is the run's frozen business time: the task file's `now` when the harness runs a task, the caller's clock for a live
-    request (agent/ never reads the wall clock itself). One client, so one cookie jar, per run."""
+    request (agent/ never reads the wall clock itself). One HTTP client and one browser context, so one cookie jar
+    each, per run; the browser starts only when a browser tool is first called."""
     store = store or RunStore()
-    client = AcmeClient(load_config() if config is None else config, load_catalog(), transport)
+    config = load_config() if config is None else config
+    client = AcmeClient(config, load_catalog(), transport)
+    browser = BrowserSession(client, headed=config.get("HEADED") == "1")
     ctx = RunContext(run_id=store.start_run(request, now), now=now, store=store)
-    return Run(ctx, build_registry(gate, client=client), client)
+    return Run(ctx, build_registry(gate, client=client, browser=browser), client, browser)
 
 
 def run_writes(events: list[dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
@@ -83,7 +89,7 @@ async def rollback(run: Run) -> Rollback:
         spec = run.registry.get(tool)
         if spec is None or tool in undo_tools:  # an earlier rollback's own compensations
             continue
-        if spec.side_effect != "reversible_write":
+        if spec.side_effect != "reversible_write":  # incl. GUI writes: undone through their API twin later (D-117)
             report.not_compensable.append({"tool": tool, "reason": spec.no_undo_reason, "id": data.get("id")})
             continue
         try:

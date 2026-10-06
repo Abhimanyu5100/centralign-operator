@@ -15,7 +15,7 @@ from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_KEYS = frozenset({
-    "ACME_URL", "ACME_PASSWORD_OPS_AGENT", "ACME_HTTP_TIMEOUT_SECONDS", "TZ_NAME",
+    "ACME_URL", "ACME_PASSWORD_OPS_AGENT", "ACME_HTTP_TIMEOUT_SECONDS", "TZ_NAME", "HEADED",
     "REPLAY", "CASSETTE_DIR",
     "GEMINI_API_KEY", "GEMINI_BASE_URL", "GEMINI_MODEL", "GEMINI_LITE_MODEL",
     "GROQ_API_KEY", "GROQ_BASE_URL", "GROQ_JUDGE_MODEL", "GROQ_COMPACTION_MODEL",
@@ -34,3 +34,13 @@ def load_config(env_file: Path | None = ROOT / ".env",
         if value:
             values[key] = value
     return MappingProxyType(values)
+
+
+# What a launched browser may see of the environment (D-105): enough for Chromium to start and nothing else.
+BROWSER_ENV_KEYS = ("HOME", "PATH", "TMPDIR", "LANG", "LC_ALL", "XDG_RUNTIME_DIR")
+
+
+def browser_env(environ: Mapping[str, str] | None = None) -> dict[str, str]:
+    """The explicit env for the browser process, never the inherited one: no Acme token, no API keys."""
+    environ = os.environ if environ is None else environ
+    return {key: environ[key] for key in BROWSER_ENV_KEYS if environ.get(key)}

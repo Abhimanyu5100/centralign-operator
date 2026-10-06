@@ -103,6 +103,7 @@ def require_login(request: Request, conn: sqlite3.Connection = Depends(get_conn)
         auth.revoke(conn, token)
         chaos.record_session_expiry(conn, check.actor, request.method, request.url.path, check.request_count)
         raise LoginRequired("session_expired")
+    chaos.hide_recent_rows(conn, check.actor, request.method, request.app.state.time_fn())  # delayed_write reads
     request.state.actor = check.actor  # lets error pages show the nav for the right user
     return check.actor
 

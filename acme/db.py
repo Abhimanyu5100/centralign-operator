@@ -16,7 +16,8 @@ DEFAULT_DB_PATH = Path(__file__).parent / "data" / "acme.db"
 # Entity tables in dependency order. `state_hash` and `/__admin/diff` cover exactly these plus `meta`.
 # `sessions` and `idempotency_keys` are deliberately not listed: logging in or replaying a key must not
 # change the state hash or the diff (risks N.32, N.45). Both are dropped by reset. So are the harness tables
-# `snapshots`, `chaos`, `chaos_attempts` and `chaos_events` (parts 8, 9): they are not company state either
+# `snapshots`, `chaos`, `chaos_attempts`, `chaos_events` and `chaos_hidden` (parts 8, 9, Day 2.3): they are not
+# company state either
 # (N.93, N.97).
 ENTITY_TABLES = ["vendors", "employees", "invoices", "approvals", "payments", "it_tickets", "mail", "audit_log"]
 
@@ -142,13 +143,20 @@ SCHEMA = [
         id          INTEGER PRIMARY KEY,
         profile     TEXT NOT NULL,
         seed        INTEGER NOT NULL,
-        effect      TEXT NOT NULL,        -- server_error, response_delayed, write_dropped, session_expired, label_renamed
+        effect      TEXT NOT NULL,        -- server_error, response_delayed, write_dropped, session_expired, label_renamed,
+                                          -- response_slowed, toast_shortened, layout_moved, write_delayed
         actor       TEXT NOT NULL,
         channel     TEXT NOT NULL,
         method      TEXT NOT NULL,
         path        TEXT NOT NULL,
         attempt     INTEGER,              -- attempt number (writes) or the session's request count (expiry)
         logical_now TEXT NOT NULL         -- Acme's logical clock (no wall clock in Acme, N.12); order by id
+    )""",
+    """CREATE TABLE chaos_hidden (
+        table_name TEXT NOT NULL,         -- delayed_write: a row an ops-agent write inserted ...
+        row_id     INTEGER NOT NULL,
+        visible_at REAL NOT NULL,         -- ... hidden from ops-agent GETs until this wall time (the app's time_fn)
+        PRIMARY KEY (table_name, row_id)
     )""",
     """CREATE TABLE audit_log (
         id          INTEGER PRIMARY KEY,
@@ -212,7 +220,7 @@ def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
 def create_schema(conn: sqlite3.Connection) -> None:
     """Drop and recreate every table. Must run inside a transaction (see `seed.reset`)."""
     for table in reversed(["meta", "sessions", "idempotency_keys", "snapshots", "chaos", "chaos_attempts",
-                          "chaos_events", *ENTITY_TABLES]):
+                          "chaos_events", "chaos_hidden", *ENTITY_TABLES]):
         conn.execute(f"DROP TABLE IF EXISTS {table}")
     for statement in SCHEMA:
         conn.execute(statement)

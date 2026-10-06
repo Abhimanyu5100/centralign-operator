@@ -1,18 +1,20 @@
 """Harness side of a live run: an Acme server to talk to, the admin calls the harness makes, and one oracle run
 (reset -> chaos -> snapshot -> scripted agent -> diff -> checker). Used by `make oracle` and the e2e tests.
 
-`serve()` starts Acme in-process on a temporary database (a thread running uvicorn on a free localhost port), with
-a random admin token and a random ops-agent password set for that server only, so `make oracle` needs no exported
-token and never touches the author's dev database (N.136). `live()` targets an already running `make acme` instead.
-The agent gets an explicit config (URL, its own password, timeout) and never the admin token (N.30, N.92).
+`serve()` starts Acme as a child process (uvicorn on a free localhost port) on a temporary database, with a random
+admin token and a random ops-agent password in that child's env only: the harness process, the agent in it and the
+Playwright driver it starts never hold the token (N.92, D-105), `make oracle` needs no exported token and never
+touches the author's dev database (N.136). `live()` targets an already running `make acme` instead. The agent gets
+an explicit config (URL, its own password, timeout) and never the admin token (N.30).
 Harness side only: agent/ never imports bench/ (decision 11).
 """
 
 import os
 import secrets
 import socket
+import subprocess
+import sys
 import tempfile
-import threading
 import time
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -22,10 +24,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-import uvicorn
 
 from acme import auth
-from acme.app import create_app
 from acme.db import connect, db_path as default_db_path
 from acme.seed import reset
 from agent.config import load_config
@@ -37,6 +37,7 @@ from bench.oracles import Oracle
 from bench.tasks import Run, Task
 
 ADMIN_HEADER = "X-Admin-Token"
+ROOT = Path(__file__).resolve().parents[1]
 
 
 @dataclass(frozen=True)
@@ -68,44 +69,45 @@ def _free_port() -> int:
 
 
 @contextmanager
-def _env(values: Mapping[str, str]) -> Iterator[None]:
-    saved = {k: os.environ.get(k) for k in values}
-    os.environ.update(values)
-    try:
-        yield
-    finally:
-        for key, value in saved.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
-
-
-@contextmanager
 def serve(db_path: Path | None = None, env: Mapping[str, str] | None = None) -> Iterator[Acme]:
     """Acme on a free localhost port, backed by `db_path` (a temporary file by default)."""
     token, password = secrets.token_hex(16), secrets.token_hex(16)
-    with tempfile.TemporaryDirectory() as tmp, _env({"ACME_ADMIN_TOKEN": token, "ACME_PASSWORD_OPS_AGENT": password,
-                                                      **(env or {})}):
+    with tempfile.TemporaryDirectory() as tmp:
         path = Path(db_path or Path(tmp) / "acme.db")
         conn = connect(path)
         reset(conn, "base")
         conn.close()
         port = _free_port()
-        server = uvicorn.Server(uvicorn.Config(create_app(path), host="127.0.0.1", port=port, log_level="warning",
-                                               lifespan="off", timeout_graceful_shutdown=1))
-        thread = threading.Thread(target=server.run, daemon=True)
-        thread.start()
-        deadline = time.monotonic() + 10
-        while not server.started:
-            if time.monotonic() > deadline or not thread.is_alive():
-                raise RuntimeError("Acme did not start")
-            time.sleep(0.02)
+        child_env = {**os.environ, "ACME_DB": str(path), "ACME_ADMIN_TOKEN": token,
+                     "ACME_PASSWORD_OPS_AGENT": password, **(env or {})}
+        server = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "--factory", "acme.app:create_app", "--host", "127.0.0.1",
+             "--port", str(port), "--log-level", "warning", "--timeout-graceful-shutdown", "1"],
+            env=child_env, cwd=ROOT)
+        url = f"http://127.0.0.1:{port}"
         try:
-            yield Acme(f"http://127.0.0.1:{port}", path, token, password)
+            _wait_until_up(url, server)
+            yield Acme(url, path, token, password)
         finally:
-            server.should_exit = True
-            thread.join(10)
+            server.terminate()
+            try:
+                server.wait(10)
+            except subprocess.TimeoutExpired:
+                server.kill()
+
+
+def _wait_until_up(url: str, server: subprocess.Popen) -> None:
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        if server.poll() is not None:
+            raise RuntimeError(f"Acme exited with code {server.returncode}")
+        try:
+            if httpx.get(url + "/healthz", timeout=1).status_code == 200:
+                return
+        except httpx.TransportError:
+            pass
+        time.sleep(0.05)
+    raise RuntimeError("Acme did not start within 15 s")
 
 
 def live() -> Acme:

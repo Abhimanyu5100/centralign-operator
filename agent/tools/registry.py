@@ -14,9 +14,10 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
 
 from agent.policy.gate import GATE_ERROR, Channel, Decision, HttpRequest, PolicyGate, SideEffect, ToolCall
 from agent.store import RunStore
@@ -33,6 +34,7 @@ AGENT_ERROR_TYPES = (
     "timeout", "connection_error", "tool_crashed",
 )
 ERROR_TYPES = ACME_ERROR_TYPES + AGENT_ERROR_TYPES
+SIDE_EFFECTS = get_args(SideEffect)
 
 
 class ToolResult(BaseModel):
@@ -89,6 +91,9 @@ class ToolSpec:
     sensitive_args: tuple[str, ...] = ()              # shown as *** in logs and results (N.123)
     transport_args: tuple[str, ...] = ()              # e.g. an idempotency key: left out of the fingerprint
     request_of: Callable[[Any], HttpRequest] | None = None   # the HTTP request the call will make, if known
+    # A tool whose effect depends on its target (a GUI click: a link reads, a form submit writes) names it per call;
+    # `side_effect` is then the worst case, used when this fails (D-117).
+    side_effect_of: Callable[[Any], SideEffect] | None = None
 
     def llm_schema(self) -> dict[str, Any]:
         return {"name": self.name, "description": self.description,
@@ -212,14 +217,17 @@ class Registry:
         try:  # validated as JSON, like Acme's API: ISO dates are fine, "62400" for an int is not (N.122)
             parsed = spec.args_model.model_validate_json(json.dumps(args), strict=True)
             request = spec.request_of(parsed) if spec.request_of else None
+            side_effect = spec.side_effect_of(parsed) if spec.side_effect_of else spec.side_effect
+            if side_effect not in SIDE_EFFECTS:
+                raise RuntimeError(f"side_effect_of returned {side_effect!r}")
         except (TypeError, ValueError) as exc:  # ValidationError is a ValueError
             return self._log_attempt(ctx, name, args, secrets, ToolResult.fail("invalid_args", _explain(exc)), started)
         except Exception as exc:  # a bug in the spec's request_of
-            result = ToolResult.fail("tool_crashed", f"request_of: {type(exc).__name__}: {exc}")
+            result = ToolResult.fail("tool_crashed", f"request_of / side_effect_of: {type(exc).__name__}: {exc}")
             return self._log_attempt(ctx, name, args, secrets, result, started)
 
         clean = parsed.model_dump(mode="json")
-        call = ToolCall(run_id=ctx.run_id, now=ctx.now, tool=name, args=clean, side_effect=spec.side_effect,
+        call = ToolCall(run_id=ctx.run_id, now=ctx.now, tool=name, args=clean, side_effect=side_effect,
                         channel=spec.channel, request=request,
                         fingerprint=fingerprint(name, clean, spec.transport_args))
         self._log(ctx, "tool_call", call.model_dump(mode="json", exclude={"run_id", "now"}), secrets)
@@ -287,16 +295,18 @@ class Registry:
         ctx.store.append(ctx.run_id, type, ctx.now.isoformat(), _redact(payload, secrets))
 
 
-def build_registry(gate: PolicyGate | None = None, client: Any = None) -> Registry:
+def build_registry(gate: PolicyGate | None = None, client: Any = None, browser: Any = None) -> Registry:
     """The operator's registry for one run: the API tools from the endpoint catalog bound to `client` (that run's
-    AcmeClient; a fresh one from config when None, which does no I/O until used), and the local file tools.
-    The browser tool joins on Day 2.3."""
+    AcmeClient; a fresh one from config when None), the local file tools, and the browser tools bound to `browser`
+    (that run's BrowserSession). Nothing does I/O until a tool is called."""
     from agent.config import load_config  # imported here: the tool modules import this one
     from agent.tools.api import AcmeClient, api_tools, load_catalog
+    from agent.tools.browser import BrowserSession, browser_tools
     from agent.tools.files import file_tools
 
     registry = Registry(gate or PolicyGate())
-    for spec in [*api_tools(client or AcmeClient(load_config(), load_catalog())), *file_tools()]:
+    client = client or AcmeClient(load_config(), load_catalog())
+    for spec in [*api_tools(client), *file_tools(), *browser_tools(browser or BrowserSession(client))]:
         registry.register(spec)
     registry.validate()
     return registry

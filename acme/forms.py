@@ -63,7 +63,7 @@ class Form:
     def rupees(self, name: str, label: str, allow_zero: bool = False) -> int | None:
         value = self._value(name)
         if not value:
-            self.error(name, f"{label} is required. Enter the amount in rupees without commas, for example 62400.00")
+            self.error(name, f"{label} is required. Enter the amount in rupees without commas, for example 12500.00")
             return None
         try:
             paise = parse_rupees(value)

@@ -23,5 +23,5 @@ test-e2e:  ## slow: Playwright and oracle runs (first tests arrive on Day 2; "no
 	@uv run pytest -q -m e2e; rc=$$?; \
 	if [ $$rc -eq 5 ]; then echo "no e2e tests collected yet"; exit 0; fi; exit $$rc
 
-oracle:  ## TASK=T1..T9|all [CHAOS=profile CHAOS_SEED=0] [LIVE=1] [EVENTS=1]: reset, chaos, oracle via the scripted agent, checker (in-process Acme on a temp DB unless LIVE=1)
-	uv run python -m bench.run_oracle $(TASK) $(if $(CHAOS),--chaos $(CHAOS) --chaos-seed $(or $(CHAOS_SEED),0)) $(if $(LIVE),--live) $(if $(EVENTS),--events)
+oracle:  ## TASK=T1..T9|all [CHANNEL=gui] [CHAOS=profile CHAOS_SEED=0] [LIVE=1] [EVENTS=1] [HEADED=1]: reset, chaos, oracle via the scripted agent, checker (in-process Acme on a temp DB unless LIVE=1)
+	uv run python -m bench.run_oracle $(TASK) $(if $(CHAOS),--chaos $(CHAOS) --chaos-seed $(or $(CHAOS_SEED),0)) $(if $(LIVE),--live) $(if $(EVENTS),--events) $(if $(CHANNEL),--channel $(CHANNEL))

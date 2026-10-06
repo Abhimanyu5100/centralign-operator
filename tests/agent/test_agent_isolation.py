@@ -8,7 +8,8 @@
 - agent/ does not import acme/ (Acme knowledge comes from acme/knowledge files, not Acme's code)
 - every tool a `tool_in` policy rule names is registered (N.77)
 - no Acme endpoint is written in agent/ code: no "/api/" literal (paths come from acme/knowledge/api.yaml, D-107)
-- no subprocess in agent/ yet; each launcher added later gets an explicit allowlisted env and its own test (D-105)
+- no subprocess in agent/; the only process agent/ starts is the browser, and every `.launch(` passes an explicit
+  `env=` (D-105; tests/agent/test_browser_unit.py checks it is `browser_env()`, without the admin token)
 """
 
 import ast
@@ -110,6 +111,12 @@ def subprocess_violations(tree: ast.AST) -> list[str]:
     return found
 
 
+def launch_violations(tree: ast.AST) -> list[str]:
+    return [ast.unparse(n) for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and n.func.attr in {"launch", "launch_persistent_context", "launch_server"}
+            and "env" not in {k.arg for k in n.keywords}]
+
+
 SCANS = {  # scan -> (files allowed to break it, planted violations that must be caught, look-alikes that must not)
     "bench": (bench_violations, set(),
               ["import bench.tasks", "from bench.checkers import engine", "open('bench/tasks/T1.yaml')",
@@ -132,6 +139,10 @@ SCANS = {  # scan -> (files allowed to break it, planted violations that must be
     "api path": (api_path_violations, set(),
                  ["url = '/api/invoices'", "f'{base}/api/mail'", "client.post('/API/approvals')"],
                  ["p = 'api.yaml'", "x = '/apiary'", "ep.path"]),
+    "browser launch": (launch_violations, set(),
+                       ["await pw.chromium.launch(headless=True)", "pw.chromium.launch(**options)",
+                        "pw.firefox.launch_persistent_context(d)"],
+                       ["await pw.chromium.launch(headless=True, env=browser_env())", "rocket.lunch()"]),
     "subprocess": (subprocess_violations, set(),
                    ["import subprocess", "from subprocess import run", "os.system('ls')",
                     "asyncio.create_subprocess_exec('chromium')", "subprocess.Popen(['x'])", "import pty"],

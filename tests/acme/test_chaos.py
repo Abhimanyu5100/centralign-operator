@@ -319,7 +319,7 @@ def test_session_expiry_reproduces_and_reset_clears(admin, db_file):
 
 
 @pytest.mark.parametrize("profile", ["flaky_500", "session_expiry_at_step_1", "commit_then_timeout",
-                                     "silent_drop_write"])
+                                     "silent_drop_write", "slow_server", "toast_2s", "field_moved", "delayed_write"])
 def test_meera_is_never_faulted(db, admin, db_file, world, profile, monkeypatch):
     monkeypatch.setenv("ACME_CHAOS_TIMEOUT_DELAY_SECONDS", "5")
     set_chaos(admin, profile, seed_where(lambda s: all(flaky(s, n) for n in (1, 2, 3))))
@@ -387,11 +387,114 @@ def test_events_say_whether_the_active_profile_fired(admin, agent):
     assert out["fired"] is False and [e["effect"] for e in out["items"]] == ["write_dropped"]
 
 
-@pytest.mark.parametrize("profile", chaos.PLANNED)
-def test_day_3_profiles_are_refused_with_a_typed_422(admin, profile):
-    r = admin.post("/__admin/chaos", params={"profile": profile})
-    assert_typed_error(r, 422, "invalid_input")
-    assert "Day 3" in r.json()["detail"]
+@pytest.mark.parametrize("profile", ["slow_server", "toast_2s", "field_moved", "delayed_write"])
+def test_the_day_2_3_profiles_are_accepted_and_wired(admin, profile):
+    assert set_chaos(admin, profile) | {"params": None} == {"profile": profile, "seed": 0, "active": True,
+                                                            "params": None, "wired": True}
+
+
+# --- slow_server (3.3, D-116) ---------------------------------------------------------------------
+
+
+def test_slow_server_holds_every_committed_write_a_seeded_time(db, admin, agent, monkeypatch):
+    monkeypatch.setenv("ACME_CHAOS_SLOW_SECONDS", "0.05")
+    set_chaos(admin, "slow_server", seed=4)
+    timings = []
+    for i in range(2):
+        start = time.monotonic()
+        assert post_invoice(agent, {**INVOICE, "invoice_no": f"INV-S{i}"}, key=f"k{i}").status_code == 201
+        timings.append(time.monotonic() - start)
+    start = time.monotonic()
+    assert ui_invoice_form(agent).status_code == 303
+    timings.append(time.monotonic() - start)
+    assert all(0.05 <= t < 1 for t in timings)
+    assert [e[:2] for e in effects(admin)] == [("response_slowed", "api")] * 2 + [("response_slowed", "ui")]
+    assert [chaos.slow_delay(4, n) for n in (1, 2, 3)] == [chaos.slow_delay(4, n) for n in (1, 2, 3)]
+    assert all(0.05 <= chaos.slow_delay(4, n) < 0.1 for n in range(1, 50))
+    assert post_invoice(agent, {**INVOICE, "invoice_no": "INV-S0"}, key="k9").status_code == 409  # a rejected write
+    assert len(effects(admin)) == 3  # ... is not slowed
+
+
+# --- toast_2s (4.3, D-116) ------------------------------------------------------------------------
+
+
+def test_toast_2s_removes_the_toast_and_page_alert_after_two_seconds(admin, agent, db_file):
+    set_chaos(admin, "toast_2s")
+    r = ui_invoice_form(agent)
+    page = agent.get(r.headers["location"]).text
+    assert 'role="status" id="toast" data-transient' in page and "}, 2000);</script>" in page
+    bad = ui_invoice_form(agent, amount="12,500")  # a field error stays; only page-level messages are transient
+    assert bad.status_code == 422 and 'id="amount-error" role="alert">' in bad.text
+    assert ("toast_shortened", "ui", "GET") in [e[:3] for e in effects(admin)]
+    meera = make_client(db_file, "meera")
+    assert "setTimeout" not in meera.get("/invoices").text  # only ops-agent pages
+    set_chaos(admin, "none")
+    r = ui_invoice_form(agent, invoice_no="INV-3002")
+    assert "setTimeout" not in agent.get(r.headers["location"]).text
+
+
+# --- field_moved (2.5, 0.2, D-116) ----------------------------------------------------------------
+
+
+def _form_order(html: str) -> list[str]:
+    import re
+    names = re.findall(r'<(?:input|select) id="(\w+)"|<button type="submit">', html)
+    return [n or "BUTTON" for n in names]
+
+
+def test_field_moved_reorders_the_invoice_form_and_keeps_labels_and_behaviour(db, admin, agent):
+    default = _form_order(agent.get("/invoices/new").text)
+    assert default[-1] == "BUTTON"
+    set_chaos(admin, "field_moved", seed=3)
+    moved = _form_order(agent.get("/invoices/new").text)
+    assert moved[0] == "BUTTON" and moved[1:] != default[:-1] and sorted(moved[1:]) == sorted(default[:-1])
+    assert _form_order(agent.get("/invoices/new").text) == moved  # same seed, same layout
+    assert Page(agent.get("/invoices/new").text).labels_for >= {"vendor_id", "invoice_no", "amount", "tax"}
+    assert ui_invoice_form(agent).status_code == 303
+    assert db.execute("SELECT COUNT(*) FROM invoices WHERE invoice_no = 'INV-3001'").fetchone()[0] == 1
+    assert {e[0] for e in effects(admin)} == {"layout_moved"}
+    set_chaos(admin, "field_moved", seed=4)
+    assert _form_order(agent.get("/invoices/new").text) != moved
+
+
+def test_field_moved_never_shows_the_default_order(db, admin):
+    # with two fields half the seeds shuffle back to the default; the profile must still move something
+    for seed in range(20):
+        set_chaos(admin, "field_moved", seed=seed)
+        assert chaos.invoice_layout(db, "ops-agent", ["a", "b"]) == (["b", "a"], True)
+    assert chaos.invoice_layout(db, "meera", ["a", "b"]) == (["a", "b"], False)
+
+
+# --- delayed_write (6.9, D-116) -------------------------------------------------------------------
+
+
+class Clock:
+    def __init__(self):
+        self.t = time.time()  # sessions of other clients are purged by wall time, so start there
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def test_delayed_write_hides_new_rows_from_agent_reads_until_the_delay_passes(db, admin, db_file, monkeypatch):
+    monkeypatch.setenv("ACME_CHAOS_VISIBILITY_SECONDS", "5")
+    clock = Clock()
+    agent = TestClient(create_app(db_file, time_fn=clock), follow_redirects=False)
+    assert agent.post("/api/login", json={"username": "ops-agent", "password": "ops-agent-dev-pw"}).status_code == 200
+    set_chaos(admin, "delayed_write")
+    new = post_invoice(agent).json()["data"]
+    assert agent.get(f"/api/invoices/{new['id']}").status_code == 404
+    assert new["id"] not in [i["id"] for i in agent.get("/api/invoices").json()["data"]["items"]]
+    assert agent.get(f"/invoices/{new['id']}").status_code == 404  # the page reads through the same lag
+    assert post_invoice(agent, {**INVOICE}, key="other-key").status_code == 409  # writes see it: still a duplicate
+    meera = make_client(db_file, "meera")
+    assert meera.get(f"/api/invoices/{new['id']}").status_code == 200  # only ops-agent reads lag
+    assert db.execute("SELECT COUNT(*) FROM invoices WHERE id = ?", (new["id"],)).fetchone()[0] == 1
+    clock.t += 5.1
+    assert agent.get(f"/api/invoices/{new['id']}").status_code == 200
+    assert [e[:2] for e in effects(admin)] == [("write_delayed", "api")]
+    data(admin.post("/__admin/reset"))
+    assert count(db, "chaos_hidden") == 0
 
 
 def test_every_ui_post_route_passes_the_chaos_route_class():
@@ -403,6 +506,10 @@ def test_every_ui_post_route_passes_the_chaos_route_class():
 
 
 EFFECT_TESTS = {
+    "slow_server": test_slow_server_holds_every_committed_write_a_seeded_time,
+    "toast_2s": test_toast_2s_removes_the_toast_and_page_alert_after_two_seconds,
+    "field_moved": test_field_moved_reorders_the_invoice_form_and_keeps_labels_and_behaviour,
+    "delayed_write": test_delayed_write_hides_new_rows_from_agent_reads_until_the_delay_passes,
     "rename_submit_button": test_rename_changes_the_button_name_and_not_the_behaviour,
     "flaky_500": test_flaky_500_fails_before_anything_is_written_and_the_retry_passes,
     "commit_then_timeout": test_commit_then_timeout_commits_then_holds_the_response_once,

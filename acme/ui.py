@@ -43,6 +43,7 @@ def _context(request: Request, actor: str | None, extra: dict) -> dict:
         "role": role_of(actor) if actor else None,
         "can": (lambda action: allowed(actor, action)) if actor else (lambda action: False),
         "flash": unquote(flash) if flash else None,
+        "toast_ms": getattr(request.state, "toast_ms", None),  # toast_2s chaos: transient messages expire
         **extra,
     }
 
@@ -173,8 +174,13 @@ def invoices(request: Request, vendor: str | None = None, status: str | None = N
                 vendor=vendor_id, status=status)
 
 
+INVOICE_LAYOUT = ["vendor_id", "invoice_no", "po_number", "invoice_date", "due_date", "received_date", "amount", "tax"]
+
+
 def _invoice_form(request, conn, actor, values: dict, errors: dict, status: int = 200) -> Response:
+    field_order, button_first = chaos.invoice_layout(conn, actor, INVOICE_LAYOUT)
     return page(request, "invoice_form.html", actor, status, values=values, errors=errors,
+                field_order=field_order, button_first=button_first,
                 vendor_options=_vendor_options(conn), submit_label=invoice_submit_label(conn, actor),
                 token=values.get("idempotency_token") or _new_token(), amount_help=AMOUNT_HELP)
 

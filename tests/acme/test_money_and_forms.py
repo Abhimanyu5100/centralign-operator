@@ -19,7 +19,7 @@ def test_parse_rupees_is_exact(text, paise):
 def test_parse_rupees_rejects_anything_but_plain_decimals_with_the_exact_hint(text):
     with pytest.raises(ValueError) as exc:
         parse_rupees(text)
-    assert str(exc.value) == "Enter the amount in rupees without commas, for example 62400.00" == AMOUNT_HELP
+    assert str(exc.value) == "Enter the amount in rupees without commas, for example 12500.00" == AMOUNT_HELP
 
 
 @pytest.mark.parametrize("paise, text", [(6_240_000, "₹62,400.00"), (5, "₹0.05"), (12_345_678_900, "₹12,34,56,789.00"),
@@ -31,7 +31,7 @@ def test_format_inr_uses_indian_grouping(paise, text):
 def test_amount_error_names_the_field_and_says_what_to_type():
     form = Form({"amount": "1,00,000"})
     assert form.rupees("amount", "Total including tax") is None
-    assert form.errors["amount"] == "Total including tax: Enter the amount in rupees without commas, for example 62400.00"
+    assert form.errors["amount"] == "Total including tax: Enter the amount in rupees without commas, for example 12500.00"
 
 
 def test_missing_and_zero_amounts_have_their_own_messages():
@@ -40,7 +40,7 @@ def test_missing_and_zero_amounts_have_their_own_messages():
     form.rupees("tax", "Tax", allow_zero=True)
     assert form.errors == {
         "amount": "Total including tax must be greater than zero",
-        "tax": "Tax is required. Enter the amount in rupees without commas, for example 62400.00",
+        "tax": "Tax is required. Enter the amount in rupees without commas, for example 12500.00",
     }
 
 

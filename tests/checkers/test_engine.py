@@ -173,7 +173,7 @@ GOOD = (ROOT / "bench" / "tasks" / "T1.yaml").read_text()
     (lambda t: t.replace("seed: base", "seed: t99"), "unknown seed"),
     (lambda t: t.replace('now: "2026-10-07T10:30:00+05:30"', 'now: "2026-10-07T10:30:00+00:00"'), "05:30"),
     (lambda t: t.replace("profile: flaky_500", "profile: flaky_501"), "unknown chaos profile"),
-    (lambda t: t.replace("profile: flaky_500", "profile: slow_server"), "Day 3"),
+    (lambda t: t.replace("profile: flaky_500", "profile: slow_servr"), "unknown chaos profile"),
     (lambda t: t.replace("invoices: {added: 1}", "audit_log: {added: 1}"), "audit_log"),
     (lambda t: t.replace("invoices: {added: 1}", "sessions: {added: 1}"), "not entity tables"),
     (lambda t: t.replace("seed: base", "seed: base\nseed: t8"), "duplicate"),

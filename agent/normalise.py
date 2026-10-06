@@ -22,7 +22,7 @@ _WESTERN = re.compile(r"[0-9]{1,3}(?:,[0-9]{3})+")           # 250,000
 
 
 def to_paise(text: str) -> int:
-    """'₹2,50,000', 'Rs. 1,234.50', 'INR 18500', '2.5 lakh' -> integer paise. Commas must group digits the
+    """'₹2,50,000', 'Rs. 1,234.50', 'INR 7500', '2.5 lakh' -> integer paise. Commas must group digits the
     Indian or the Western way; at most two decimals; no sign, no other separators."""
     s = _SUFFIX.sub("", _CURRENCY.sub("", text.strip())).strip()
     unit = 1
