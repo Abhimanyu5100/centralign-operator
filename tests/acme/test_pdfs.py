@@ -239,6 +239,23 @@ def test_a_listed_file_downloads_with_its_exact_bytes(agent):
     assert agent.get("/files/sharma_INV-1043.pdf").content == r.content
 
 
+def test_the_file_list_names_exactly_the_served_pdfs(agent, tmp_path, monkeypatch):
+    # Day 2.2: GET /api/files is how the agent's list_files tool finds documents
+    r = agent.get("/api/files")
+    assert r.status_code == 200 and r.json()["data"]["items"] == [{"name": n} for n in files.available()]
+    assert {"name": "sharma_INV-1043.pdf"} in r.json()["data"]["items"]
+    (tmp_path / "secret.pdf").symlink_to(files.files_dir() / "sharma_INV-1043.pdf")
+    (tmp_path / "notes.txt").write_text("x")
+    monkeypatch.setenv("ACME_FILES_DIR", str(tmp_path))
+    assert agent.get("/api/files").json()["data"]["items"] == []  # no symlinks, no non-PDFs
+
+
+def test_the_file_list_needs_a_login(db_file):
+    from tests.acme.conftest import make_client
+    r = make_client(db_file, None).get("/api/files")
+    assert r.status_code == 401 and r.json()["error_type"] == "login_required"
+
+
 @pytest.mark.parametrize("bad", BAD_NAMES)
 def test_anything_else_is_a_404_on_both_routes(agent, bad):
     api, ui = agent.get(f"/api/files/{bad}"), agent.get(f"/files/{bad}")

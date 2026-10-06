@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ValidationError
 
-from acme import chaos, idempotency, mail, queries, services
+from acme import chaos, files, idempotency, mail, queries, services
 from acme.models import ApprovalIn, DecisionIn, EmployeeIn, InvoiceIn, ItTicketIn, MailIn, PaymentIn
 from acme.services import Invalid, MalformedBody, NotFound, UnsupportedMediaType
 from acme.web import get_conn, pdf_response, require_login
@@ -165,6 +165,12 @@ def mail_attachment(mail_id: int, name: str, conn: sqlite3.Connection = Depends(
     if name not in mail.view(services.get(conn, "mail", mail_id))["attachments"]:
         raise NotFound("File not found")
     return pdf_response(name)
+
+
+@router.get("/api/files")
+def file_list() -> JSONResponse:
+    """Names of the PDFs Acme holds (Day 2.2: the agent's list_files tool); download one with /api/files/{name}."""
+    return ok({"items": [{"name": name} for name in files.available()]})
 
 
 @router.get("/api/files/{name}")

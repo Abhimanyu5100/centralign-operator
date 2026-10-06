@@ -7,6 +7,8 @@
   registered tool spec names them (ORG-004 structural half, D-085, 3.9)
 - agent/ does not import acme/ (Acme knowledge comes from acme/knowledge files, not Acme's code)
 - every tool a `tool_in` policy rule names is registered (N.77)
+- no Acme endpoint is written in agent/ code: no "/api/" literal (paths come from acme/knowledge/api.yaml, D-107)
+- no subprocess in agent/ yet; each launcher added later gets an explicit allowlisted env and its own test (D-105)
 """
 
 import ast
@@ -85,6 +87,29 @@ def acme_import_violations(tree: ast.AST) -> list[str]:
     return [n for n in _imports(tree) if _top(n) == "acme"]
 
 
+def api_path_violations(tree: ast.AST) -> list[str]:
+    return [s for s in _strings(tree) if "/api/" in s.lower()]
+
+
+SUBPROCESS_CALLS = {  # module -> functions that start a process (any call on subprocess counts)
+    "os": {"system", "popen", "fork", "forkpty", "execv", "execve", "execl", "execlp", "execvp", "spawnl", "spawnv",
+           "posix_spawn"},
+    "asyncio": {"create_subprocess_exec", "create_subprocess_shell"},
+}
+
+
+def subprocess_violations(tree: ast.AST) -> list[str]:
+    found = [n for n in _imports(tree) if _top(n) in {"subprocess", "pty", "multiprocessing"}
+             or n.split(".")[-1] in SUBPROCESS_CALLS["os"] | SUBPROCESS_CALLS["asyncio"]]
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+                and isinstance(node.func.value, ast.Name):
+            module, name = node.func.value.id, node.func.attr
+            if module == "subprocess" or name in SUBPROCESS_CALLS.get(module, ()):
+                found.append(ast.unparse(node))
+    return found
+
+
 SCANS = {  # scan -> (files allowed to break it, planted violations that must be caught, look-alikes that must not)
     "bench": (bench_violations, set(),
               ["import bench.tasks", "from bench.checkers import engine", "open('bench/tasks/T1.yaml')",
@@ -104,6 +129,13 @@ SCANS = {  # scan -> (files allowed to break it, planted violations that must be
                  ["p = 'runs/runs.db'", "'/api/invoices'"]),
     "acme import": (acme_import_violations, set(), ["import acme.web", "from acme import services"],
                     ["from agent.policy import loader"]),
+    "api path": (api_path_violations, set(),
+                 ["url = '/api/invoices'", "f'{base}/api/mail'", "client.post('/API/approvals')"],
+                 ["p = 'api.yaml'", "x = '/apiary'", "ep.path"]),
+    "subprocess": (subprocess_violations, set(),
+                   ["import subprocess", "from subprocess import run", "os.system('ls')",
+                    "asyncio.create_subprocess_exec('chromium')", "subprocess.Popen(['x'])", "import pty"],
+                   ["registry.call(name)", "run.call('x', {})", "asyncio.run(main())"]),
 }
 
 
@@ -151,8 +183,12 @@ def spec_target_violations(tool: ToolSpec) -> list[str]:
     return [t for t in FORBIDDEN_TARGETS if t in text]
 
 
+def test_the_real_registry_is_not_empty_so_these_checks_are_not_vacuous():
+    specs = build_registry().specs()  # N.124
+    assert len(specs) >= 25 and {"submit_invoice", "send_mail", "extract_pdf_text"} <= {s.name for s in specs}
+
+
 def test_no_registered_tool_names_the_acme_database_or_admin_paths():
-    # vacuous until Day 2.2 registers the first real tools (N.124); the fixture below keeps the check honest
     assert {t.name: spec_target_violations(t) for t in build_registry().specs() if spec_target_violations(t)} == {}
 
 
@@ -171,7 +207,7 @@ def missing_policy_tools(policies: PolicyFile, registry: Registry) -> list[str]:
 
 
 def test_every_tool_named_by_a_policy_is_registered():
-    # policies.yaml has no tool_in rule today, so this holds trivially until one is added (N.77)
+    # policies.yaml has no tool_in rule today; the registry is real and non-empty, so a new rule is checked (N.77)
     assert missing_policy_tools(load_policies(), build_registry()) == []
 
 

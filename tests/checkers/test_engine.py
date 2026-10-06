@@ -248,7 +248,16 @@ def test_checker_test_states_are_never_built_with_raw_sql():
     assert not banned.search((ROOT / "tests" / "checkers" / "test_tasks.py").read_text())
 
 
-def test_bench_never_imports_agent():
-    """The harness judges the agent; it must not share code with it."""
-    for path in (ROOT / "bench").rglob("*.py"):
+JUDGE = [ROOT / "bench" / "tasks.py", *sorted((ROOT / "bench" / "checkers").rglob("*.py"))]
+
+
+def test_the_judge_never_imports_agent():
+    """The checker and the task loader judge the agent, so they share no code with it (D-109). The oracles and the
+    live harness (bench/oracles/, bench/live.py, bench/run_oracle.py) drive the agent and may import it."""
+    assert len(JUDGE) >= 3
+    for path in JUDGE:
         assert not re.search(r"^\s*(from|import)\s+agent\b", path.read_text(), re.M), path
+
+
+def test_the_judge_import_check_catches_a_planted_import():
+    assert re.search(r"^\s*(from|import)\s+agent\b", "x = 1\nfrom agent.tools import api\n", re.M)

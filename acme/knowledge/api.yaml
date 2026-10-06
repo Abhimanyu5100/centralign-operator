@@ -1,0 +1,332 @@
+# Acme's official JSON API as the operator knows it (Day 2.2, D-107). agent/tools/api.py turns every entry
+# under `tools` into a typed tool; no Acme path is written in agent/ code (an isolation test refuses "/api/").
+#
+# Per entry: name, one-line description (shown to the LLM), method, path template ({x} = the argument x),
+# side_effect (read | reversible_write | irreversible_write | external_comms), args (type, description,
+# required, enum, pattern), undo {tool, args: undo argument <- field of this tool's result} or no_undo_reason,
+# transport_args (only idempotency_key: sent as a header, left out of the call fingerprint),
+# read_back (how to tell whether a write without an idempotency key already happened, register 3.5):
+#   kind new_row       a matching row that did not exist before the first attempt is ours
+#   kind target_state  a matching row means the change is already in effect
+#   tool + args        the read tool, and its arguments taken from this call's arguments
+#   match / expect     row field <- this call's argument / row field = literal ($user = the agent's login)
+# response: file saves the bytes in the run's scratch folder; untrusted: provenance origin for returned text.
+# Paths and args mirror acme/api.py; tests/agent/test_catalog.py checks every route exists with that method.
+schema_version: 0
+
+session:
+  api_prefix: /api/      # every path below starts here; anything else is refused at load time
+  login_method: POST
+  login_path: /api/login
+  user: ops-agent
+  password_key: ACME_PASSWORD_OPS_AGENT   # config key; the value never enters a tool argument or the LLM context
+  idempotency_header: Idempotency-Key
+  replay_header: Idempotent-Replayed
+
+tools:
+  # --- reads -------------------------------------------------------------------------------------------------
+  - name: find_vendors
+    description: List vendors in the vendor master (id, name, GSTIN, status, contact email); q filters by name.
+    method: GET
+    path: /api/vendors
+    side_effect: read
+    args:
+      q: {type: string, required: false, description: "Part of the vendor name"}
+
+  - name: get_vendor
+    description: Read one vendor from the vendor master.
+    method: GET
+    path: /api/vendors/{vendor_id}
+    side_effect: read
+    args:
+      vendor_id: {type: integer, description: Vendor id}
+
+  - name: list_invoices
+    description: List invoices, newest first, optionally for one vendor id and one status.
+    method: GET
+    path: /api/invoices
+    side_effect: read
+    args:
+      vendor: {type: integer, required: false, description: "Vendor id (from find_vendors)"}
+      status:
+        type: string
+        required: false
+        enum: [draft, pending_approval, approved, rejected, paid, void]
+        description: Invoice status
+
+  - name: get_invoice
+    description: Read one invoice with its approvals and payment requests.
+    method: GET
+    path: /api/invoices/{invoice_id}
+    side_effect: read
+    args:
+      invoice_id: {type: integer, description: Invoice id}
+
+  - name: list_approvals
+    description: List business approval requests, newest first, optionally by status.
+    method: GET
+    path: /api/approvals
+    side_effect: read
+    args:
+      status: {type: string, required: false, enum: [pending, approved, rejected, withdrawn], description: Approval status}
+
+  - name: get_approval
+    description: Read one business approval request.
+    method: GET
+    path: /api/approvals/{approval_id}
+    side_effect: read
+    args:
+      approval_id: {type: integer, description: Approval id}
+
+  - name: list_payments
+    description: List payment requests, optionally for one invoice id and one status.
+    method: GET
+    path: /api/payments
+    side_effect: read
+    args:
+      invoice: {type: integer, required: false, description: Invoice id}
+      status:
+        type: string
+        required: false
+        enum: [pending_approval, scheduled, sent, rejected, cancelled]
+        description: Payment status
+
+  - name: get_payment
+    description: Read one payment request with its approvals.
+    method: GET
+    path: /api/payments/{payment_id}
+    side_effect: read
+    args:
+      payment_id: {type: integer, description: Payment id}
+
+  - name: find_employees
+    description: List employees; q filters by part of the name.
+    method: GET
+    path: /api/employees
+    side_effect: read
+    args:
+      q: {type: string, required: false, description: "Part of the employee name"}
+
+  - name: get_employee
+    description: Read one employee record.
+    method: GET
+    path: /api/employees/{employee_id}
+    side_effect: read
+    args:
+      employee_id: {type: integer, description: Employee id}
+
+  - name: list_it_tickets
+    description: List IT tickets, newest first, optionally for one employee id.
+    method: GET
+    path: /api/it-tickets
+    side_effect: read
+    args:
+      employee: {type: integer, required: false, description: Employee id}
+
+  - name: get_it_ticket
+    description: Read one IT ticket.
+    method: GET
+    path: /api/it-tickets/{ticket_id}
+    side_effect: read
+    args:
+      ticket_id: {type: integer, description: IT ticket id}
+
+  - name: list_audit
+    description: Read Acme's audit log after an audit id (page with next_since while has_more is true).
+    method: GET
+    path: /api/audit
+    side_effect: read
+    args:
+      since: {type: integer, required: false, description: "Return entries with an audit id greater than this"}
+      limit: {type: integer, required: false, description: "Page size, 1 to 1000 (default 500)"}
+
+  - name: list_mail
+    description: List mail summaries (no bodies), newest first; folder inbox (default) or outbox.
+    method: GET
+    path: /api/mail
+    side_effect: read
+    untrusted: mailbox
+    args:
+      folder: {type: string, required: false, enum: [inbox, outbox], description: Mail folder}
+
+  - name: read_mail
+    description: Read one mail message with its body and attachment names.
+    method: GET
+    path: /api/mail/{mail_id}
+    side_effect: read
+    untrusted: "mail:{mail_id}"
+    args:
+      mail_id: {type: integer, description: Mail id (from list_mail)}
+
+  - name: list_files
+    description: List the PDF files Acme holds (invoices and other documents).
+    method: GET
+    path: /api/files
+    side_effect: read
+
+  - name: download_file
+    description: Download one of Acme's PDF files into this run's scratch folder.
+    method: GET
+    path: /api/files/{name}
+    side_effect: read
+    response: file
+    args:
+      name: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*\.pdf$', description: "File name as listed by list_files or a mail"}
+
+  - name: download_attachment
+    description: Download a mail attachment into this run's scratch folder.
+    method: GET
+    path: /api/mail/{mail_id}/attachments/{name}
+    side_effect: read
+    response: file
+    args:
+      mail_id: {type: integer, description: Mail id}
+      name: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*\.pdf$', description: Attachment file name}
+
+  # --- writes ------------------------------------------------------------------------------------------------
+  - name: submit_invoice
+    description: Enter a vendor invoice; Acme approves it at or below the limit, else it waits for approval.
+    method: POST
+    path: /api/invoices
+    side_effect: reversible_write
+    undo: {tool: void_invoice, args: {invoice_id: id}}
+    transport_args: [idempotency_key]
+    args:
+      vendor_id: {type: integer, description: Vendor id from the vendor master}
+      invoice_no: {type: string, description: Invoice number as printed on the invoice}
+      po_number: {type: string, required: false, description: Purchase order number}
+      invoice_date: {type: date, description: "Invoice date, ISO YYYY-MM-DD"}
+      due_date: {type: date, description: "Due date, ISO YYYY-MM-DD"}
+      received_date: {type: date, required: false, description: "Date received, ISO; defaults to today"}
+      amount_paise: {type: integer, description: "Invoice total including tax, in paise (Rs 1 = 100 paise)"}
+      tax_paise: {type: integer, description: "Tax part of the total, in paise"}
+
+  - name: request_approval
+    description: Ask the finance manager for a business approval of a pending invoice or payment request.
+    method: POST
+    path: /api/approvals
+    side_effect: reversible_write
+    undo: {tool: withdraw_approval, args: {approval_id: id}}
+    read_back:
+      kind: new_row
+      tool: list_approvals
+      match: {entity_type: entity_type, entity_id: entity_id}
+      expect: {requested_by: $user, status: pending}
+    args:
+      entity_type: {type: string, enum: [invoice, payment], description: What needs approval}
+      entity_id: {type: integer, description: Id of the invoice or payment request}
+      reason: {type: string, required: false, description: Why approval is needed}
+
+  - name: create_payment
+    description: Create a payment request for an approved invoice; amount and payee come from Acme's records.
+    method: POST
+    path: /api/payments
+    side_effect: reversible_write
+    undo: {tool: cancel_payment, args: {payment_id: id}}
+    transport_args: [idempotency_key]
+    args:
+      invoice_id: {type: integer, description: Id of an approved invoice}
+      scheduled_date: {type: date, required: false, description: "Payment date, ISO; defaults to the due date"}
+
+  - name: create_employee
+    description: Create an employee record in onboarding status.
+    method: POST
+    path: /api/employees
+    side_effect: reversible_write
+    undo: {tool: cancel_employee, args: {employee_id: id}}
+    read_back:
+      kind: new_row
+      tool: find_employees
+      args: {q: name}
+      match: {email: email}
+    args:
+      name: {type: string, description: Full name}
+      email: {type: string, description: Work email address at the company domain}
+      role: {type: string, description: Job title}
+      department: {type: string, description: Department}
+      manager_id: {type: integer, description: Employee id of the manager}
+      start_date: {type: date, description: "First working day, ISO YYYY-MM-DD"}
+
+  - name: create_it_ticket
+    description: Open an IT ticket (laptop or accounts) for an employee.
+    method: POST
+    path: /api/it-tickets
+    side_effect: reversible_write
+    undo: {tool: cancel_it_ticket, args: {ticket_id: id}}
+    read_back:
+      kind: new_row
+      tool: list_it_tickets
+      args: {employee: employee_id}
+      match: {type: type, employee_id: employee_id}
+      expect: {created_by: $user}
+    args:
+      type: {type: string, enum: [laptop, accounts], description: Ticket type}
+      employee_id: {type: integer, description: Employee id}
+
+  - name: send_mail
+    description: Send one email from the operator's mailbox to one recipient.
+    method: POST
+    path: /api/mail/send
+    side_effect: external_comms
+    no_undo_reason: sent mail cannot be recalled
+    transport_args: [idempotency_key]
+    args:
+      to: {type: string, description: "One email address"}
+      subject: {type: string, description: One-line subject}
+      body: {type: string, description: Plain-text body}
+      attachments:
+        type: strings
+        required: false
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*\.pdf$'
+        description: "Names of Acme files to attach (see list_files)"
+
+  # --- undo (compensating actions, register 7.3) -------------------------------------------------------------
+  - name: void_invoice
+    description: Void an invoice this operator entered (undo of submit_invoice).
+    method: POST
+    path: /api/invoices/{invoice_id}/void
+    side_effect: irreversible_write
+    no_undo_reason: a void invoice cannot be restored; enter it again instead
+    read_back: {kind: target_state, tool: get_invoice, args: {invoice_id: invoice_id}, expect: {status: void}}
+    args:
+      invoice_id: {type: integer, description: Invoice id}
+
+  - name: withdraw_approval
+    description: Withdraw a pending approval request this operator made (undo of request_approval).
+    method: POST
+    path: /api/approvals/{approval_id}/withdraw
+    side_effect: irreversible_write
+    no_undo_reason: a withdrawn request cannot be reopened; request approval again instead
+    read_back: {kind: target_state, tool: get_approval, args: {approval_id: approval_id}, expect: {status: withdrawn}}
+    args:
+      approval_id: {type: integer, description: Approval id}
+
+  - name: cancel_payment
+    description: Cancel a payment request still pending approval (undo of create_payment).
+    method: POST
+    path: /api/payments/{payment_id}/cancel
+    side_effect: irreversible_write
+    no_undo_reason: a cancelled payment request cannot be reopened; create a new one instead
+    read_back: {kind: target_state, tool: get_payment, args: {payment_id: payment_id}, expect: {status: cancelled}}
+    args:
+      payment_id: {type: integer, description: Payment id}
+
+  - name: cancel_employee
+    description: Cancel an onboarding employee record (undo of create_employee).
+    method: POST
+    path: /api/employees/{employee_id}/cancel
+    side_effect: irreversible_write
+    no_undo_reason: a cancelled onboarding cannot be reopened; create the record again instead
+    read_back: {kind: target_state, tool: get_employee, args: {employee_id: employee_id}, expect: {status: cancelled}}
+    args:
+      employee_id: {type: integer, description: Employee id}
+
+  - name: cancel_it_ticket
+    description: Cancel an open IT ticket (undo of create_it_ticket).
+    method: POST
+    path: /api/it-tickets/{ticket_id}/cancel
+    side_effect: irreversible_write
+    no_undo_reason: a cancelled ticket cannot be reopened; open a new one instead
+    read_back: {kind: target_state, tool: get_it_ticket, args: {ticket_id: ticket_id}, expect: {status: cancelled}}
+    args:
+      ticket_id: {type: integer, description: IT ticket id}

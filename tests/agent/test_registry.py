@@ -387,3 +387,20 @@ def test_a_sensitive_argument_of_the_wrong_type_is_redacted_too(tmp_path):
     result = call(registry_with(PolicyGate(), login_spec()), "login", {"username": "u", "password": 98765432}, ctx)
     assert result.error_type == "invalid_args" and result.detail.startswith("password:")
     assert "98765432" not in _raw_log(ctx) and "98765432" not in result.detail
+
+
+def test_a_short_secret_is_redacted_only_as_a_whole_value(tmp_path):
+    # a 1-3 character secret would otherwise erase every matching substring of every logged string (Day 2.2)
+    ctx = ctx_for(tmp_path)
+    result = call(registry_with(PolicyGate(), login_spec()), "login",
+                  {"username": "cab driver", "password": "ab", "echo_secret": True}, ctx)
+    assert result.data["plain"] == "***"
+    assert result.data["nested"] == {"list": ["pw=ab"]}  # inside other text: left alone
+    assert "cab driver" in _raw_log(ctx)
+
+
+def test_a_four_character_secret_is_still_redacted_inside_text(tmp_path):
+    ctx = ctx_for(tmp_path)
+    result = call(registry_with(PolicyGate(), login_spec()), "login",
+                  {"username": "u", "password": "abcd", "echo_secret": True}, ctx)
+    assert result.data["nested"] == {"list": ["pw=***"]} and "abcd" not in _raw_log(ctx)

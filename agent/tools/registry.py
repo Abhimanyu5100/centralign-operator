@@ -145,12 +145,18 @@ def _secret_values(spec: ToolSpec, args: Any) -> list[str]:
             and isinstance(v, (str, int, float)) and not isinstance(v, bool) and str(v)]
 
 
+MIN_SUBSTRING_SECRET = 4  # a shorter secret ("ab") is replaced only as a whole value, never inside other text
+
+
 def _redact(value: Any, secrets: list[str]) -> Any:
     if isinstance(value, (int, float)) and not isinstance(value, bool) and str(value) in secrets:
         return "***"
     if isinstance(value, str):
+        if value in secrets:
+            return "***"
         for secret in secrets:
-            value = value.replace(secret, "***")
+            if len(secret) >= MIN_SUBSTRING_SECRET:
+                value = value.replace(secret, "***")
         return value
     if isinstance(value, dict):
         return {k: _redact(v, secrets) for k, v in value.items()}
@@ -281,8 +287,16 @@ class Registry:
         ctx.store.append(ctx.run_id, type, ctx.now.isoformat(), _redact(payload, secrets))
 
 
-def build_registry(gate: PolicyGate | None = None) -> Registry:
-    """The operator's registry. Tools are added from Day 2.2 (API, mail, files), 2.3 (browser)."""
+def build_registry(gate: PolicyGate | None = None, client: Any = None) -> Registry:
+    """The operator's registry for one run: the API tools from the endpoint catalog bound to `client` (that run's
+    AcmeClient; a fresh one from config when None, which does no I/O until used), and the local file tools.
+    The browser tool joins on Day 2.3."""
+    from agent.config import load_config  # imported here: the tool modules import this one
+    from agent.tools.api import AcmeClient, api_tools, load_catalog
+    from agent.tools.files import file_tools
+
     registry = Registry(gate or PolicyGate())
+    for spec in [*api_tools(client or AcmeClient(load_config(), load_catalog())), *file_tools()]:
+        registry.register(spec)
     registry.validate()
     return registry

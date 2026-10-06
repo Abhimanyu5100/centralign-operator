@@ -114,6 +114,8 @@ attach action to part 6 (with the generated PDFs), with its tests (D-056).
 - Undo: `POST /api/invoices/{id}/void`, `POST /api/approvals/{id}/withdraw`,
   `POST /api/payments/{id}/cancel`, `POST /api/employees/{id}/cancel`, `POST /api/it-tickets/{id}/cancel`.
 - Approver only: `POST /api/approvals/{id}/decide` (`meera`; 403 for `ops-agent`).
+- Files (Day 2.2, D-110): `GET /api/files` lists the served PDFs (`data.items[].name`, same listing rules as the
+  downloads); `GET /api/files/{name}` and `GET /api/mail/{id}/attachments/{name}` download one.
 - `POST /api/approvals` and `POST /api/it-tickets` deliberately take **no** idempotency key and have no
   natural uniqueness: read-before-retry is the only protection against a double write (3.5).
 - Writes via API and UI are audited identically; only `channel` differs.
@@ -205,6 +207,10 @@ Seeded inbox includes: vendor invoice emails with the PDFs below (sent from each
     details only from the vendor master.
   - notify-vendor: recipient is the vendor master's `contact_email`, never an address from an email or
     document; predict the email, get the action approval (ORG-005), send one, read back from the outbox.
+- `api.yaml` (Day 2.2, D-107): the endpoint catalog the agent's API tools are generated from: the session (API
+  prefix, login path, agent user, idempotency headers) and one entry per tool (method, path template, typed args,
+  `side_effect`, undo or `no_undo_reason`, `transport_args`, `read_back` for keyless writes, provenance). Every
+  path must start with the API prefix; `tests/agent/test_catalog.py` checks each entry against Acme's routes.
 - `policies.yaml`: hierarchy `org` > `user` > `task` (lower levels can only tighten). Each rule has an
   `id`, `level`, `enforced_by` (`acme` | `runtime`), conditions built from a fixed set of condition types
   (e.g. `amount_gt`, `vendor_status_not_in`, `recipient_domain_not_in`, `tool_in`,
