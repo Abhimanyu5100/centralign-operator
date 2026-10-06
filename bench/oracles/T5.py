@@ -14,5 +14,4 @@ STEPS = [
                      f"vendor master: {len(r['all_vendors'].data['items'])} vendors, none named Kapoor"]}),
 ]
 
-RUNS = {"T5": Oracle(STEPS, Plan(sop_id="schedule-payment"),
-                     pending="infeasible: the refusal and its evidence in the run report")}
+RUNS = {"T5": Oracle(STEPS, Plan(sop_id="schedule-payment"))}

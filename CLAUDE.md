@@ -177,7 +177,7 @@ docs/                 # problem statement, research notes, failure register, ris
 - Tool results are typed: `{ok: bool, error_type: str | None, detail: str, data: dict}`.
 - Every run writes an append-only event log (tool call, policy decision, approval, LLM call, verifier result).
 - Tests: `pytest`. Every checker and policy rule has a passing and a failing test.
-- Keep it small: target 2,000–3,000 lines of agent code, about 3,500 at most if needed (D-115); every checkpoint
+- Keep it small: target 2,000–3,000 lines of agent code, about 3,800 at most if needed (D-115, D-154); every checkpoint
   reports the running `agent/` total. Prefer deleting code to adding abstraction.
 - Stop after each working slice and show what changed. The author reviews with `git diff` and commits.
   Claude Code never runs `git commit` or `git push`.
@@ -251,7 +251,7 @@ make pdfs        # regenerate every PDF and MANIFEST.sha256 (only after an inten
 make oracle TASK=T1|all [CHANNEL=gui] [CHAOS=profile CHAOS_SEED=0] [LIVE=1] [EVENTS=1] [HEADED=1]
                  # Phase A: scripted agent runs the oracle, then the checker (in-process Acme unless LIVE=1)
 make run TASK="..." [CHAOS=profile] [REPLAY=1]   # Phase B: LLM agent (Day 4+)
-make bench       # AcmeBench -> bench/results/ (Day 3.3)
+make bench [K=1] [ONLY=T1,T2] [NO_ADVERSARIAL=1]   # AcmeBench: every oracle, chaos variants, adversarial -> bench/results/
 make ui          # action-approval inbox on 127.0.0.1:8100 (approve or reject held calls)
 make adversarial # every bench/adversarial script against an in-process Acme (each must be stopped as expected)
 make test        # fast: unit, integration, checker (excludes the e2e marker)

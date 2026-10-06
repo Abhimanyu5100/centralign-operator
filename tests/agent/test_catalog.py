@@ -74,6 +74,12 @@ def test_every_acme_write_route_the_agent_may_use_is_in_the_catalog():
     (lambda t, r: r["ui_forms"][0].update(same_as="void_invoice"), "not a tool with the same side effect"),
     (lambda t, r: r["ui_forms"][0].update(path="/api/invoices"), "outside the API prefix"),
     (lambda t, r: r["ui_forms"][0].update(side_effect="maybe"), "side_effect"),
+    (lambda t, r: r["ui_forms"][0].pop("entity"), "declares its entity"),
+    (lambda t, r: r["ui_forms"][0].update(entity="payment"), "differs from submit_invoice"),
+    (lambda t, r: r["ui_forms"][3].update(target_param="id"), "not a path parameter"),
+    (lambda t, r: t["submit_invoice"].pop("verify"), "names its postcondition read"),
+    (lambda t, r: t["submit_invoice"]["verify"].update(tool="submit_invoice"), "not a read tool"),
+    (lambda t, r: t["send_mail"]["verify"]["fields"].update(cc="cc"), "names no argument"),
 ])
 def test_the_validator_rejects_an_inconsistent_catalog(change, message):
     with pytest.raises(ValidationError, match=message):
@@ -114,3 +120,15 @@ def test_every_ui_post_route_except_the_approvers_is_classified():
     listed = {f.path.replace("{", "").replace("}", "") for f in load_catalog().ui_forms}
     unlisted = {p for p in pages if p.replace("{", "").replace("}", "") not in listed}
     assert unlisted == {"/approvals/{approval_id}/decide"}  # never the agent's: unknown, so an irreversible write
+
+
+@pytest.mark.parametrize("path, target", [
+    ("/invoices/42/attach-source", ("invoice", 42)), ("/invoices/42/void", ("invoice", 42)),
+    ("/approvals/7/withdraw", ("approval", 7)), ("/payments/3/cancel", ("payment", 3)),
+    ("/employees/9/cancel", ("employee", 9)), ("/it-tickets/5/cancel", ("it_ticket", 5)),
+    ("/invoices/new", None), ("/invoices/42/request-approval", None), ("/invoices/x/void", None),
+])
+def test_a_form_that_changes_a_record_names_it_from_its_path(path, target):
+    """D-155: the gate's ORG-008 and the verifier's layer 3 read the record a GUI submit changes from its path."""
+    form = load_catalog().form(path)
+    assert (None if form.target_id(path) is None else (form.entity, form.target_id(path))) == target

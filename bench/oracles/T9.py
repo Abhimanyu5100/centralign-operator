@@ -28,5 +28,4 @@ PLAN = Plan(sop_id="notify-vendor", milestones=[
                           Predicate(read="read_mail", args={"mail_id": Ref(ref="M1")},
                                     contains={"subject": ["INV-1043"], "body": ["under review"]})]),
 ])
-REPORT = "action_approvals with the predicted email in the run report"
-RUNS = {run_id: Oracle(STEPS, PLAN, pending=REPORT) for run_id in ("T9:none", "T9:approve", "T9:reject")}
+RUNS = {run_id: Oracle(STEPS, PLAN) for run_id in ("T9:none", "T9:approve", "T9:reject")}

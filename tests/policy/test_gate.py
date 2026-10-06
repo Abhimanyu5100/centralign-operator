@@ -66,11 +66,12 @@ def api(tmp_path):
 
 
 def gui(path: str, side_effect: str, fields: dict | None = None, trust: tuple[str, ...] = (),
-        method: str = "POST", sop_id: str | None = "process-invoice") -> ToolCall:
-    """A browser_click as the browser tool describes it (D-125): the form's fields join the args."""
+        method: str = "POST", sop_id: str | None = "process-invoice", target: Target | None = None) -> ToolCall:
+    """A browser_click as the browser tool describes it (D-125, D-155): the form's fields join the args, and a form
+    that changes a record names it as the target."""
     return ToolCall(run_id="r1", now=NOW, tool="browser_click", args={"ref": "b1", **(fields or {})},
                     side_effect=side_effect, channel="gui", request=HttpRequest(method=method, path=path),
-                    fingerprint="g" * 64, sop_id=sop_id, trust_sensitive=trust)
+                    fingerprint="g" * 64, sop_id=sop_id, trust_sensitive=trust, target=target)
 
 
 def raw(path: str, method: str = "POST", side_effect: str = "irreversible_write", tool: str = "test_only_raw",
@@ -251,10 +252,25 @@ def test_undoing_a_row_the_run_did_not_create_is_held(api, tool, args, note):
     assert decision.effect == "require_approval" and decision.policy_ids == ["ORG-008"] and note in decision.reason
 
 
-@pytest.mark.parametrize("path", ["/invoices/42/void", "/invoices/42/attach-source", "/some/unknown/form"])
-def test_an_irreversible_browser_submit_is_held(path):
-    decision = decide(gui(path, "irreversible_write"))
+def test_an_unknown_browser_form_is_held():
+    decision = decide(gui("/some/unknown/form", "irreversible_write"))
     assert decision.policy_ids == ["ORG-008"] and "no known target record" in decision.reason
+
+
+@pytest.mark.parametrize("path", ["/invoices/42/attach-source", "/invoices/42/void"])
+def test_attaching_to_or_voiding_the_runs_own_invoice_through_the_browser_is_not_held(path):
+    """N.166, D-155: the PI-6 attach (and a GUI void) on an invoice this run entered passes ORG-008."""
+    own = Facts(vendor_status=APPROVED.vendor_status, created=frozenset({("invoice", 42)}))
+    decision = decide(gui(path, "irreversible_write", {"source_file": "x.pdf"}, target=Target(entity="invoice", id=42)),
+                      own)
+    assert decision.effect == "allow"
+
+
+@pytest.mark.parametrize("path", ["/invoices/3/attach-source", "/invoices/3/void"])
+def test_attaching_to_or_voiding_a_pre_existing_invoice_through_the_browser_is_held(path):
+    decision = decide(gui(path, "irreversible_write", target=Target(entity="invoice", id=3)),
+                      Facts(created=frozenset({("invoice", 42)})))
+    assert decision.policy_ids == ["ORG-008"] and "invoice 3 not created by this run" in decision.reason
 
 
 def test_internal_mail_and_reversible_writes_are_not_held_by_org008(api):

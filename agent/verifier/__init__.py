@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 from pydantic import BaseModel
 
 from agent.failures import classify
-from agent.plan import Plan, plan_problems
+from agent.plan import Plan, coverage_warnings, plan_problems
 from agent.policy.facts import calls
 from agent.tools.registry import ToolResult
 from agent.verifier.predicates import Check, MilestoneCheck, milestones, postconditions
@@ -112,6 +112,9 @@ async def _verify(run, plan: Plan | None) -> Verdict:
     # A write the run thought it made but Acme never stored (a silent drop) is a note, not a failure on its own:
     # if it mattered, its postcondition or a milestone fails; if the run read back and redid it, the run recovered.
     notes = [f"claimed but not in the audit log: {w['tool']}" for w in effects.claimed_not_audited]
+    forms = [run.client.catalog.form((c.get("request") or {}).get("path", "")) for c, _ in writes
+             if c.get("channel") == "gui"]
+    notes += coverage_warnings(plan, run.client.catalog, {f.entity for f in forms if f and f.entity})
     evidence = replace(evidence, failures=failures,
                        unverifiable=any(m.unverifiable and m.critical for m in checked),
                        minor=[f"milestone {m.id} not met: {m.target}" for m in checked if not m.critical and not m.ok],

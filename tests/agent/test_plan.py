@@ -6,7 +6,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from agent.plan import Plan, plan_problems
+from agent.plan import Plan, coverage_warnings, plan_problems
 from bench.oracles import oracle_for
 from tests.agent.agent_fixtures import AllowAllGate
 
@@ -64,3 +64,15 @@ def test_plan_problems_names_reads_that_are_not_api_read_tools():
 def test_every_oracle_plan_reads_only_through_api_read_tools(run_id):
     from agent.tools.registry import build_registry
     assert plan_problems(oracle_for(run_id).plan, build_registry(AllowAllGate())) == []
+
+
+def test_a_browser_write_no_milestone_reads_is_flagged():
+    """D-156: a GUI write returns a page; only a milestone can show it was stored."""
+    from agent.tools.api import load_catalog
+    catalog, t1 = load_catalog(), oracle_for("T1").plan
+    assert coverage_warnings(t1, catalog, {"invoice", "approval"}) == []
+    only_m1 = Plan(sop_id=t1.sop_id, milestones=t1.milestones[:1])
+    assert coverage_warnings(only_m1, catalog, {"invoice", "approval"}) == [
+        "a browser write of approval has no milestone reading it: a dropped write would go unnoticed"]
+    assert coverage_warnings(None, catalog, {"mail"}) == [
+        "a browser write of mail has no milestone reading it: a dropped write would go unnoticed"]

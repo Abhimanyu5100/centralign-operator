@@ -182,3 +182,13 @@ def test_a_form_field_named_like_a_tool_argument_fails_closed(tmp_path):
 def test_targets_are_resolved_against_the_page_and_off_site_ones_stay_full_urls(raw, target):
     from agent.tools.browser import site_target
     assert site_target("http://acme.test/mail/12", raw) == target
+
+
+
+@pytest.mark.parametrize("ref, target", [("b3", ("invoice", 9)), ("b2", None), ("b5", None), ("l1", None)])
+def test_a_submit_names_the_record_its_form_changes(tmp_path, ref, target):
+    """D-155: /invoices/9/void names invoice 9; a create or request form, an unknown form and a link name none."""
+    gate = FixedGate(DENY)
+    call(_registry_with(ELEMENTS, gate), "browser_click", {"ref": ref}, ctx_for(tmp_path))
+    seen = gate.seen[0].target
+    assert (None if seen is None else (seen.entity, seen.id)) == target

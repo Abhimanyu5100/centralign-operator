@@ -34,6 +34,7 @@ from acme.seed import reset
 from agent.config import load_config
 from agent.lifecycle import Run as AgentRun, start_run
 from agent.scripted import ScriptResult, resume_script, run_script
+from agent.report import build_report, write_report
 from agent.verifier import Verdict, verify
 from agent.store import RunStore
 from bench.approver import decide
@@ -43,6 +44,8 @@ from bench.tasks import Run, Task
 
 ADMIN_HEADER = "X-Admin-Token"
 ROOT = Path(__file__).resolve().parents[1]
+# Bench, oracle and adversarial runs keep their own run store, so `make ui` (runs/runs.db) shows only real runs (N.164).
+BENCH_STORE = ROOT / "runs" / "bench.db"
 
 
 @dataclass(frozen=True)
@@ -130,10 +133,13 @@ class OracleRun:
     agent_run_id: str
     script: ScriptResult
     result: engine.Result
-    pending: list[str] = field(default_factory=list)  # what only the Day 3.3 report can show
     chaos_fired: bool | None = None
     decisions: list[dict[str, Any]] = field(default_factory=list)  # what the scripted approver decided
     verdict: Verdict | None = None                                  # the verifier's status and evidence (3.2)
+    report: dict[str, Any] = field(default_factory=dict)            # the run report (D-098), checked by the engine
+    diff: dict[str, Any] = field(default_factory=dict)              # /__admin/diff tables since the run's snapshot
+    seconds: float = 0.0                                            # wall time of the whole run, verification included
+    verify_seconds: float = 0.0                                     # of which the verifier (N.167)
 
     @property
     def passed(self) -> bool:
@@ -141,25 +147,30 @@ class OracleRun:
 
 
 async def run_oracle(acme: Acme, task: Task, run: Run, oracle: Oracle, *, chaos: str | None = None,
-                     chaos_seed: int = 0, store: RunStore | None = None, timeout: float | None = None) -> OracleRun:
+                     chaos_seed: int = 0, store: RunStore | None = None, timeout: float | None = None,
+                     transport: Any = None) -> OracleRun:
     acme.admin("POST", "/__admin/reset", seed=task.seed, now=task.now)
     if chaos:
         acme.admin("POST", "/__admin/chaos", profile=chaos, seed=chaos_seed)  # after reset: reset clears it
     snapshot = acme.admin("POST", "/__admin/snapshot")["snapshot"]
-    agent: AgentRun = start_run(task.request, datetime.fromisoformat(task.now), store=store,
-                                config=acme.agent_config(timeout), plan=oracle.plan)
+    agent: AgentRun = start_run(task.request, datetime.fromisoformat(task.now), store=store or RunStore(BENCH_STORE),
+                                config=acme.agent_config(timeout), plan=oracle.plan, transport=transport)
     decisions: list[dict[str, Any]] = []
+    started = time.perf_counter()
     try:
         script = await run_script(agent, oracle.steps)
         if script.ended == "paused":  # the approver decides in the inbox, then the run resumes
             decisions = await asyncio.to_thread(decide, agent.ctx.store.path, agent.run_id, run.approver)
             script = await resume_script(agent, oracle.steps, script)
+        verifying = time.perf_counter()
         verdict = await verify(agent)
+        verify_seconds = time.perf_counter() - verifying
+        report = build_report(agent)
+        write_report(agent, report)
     finally:
         await agent.close()
     diff = acme.admin("GET", "/__admin/diff", since=snapshot)["tables"]
-    result = engine.check(run.model_copy(update={"report_checks": []}), acme.db_path, diff)
-    pending = [f"report: status == {run.expected_outcome}"] + [f"report: {rc.path}" for rc in run.report_checks]
-    pending += [oracle.pending] if oracle.pending else []
+    result = engine.check(run, acme.db_path, diff, report)  # the report checks are real checks now (D-112)
     fired = acme.admin("GET", "/__admin/chaos/events")["fired"] if chaos else None
-    return OracleRun(run, agent.run_id, script, result, pending, fired, decisions, verdict)
+    return OracleRun(run, agent.run_id, script, result, fired, decisions, verdict, report, diff,
+                     time.perf_counter() - started, verify_seconds)

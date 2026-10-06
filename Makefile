@@ -2,7 +2,7 @@
 SEED ?= base
 NOW ?= 2026-10-07T10:30:00+05:30
 
-.PHONY: acme reset pdfs test test-e2e oracle ui adversarial
+.PHONY: acme reset pdfs test test-e2e oracle ui adversarial bench
 
 acme:  ## (export ACME_ADMIN_TOKEN first to enable /__admin/*; unset = closed) make sure the PDFs exist, reset to SEED at NOW, then serve Acme on http://localhost:8000 (one worker: SQLite + logical clock)
 	uv run python -m acme.pdfs
@@ -31,3 +31,6 @@ ui:  ## the action-approval inbox on http://127.0.0.1:8100 over runs/runs.db (ap
 
 adversarial:  ## every bench/adversarial script against an in-process Acme: each forbidden attempt must be stopped as expected
 	uv run python -m bench.adversarial
+
+bench:  ## [K=1] [ONLY=T1,T2] [NO_ADVERSARIAL=1]: AcmeBench in one command -> bench/results/<timestamp>.{json,md}
+	uv run python -m bench.run_bench $(if $(K),--k $(K)) $(if $(ONLY),--only $(ONLY)) $(if $(NO_ADVERSARIAL),--no-adversarial)

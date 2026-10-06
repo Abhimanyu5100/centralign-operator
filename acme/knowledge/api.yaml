@@ -28,24 +28,28 @@ session:
   replay_header: Idempotent-Replayed
   login_page: /login      # the browser lands here (a 303 with ?next=) when its session is gone
   creator_fields: [created_by, requested_by]   # a row the agent's account created is never trusted evidence
+  entity_tables: {vendor: vendors, invoice: invoices, approval: approvals, payment: payments, employee: employees,
+                  it_ticket: it_tickets, mail: mail}   # how the run report names what changed (D-098)
 
 # How the browser tool classifies a form submit (method POST) before the click (Day 2.3, D-117): the form's
 # action path ({x} = one path segment), its side effect, and the API tool that makes the same write (for
 # read-back and undo; its side effect must match). Any form not listed counts as an irreversible write.
+# entity: what a writing form writes; target_param: the path parameter holding the id of the existing record a
+# form changes, which the gate's ORG-008 and the verifier's layer 3 read (D-155).
 ui_forms:
-  - {path: /invoices/new, side_effect: reversible_write, same_as: submit_invoice}
-  - {path: "/invoices/{invoice_id}/request-approval", side_effect: reversible_write, same_as: request_approval}
-  - {path: "/invoices/{invoice_id}/attach-source", side_effect: irreversible_write}
-  - {path: "/invoices/{invoice_id}/void", side_effect: irreversible_write, same_as: void_invoice}
-  - {path: "/approvals/{approval_id}/withdraw", side_effect: irreversible_write, same_as: withdraw_approval}
-  - {path: /payments/new, side_effect: reversible_write, same_as: create_payment}
-  - {path: "/payments/{payment_id}/request-approval", side_effect: reversible_write, same_as: request_approval}
-  - {path: "/payments/{payment_id}/cancel", side_effect: irreversible_write, same_as: cancel_payment}
-  - {path: /employees/new, side_effect: reversible_write, same_as: create_employee}
-  - {path: "/employees/{employee_id}/cancel", side_effect: irreversible_write, same_as: cancel_employee}
-  - {path: /it-tickets/new, side_effect: reversible_write, same_as: create_it_ticket}
-  - {path: "/it-tickets/{ticket_id}/cancel", side_effect: irreversible_write, same_as: cancel_it_ticket}
-  - {path: /mail/compose, side_effect: external_comms, same_as: send_mail, trust_sensitive_args: [to]}
+  - {path: /invoices/new, side_effect: reversible_write, same_as: submit_invoice, entity: invoice}
+  - {path: "/invoices/{invoice_id}/request-approval", side_effect: reversible_write, same_as: request_approval, entity: approval}
+  - {path: "/invoices/{invoice_id}/attach-source", side_effect: irreversible_write, entity: invoice, target_param: invoice_id}
+  - {path: "/invoices/{invoice_id}/void", side_effect: irreversible_write, same_as: void_invoice, entity: invoice, target_param: invoice_id}
+  - {path: "/approvals/{approval_id}/withdraw", side_effect: irreversible_write, same_as: withdraw_approval, entity: approval, target_param: approval_id}
+  - {path: /payments/new, side_effect: reversible_write, same_as: create_payment, entity: payment}
+  - {path: "/payments/{payment_id}/request-approval", side_effect: reversible_write, same_as: request_approval, entity: approval}
+  - {path: "/payments/{payment_id}/cancel", side_effect: irreversible_write, same_as: cancel_payment, entity: payment, target_param: payment_id}
+  - {path: /employees/new, side_effect: reversible_write, same_as: create_employee, entity: employee}
+  - {path: "/employees/{employee_id}/cancel", side_effect: irreversible_write, same_as: cancel_employee, entity: employee, target_param: employee_id}
+  - {path: /it-tickets/new, side_effect: reversible_write, same_as: create_it_ticket, entity: it_ticket}
+  - {path: "/it-tickets/{ticket_id}/cancel", side_effect: irreversible_write, same_as: cancel_it_ticket, entity: it_ticket, target_param: ticket_id}
+  - {path: /mail/compose, side_effect: external_comms, same_as: send_mail, entity: mail, trust_sensitive_args: [to]}
   - {path: /logout, side_effect: read}   # ends the browser's own session; no company state changes
 
 tools:

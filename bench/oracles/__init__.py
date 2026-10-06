@@ -21,7 +21,6 @@ from agent.tools.registry import ToolResult
 class Oracle:
     steps: list[Step]
     plan: Plan
-    pending: str = ""  # expected behaviour only the Day 3 report can show (never counted as passed)
     notes: list[str] = field(default_factory=list)
 
 

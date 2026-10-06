@@ -331,3 +331,38 @@ def test_a_form_changed_after_the_decision_is_not_submitted(acme):
     result = browse(acme, _compose(click))
     assert result.error_type == "precondition_failed" and "changed after the gate decided" in result.detail
     assert count(acme, "SELECT COUNT(*) FROM mail WHERE folder = 'outbox'") == before
+
+
+def test_the_pi6_attach_passes_org008_on_the_runs_own_invoice_only(acme):
+    """N.166, D-155, through a real browser and the real policy gate: SOP step PI-6 (attach the source PDF) on the
+    invoice this run entered runs without an approval; the same form on a pre-existing invoice is held by ORG-008.
+    The pre-existing one is seed t9's INV-1043, entered by the same ops-agent account the day before (Acme shows the
+    attach form only to an invoice's creator), so only the run, not the account, tells them apart."""
+    from agent.plan import Plan
+    acme.admin("POST", "/__admin/reset", seed="t9", now=NOW)
+    conn = sqlite3.connect(acme.db_path)
+    seeded = conn.execute("SELECT id FROM invoices WHERE invoice_no = 'INV-1043' AND created_by = 'ops-agent'").fetchone()[0]
+    conn.close()
+    run = start_run("attach test", datetime.fromisoformat(NOW), config=acme.agent_config(),
+                    plan=Plan(sop_id="process-invoice"))
+
+    async def attach(run, invoice_id):
+        page = await run.call("browser_open", {"path": f"/invoices/{invoice_id}"})
+        await run.call("browser_select", {"ref": ref(page, "combobox", name="Source PDF"),
+                                          "option": "rao_INV-2210.pdf"})
+        return await run.call("browser_click", {"ref": ref(page, "button", name="Attach source file")})
+
+    async def body():
+        try:
+            await run.begin()
+            vendor = (await run.call("find_vendors", {"q": "Sharma"})).data["items"][0]["id"]  # ORG-002: read it
+            own = await run.call("submit_invoice", {**BIG, "vendor_id": vendor})
+            assert own.ok, own.detail
+            return own.data["id"], await attach(run, own.data["id"]), await attach(run, seeded)
+        finally:
+            await run.close()
+    own_id, mine, theirs = asyncio.run(body())
+    assert mine.ok, mine.detail
+    assert count(acme, f"SELECT COUNT(*) FROM invoices WHERE id = {own_id} AND source_file = 'rao_INV-2210.pdf'") == 1
+    assert theirs.error_type == "approval_required" and theirs.data["policy_ids"] == ["ORG-008"]
+    assert count(acme, f"SELECT COUNT(*) FROM invoices WHERE id = {seeded} AND source_file = 'rao_INV-2210.pdf'") == 0

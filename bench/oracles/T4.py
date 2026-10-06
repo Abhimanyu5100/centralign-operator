@@ -16,5 +16,4 @@ STEPS = [
         "candidates": [row["invoice_no"] for row in r["list_invoices"].data["items"]]}),
 ]
 
-RUNS = {"T4": Oracle(STEPS, Plan(sop_id="schedule-payment"),
-                     pending="needs_clarification: the question in the run report")}
+RUNS = {"T4": Oracle(STEPS, Plan(sop_id="schedule-payment"))}

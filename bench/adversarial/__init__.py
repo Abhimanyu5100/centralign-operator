@@ -16,5 +16,6 @@ def script(name: str) -> Script:
 
 
 async def run_all(acme, store: RunStore | None = None) -> list[Outcome]:
-    store = store or RunStore()
+    from bench.live import BENCH_STORE
+    store = store or RunStore(BENCH_STORE)  # never the operator's store: the inbox shows only real runs (N.164)
     return [await run_one(acme, script(name), store) for name in NAMES]

@@ -89,3 +89,12 @@ def plan_problems(plan: Plan, registry) -> list[str]:
             if spec is None or spec.side_effect != "read" or spec.channel != "api":
                 problems.append(f"{milestone.id}: {predicate.read!r} is not an API read tool")
     return problems
+
+
+def coverage_warnings(plan: Plan | None, catalog, entities: set[str]) -> list[str]:
+    """Entities the run wrote through the browser that no milestone reads (D-156). A GUI submit returns a page, not a
+    row, so only a milestone can show it was stored: without one, a silent drop there would go unnoticed."""
+    read = {catalog.get(p.read).entity for m in (plan.milestones if plan else []) for p in m.predicates
+            if catalog.get(p.read) is not None}
+    return [f"a browser write of {entity} has no milestone reading it: a dropped write would go unnoticed"
+            for entity in sorted(entities - read)]

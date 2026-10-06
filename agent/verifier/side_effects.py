@@ -31,7 +31,7 @@ class SideEffects(BaseModel):
 class Write:
     tool: str
     entity: str | None
-    id: int | None              # None: a GUI submit (it returns a page, not a row)
+    id: int | None              # None: a GUI submit that creates a row (it returns a page, not the row)
     already_done: bool
 
 
@@ -44,10 +44,10 @@ def writes_of(catalog: Any, pairs: list[tuple[dict[str, Any], dict[str, Any]]]) 
         data, ep = result.get("data") or {}, catalog.get(call["tool"])
         if ep is not None:
             entity, row_id = ep.entity, data.get("id")
-        else:  # a browser submit: what it wrote is its form's API twin
-            form = catalog.form((call.get("request") or {}).get("path", ""))
-            twin = catalog.get(form.same_as) if form and form.same_as else None
-            entity, row_id = (twin.entity if twin else None), None
+        else:  # a browser submit: its form names the entity, and the record id when it changes one (D-155)
+            path = (call.get("request") or {}).get("path", "")
+            form = catalog.form(path)
+            entity, row_id = (form.entity, form.target_id(path)) if form else (None, None)
         writes.append(Write(call["tool"], entity, row_id, bool(data.get("already_done"))))
     return writes
 

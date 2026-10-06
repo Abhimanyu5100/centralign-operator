@@ -2,8 +2,8 @@
 registry and the policy gate, the task's checker on the result (Day 2.2; the real gate from Day 3.1).
 
 - every oracle run's end state passes its DB checker with chaos off and ends the way its task expects (T4 asks,
-  T5 declines, T9 pauses for the action approval and the scripted approver decides); report checks stay pending
-  until Day 3.3;
+  T5 declines, T9 pauses for the action approval and the scripted approver decides); the checker includes the
+  report's status and report checks (Day 3.3);
 - `commit_then_timeout` (3.5): the first IT ticket commits but its response is held past the client timeout; the
   tool reads back, reports already_done and Acme holds exactly one ticket of each type;
 - `flaky_500` seed 0 (attempts 1 and 2 fail before writing): exactly one invoice and one approval request;
@@ -55,7 +55,7 @@ def test_every_oracle_passes_its_db_checker_with_chaos_off(acme, run_id):
     assert result.script.ended == ENDED.get(run_id, "done"), (result.script.ended, result.script.stopped_at)
     assert result.verdict.status == result.run.expected_outcome, result.verdict.reasons  # the verifier agrees
     assert result.result.passed, [(c.name, c.detail) for c in result.result.checks if not c.ok]
-    assert result.pending and result.pending[0].startswith("report: status")  # never counted as passed
+    assert any(c.name == "report: status" for c in result.result.checks)  # the report is checked, not pending
 
 
 def test_commit_then_timeout_reads_back_instead_of_writing_twice(acme):
@@ -128,7 +128,8 @@ def test_t9_pauses_before_the_send_and_the_approver_decides(acme):
     from agent.store import RunStore
     result = _oracle(acme, "T9:approve")
     assert [d["status"] for d in result.decisions] == ["approved"]
-    events = RunStore().events(result.agent_run_id)
+    from bench.live import BENCH_STORE
+    events = RunStore(BENCH_STORE).events(result.agent_run_id)  # harness runs live in the bench store (N.164)
     sends = [e for e in events if e["type"] == "tool_result" and e["payload"]["tool"] == "send_mail"]
     approval = [e for e in events if e["type"] == "approval"]
     assert [e["payload"]["error_type"] for e in sends] == ["approval_required", None]
@@ -137,3 +138,15 @@ def test_t9_pauses_before_the_send_and_the_approver_decides(acme):
     assert approval[0]["seq"] < sends[0]["seq"] < approval[1]["seq"] < approval[2]["seq"] < sends[1]["seq"]
     assert approval[0]["payload"]["predicted"]["args"]["to"] == "accounts@sharmalogistics.example"
     assert _count(acme, "SELECT COUNT(*) FROM mail WHERE folder = 'outbox'") == 1
+
+
+def test_the_bench_runs_end_to_end_and_writes_its_results(acme, tmp_path):
+    """One `make bench` slice: a task twice (pass^2), its chaos variant, the adversarial scripts, saved files."""
+    from agent.store import RunStore
+    from bench.run_bench import bench, save
+    result = asyncio.run(bench(acme, k=2, only={"T8"}, store=RunStore(tmp_path / "bench.db")))
+    assert result["pass_k"] == {"T8": True} and len(result["rows"]) == 3
+    assert result["summary"]["chaos_fired"] == "1/1" and result["summary"]["adversarial_stopped"] == "8/8"
+    assert all(r["agreement"] and r["cup"] for r in result["rows"])
+    saved = save(result, tmp_path)
+    assert saved.is_file() and saved.with_suffix(".json").is_file() and "| T8 |" in saved.read_text()

@@ -272,3 +272,23 @@ def test_a_write_explains_only_rows_of_its_own_entity():
     rows = [_row(1, "t1", "approval", 9, "approval.request")]
     effects = match(rows, [Write("submit_invoice", "invoice", 9, False)], "ops-agent")
     assert len(effects.unexplained) == 1 and effects.claimed_not_audited[0]["tool"] == "submit_invoice"
+
+
+def test_a_gui_change_of_a_record_is_matched_by_its_id():
+    rows = [_row(1, "t1", "invoice", 42, "invoice.attach_source"), _row(2, "t2", "invoice", 43, "invoice.void")]
+    writes = [Write("browser_click", "invoice", 43, False), Write("browser_click", "invoice", 42, False)]
+    assert match(rows, writes, "ops-agent").unexplained == []
+    wrong = match(rows[:1], [Write("browser_click", "invoice", 99, False)], "ops-agent")
+    assert len(wrong.unexplained) == 1
+
+
+def test_writes_of_reads_a_gui_writes_entity_and_record_from_its_form_path():
+    """D-155: a GUI submit's entity comes from its ui_forms entry, and its record id from the path when it changes one."""
+    from agent.tools.api import load_catalog
+    from agent.verifier.side_effects import writes_of
+    def click(path):
+        return ({"tool": "browser_click", "side_effect": "irreversible_write", "channel": "gui",
+                 "request": {"method": "POST", "path": path}}, {"ok": True, "data": {"url": "/invoices"}})
+    writes = writes_of(load_catalog(), [click("/invoices/42/attach-source"), click("/invoices/new"),
+                                        click("/some/unknown/form")])
+    assert [(w.entity, w.id) for w in writes] == [("invoice", 42), ("invoice", None), (None, None)]

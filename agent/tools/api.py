@@ -123,6 +123,7 @@ class Session(_Strict):
     login_page: str                           # where the browser lands when its session is gone
     creator_fields: list[str]                 # row fields naming who created it; the agent's own rows are never
                                               # trusted evidence (D-133)
+    entity_tables: dict[str, str]             # audit entity type -> Acme's table name, for the report (D-098)
 
 
 class UiForm(_Strict):
@@ -130,10 +131,19 @@ class UiForm(_Strict):
     side_effect: SideEffect
     same_as: str | None = None                # the API tool that makes the same write
     trust_sensitive_args: list[str] = []      # form fields the gate treats as trust-sensitive (D-125)
+    entity: Entity | None = None              # what a writing form writes (D-155)
+    target_param: str | None = None           # the path parameter holding the id of the record it changes
 
     def matches(self, path: str) -> bool:
         mine, theirs = self.path.strip("/").split("/"), path.strip("/").split("/")
         return len(mine) == len(theirs) and all(m == t or m.startswith("{") for m, t in zip(mine, theirs))
+
+    def target_id(self, path: str) -> int | None:
+        """The id of the record this form changes, read from the submitted path (None: no target, or not an id)."""
+        if self.target_param is None or not self.matches(path):
+            return None
+        value = path.strip("/").split("/")[self.path.strip("/").split("/").index("{" + self.target_param + "}")]
+        return int(value) if value.isdigit() else None
 
 
 class Catalog(_Strict):
@@ -166,6 +176,12 @@ class Catalog(_Strict):
                 problems.append(f"ui form {form.path!r} must be a page path outside the API prefix")
             if form.same_as and (twin is None or twin.side_effect != form.side_effect):
                 problems.append(f"ui form {form.path!r}: same_as {form.same_as!r} is not a tool with the same side effect")
+            if form.side_effect != "read" and form.entity is None:
+                problems.append(f"ui form {form.path!r}: a writing form declares its entity")
+            if twin is not None and form.entity != twin.entity:
+                problems.append(f"ui form {form.path!r}: entity {form.entity!r} differs from {twin.name}'s {twin.entity!r}")
+            if form.target_param and "{" + form.target_param + "}" not in form.path.split("/"):
+                problems.append(f"ui form {form.path!r}: target_param {form.target_param!r} is not a path parameter")
         if problems:
             raise ValueError("; ".join(problems))
         return self

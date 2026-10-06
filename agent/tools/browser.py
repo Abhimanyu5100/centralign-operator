@@ -26,7 +26,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeout
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent.config import browser_env
-from agent.policy.gate import HttpRequest, SideEffect
+from agent.policy.gate import HttpRequest, SideEffect, Target
 from agent.tools.api import AcmeClient
 from agent.tools.registry import GateArgs, RunContext, ToolResult, ToolSpec
 
@@ -237,6 +237,13 @@ def browser_tools(session: BrowserSession) -> list[ToolSpec]:
             return HttpRequest(method="GET", path=el.href)
         return HttpRequest(method=el.form[0], path=el.form[1]) if el is not None and el.form else None
 
+    def click_target(args: RefArgs) -> Target | None:
+        """The existing record a submit changes, read from its form's path (D-155): `/invoices/42/void` -> invoice 42."""
+        el = target(args)
+        form = catalog.form(el.form[1]) if el is not None and el.form and el.form[0] == "POST" else None
+        record = form.target_id(el.form[1]) if form else None
+        return Target(entity=form.entity, id=record) if record is not None else None
+
     async def form_fields(args: RefArgs) -> GateArgs:
         """For a POST submit: the fields it will send (the gate and the fingerprint see them, D-125) and which of
         them the catalog marks trust-sensitive for that form."""
@@ -349,7 +356,8 @@ def browser_tools(session: BrowserSession) -> list[ToolSpec]:
         ToolSpec(name="browser_click", description="Click a link or button by ref; a form submit may write.",
                  args_model=RefArgs, side_effect="external_comms", channel="gui", fn=click,  # worst case: a mail form
                  no_undo_reason="a form sent from the browser is undone, if at all, by the matching API undo tool",
-                 side_effect_of=click_effect, request_of=click_request, gate_args_of=form_fields),
+                 side_effect_of=click_effect, request_of=click_request, gate_args_of=form_fields,
+                 target_of=click_target),
         ToolSpec(name="browser_fill", description="Type text into a text field by ref (nothing is sent until a submit).",
                  args_model=FillArgs, side_effect="read", channel="gui", fn=fill),
         ToolSpec(name="browser_select", description="Choose an option in a dropdown by ref and option label.",

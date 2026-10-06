@@ -2,8 +2,9 @@
 task's oracle through the scripted agent, then the task's checker; print pass/fail per predicate.
 
 By default Acme runs in-process on a temporary database (bench/live.py); LIVE=1 targets `make acme` (needs
-ACME_ADMIN_TOKEN exported). TASK=all runs T1-T9. Report checks need the Day 3 report and print as PENDING, never
-as passed. Exit code 1 when a chaos-off oracle stops early or fails a DB check.
+ACME_ADMIN_TOKEN exported). TASK=all runs T1-T9. Each run is verified, its report written to
+runs/<run_id>/report.{json,md} and checked (status and report checks). Runs go to the bench run store
+(runs/bench.db), not the operator's (N.164). Exit code 1 when a chaos-off run fails its checker.
 """
 
 import argparse
@@ -14,7 +15,7 @@ import sys
 
 from agent.store import RunStore
 from bench import tasks
-from bench.live import OracleRun, live, run_oracle, serve
+from bench.live import BENCH_STORE, OracleRun, live, run_oracle, serve
 from bench.oracles import oracle_for
 
 
@@ -32,8 +33,6 @@ def _print(o: OracleRun, store: RunStore, events: bool) -> None:
           f"{'  ' + '; '.join(v.reasons)[:300] if v.reasons else ''}")
     for check in o.result.checks:
         print(f"  {'PASS' if check.ok else 'FAIL'}  {check.name}{'  ' + check.detail if check.detail else ''}")
-    for item in o.pending:
-        print(f"  PEND  {item}  (Day 3.3)")
     print(f"  checkpoints {o.result.checkpoint_score:.0%}")
     for key, result in o.script.results.items():
         if result.data.get("already_done") or len(result.data.get("attempts", [])) > 1:
@@ -47,7 +46,7 @@ async def _main(args: argparse.Namespace) -> int:
     ids = [t.id for t in tasks.load_all()] if args.task == "all" else [args.task]
     if args.channel == "gui":  # only tasks with a GUI oracle
         ids = [i for i in ids if (Path(__file__).parent / "oracles" / f"{i}_gui.py").is_file()]
-    store = RunStore()
+    store = RunStore(BENCH_STORE)
     results = []
     with serve() if not args.live else _nullcontext(live()) as acme:
         for task_id in ids:
@@ -57,11 +56,10 @@ async def _main(args: argparse.Namespace) -> int:
                                      chaos_seed=args.chaos_seed, store=store)
                 _print(o, store, args.events)
                 results.append(o)
-    print("\nrun          ended       verifier status               DB checker  pending (Day 3.3)")
+    print("\nrun          ended       verifier status               checker (DB, side effects, report)")
     for o in results:
         status = o.verdict.status + ("" if o.verdict.status == o.run.expected_outcome else " (!)")
-        print(f"{o.run.run_id:<12} {o.script.ended:<11} {status:<29} {'PASS' if o.result.passed else 'FAIL':<11} "
-              f"{len(o.pending)}")
+        print(f"{o.run.run_id:<12} {o.script.ended:<11} {status:<29} {'PASS' if o.result.passed else 'FAIL'}")
     failed = [o for o in results if not o.passed]
     return 1 if failed and not args.chaos else 0
 
