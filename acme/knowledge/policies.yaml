@@ -1,12 +1,16 @@
-# Company policies. DRAFT (schema_version 0) until the Day 3 gate design. Schema: agent/policy/models.py.
+# Company policies (schema_version 0). Schema: agent/policy/models.py; evaluator: agent/policy/gate.py.
 #
-# A rule fires when ALL conditions in `when` hold for a tool call. Effects are deny or require_approval only,
-# so a lower level can never loosen a higher one (P.11); the defaults live in the gate code, not here.
+# A rule fires when ALL conditions in `when` hold for a tool call. Every rule is evaluated; the strictest
+# effect among the matching rules wins (deny over require_approval) and every matching id is logged (D-087).
+# Effects are deny or require_approval only, so a lower level can never loosen a higher one (P.11). The
+# side-effect-class defaults are rules here too (ORG-005, ORG-008, ORG-009, D-126); no policy id lives in code.
 # `enforced_by: acme` means Acme itself enforces the rule; the runtime gate then only denies attempts to
 # bypass it, and `acme_check` names the Acme code that does the enforcing (a test resolves every entry).
 # `enforced_by: runtime` means only the gate enforces it.
 # `path` is a segment-aware glob (D-088): `*` matches inside one path segment, `**` (a whole segment) matches zero or
 # more segments. The matcher normalises the path first and ignores case (agent/policy/pathglob.py).
+# A value the gate cannot read (a missing argument, a vendor not read in this run, an unclear recipient, an
+# unknown target record) counts as "the condition holds": the gate fails closed.
 schema_version: 0
 rules:
   - id: ORG-001
@@ -60,7 +64,7 @@ rules:
     enforced_by: runtime
     effect: require_approval
     when:
-      - {type: request_matches, method: POST, path: ["/api/mail/send", "/mail/compose"]}
+      - {type: side_effect_in, side_effects: [external_comms]}
       - {type: recipient_domain_not_in, arg: to, allowlist: mail_allowlist.yaml}
     message: Email to an external domain needs an action approval; the approver sees the predicted email first.
 
@@ -78,3 +82,33 @@ rules:
       Payee and bank details come only from the vendor master, never from a document or an email. A payment
       request has no payee or bank fields and its amount is always the invoice total; the agent has no
       bank-detail write path.
+
+  - id: ORG-007
+    level: org
+    enforced_by: runtime
+    effect: require_approval
+    when:
+      - {type: field_source_untrusted, allowlist: mail_allowlist.yaml}
+    message: >-
+      A payee, bank detail, recipient or payment amount seen only in an email, a document or a page, and in no
+      trusted record, needs an action approval. An address on the mail allowlist is exempt.
+
+  - id: ORG-008
+    level: org
+    enforced_by: runtime
+    effect: require_approval
+    when:
+      - {type: side_effect_in, side_effects: [irreversible_write]}
+      - {type: target_not_created_by_run}
+    message: >-
+      An irreversible change to a record this run did not create (or a browser form the catalog does not
+      know) needs an action approval. Undoing the run's own writes does not.
+
+  - id: ORG-009
+    level: org
+    enforced_by: runtime
+    effect: require_approval
+    when:
+      - {type: run_has_no_sop}
+      - {type: side_effect_in, side_effects: [reversible_write, irreversible_write, external_comms]}
+    message: With no SOP for the request, every write needs an action approval.

@@ -33,7 +33,7 @@ import httpx
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model, model_validator
 
-from agent.policy.gate import HttpRequest, SideEffect
+from agent.policy.gate import HttpRequest, SideEffect, Target
 from agent.tools.files import scratch_dir
 from agent.tools.registry import ACME_ERROR_TYPES, RunContext, ToolResult, ToolSpec, fingerprint
 
@@ -43,6 +43,9 @@ UNKNOWN_OUTCOME = frozenset({"timeout", "connection_error", "server_error"})
 SESSION_LOST = frozenset({"session_expired", "login_required"})
 ARG_TYPES: dict[str, type] = {"string": str, "integer": int, "date": date, "boolean": bool}
 TRANSPORT_ARGS = {"idempotency_key": "Leave empty: the runtime derives one key per intended write"}
+# What a tool reads or writes (D-131): the verifier matches audit rows to writes by it, and the gate's run facts
+# use it to tell business records (trusted when read, D-133) from mail, audit rows and files.
+Entity = Literal["vendor", "invoice", "approval", "payment", "employee", "it_ticket", "mail", "audit", "file"]
 
 
 # --- the catalog ----------------------------------------------------------------------------------------------
@@ -79,7 +82,9 @@ class Endpoint(_Strict):
     method: Literal["GET", "POST"]
     path: str
     side_effect: SideEffect
+    entity: Entity
     args: dict[str, Arg] = {}
+    trust_sensitive_args: list[str] = []      # payee, bank details, vendor identity, recipients, amounts (D-131)
     undo: Undo | None = None
     no_undo_reason: str | None = None
     transport_args: list[Literal["idempotency_key"]] = []
@@ -102,12 +107,15 @@ class Session(_Strict):
     idempotency_header: str
     replay_header: str
     login_page: str                           # where the browser lands when its session is gone
+    creator_fields: list[str]                 # row fields naming who created it; the agent's own rows are never
+                                              # trusted evidence (D-133)
 
 
 class UiForm(_Strict):
     path: str                                 # the form's action, {x} = one path segment
     side_effect: SideEffect
     same_as: str | None = None                # the API tool that makes the same write
+    trust_sensitive_args: list[str] = []      # form fields the gate treats as trust-sensitive (D-125)
 
     def matches(self, path: str) -> bool:
         mine, theirs = self.path.strip("/").split("/"), path.strip("/").split("/")
@@ -123,9 +131,12 @@ class Catalog(_Strict):
     def get(self, name: str) -> Endpoint | None:
         return next((ep for ep in self.tools if ep.name == name), None)
 
+    def form(self, path: str) -> UiForm | None:
+        return next((f for f in self.ui_forms if f.matches(path)), None)
+
     def form_effect(self, path: str) -> SideEffect:
         """What submitting a form to `path` does; a form the catalog does not know is an irreversible write."""
-        form = next((f for f in self.ui_forms if f.matches(path)), None)
+        form = self.form(path)
         return form.side_effect if form else "irreversible_write"
 
     @model_validator(mode="after")
@@ -170,6 +181,7 @@ def _problems(ep: Endpoint, catalog: Catalog) -> list[str]:
         if arg.enum and arg.type != "string" or arg.pattern and arg.type not in ("string", "strings"):
             problems.append(f"argument {name!r}: enum needs type string, pattern string or strings")
     problems += [f"sensitive arg {a!r} is not an argument" for a in ep.sensitive_args if a not in ep.args]
+    problems += [f"trust-sensitive arg {a!r} is not an argument" for a in ep.trust_sensitive_args if a not in ep.args]
     problems += [f"transport arg {a!r} clashes with an argument" for a in ep.transport_args if a in ep.args]
     if ep.untrusted:
         problems += [f"untrusted origin names {f!r}, not an argument"
@@ -440,7 +452,14 @@ def _spec(ep: Endpoint, client: AcmeClient) -> ToolSpec:
     def request_of(args: BaseModel) -> HttpRequest:
         return HttpRequest(method=ep.method, path=_parts(ep, args.model_dump(mode="json"))[0])
 
+    def target_of(args: BaseModel) -> Target | None:
+        """The existing record a write changes: its entity and the one integer id in its path (undo tools)."""
+        ids = [p for p in ep.path_params if ep.args[p].type == "integer"]
+        if ep.side_effect == "read" or len(ids) != 1:
+            return None
+        return Target(entity=ep.entity, id=getattr(args, ids[0]))
+
     return ToolSpec(name=ep.name, description=ep.description, args_model=args_model(ep), side_effect=ep.side_effect,
                     channel="api", fn=fn, undo=ep.undo.tool if ep.undo else None, no_undo_reason=ep.no_undo_reason,
                     sensitive_args=tuple(ep.sensitive_args), transport_args=tuple(ep.transport_args),
-                    request_of=request_of)
+                    trust_sensitive_args=tuple(ep.trust_sensitive_args), request_of=request_of, target_of=target_of)

@@ -20,14 +20,16 @@ from bench.oracles import oracle_for
 
 def _print(o: OracleRun, store: RunStore, events: bool) -> None:
     steps = len(o.script.results)
-    stopped = f", stopped at {o.script.stopped_at}: {o.script.results[o.script.stopped_at].detail}" \
-        if o.script.stopped_at else ""
+    at = o.script.results.get(o.script.stopped_at) if o.script.stopped_at else None
+    stopped = f" at {o.script.stopped_at}: {at.detail[:160]}" if at else ""
     chaos = "" if o.chaos_fired is None else f", chaos fired: {'yes' if o.chaos_fired else 'no'}"
-    print(f"\n== {o.run.run_id}  (agent run {o.agent_run_id}: {steps} step(s){stopped}{chaos})")
+    approver = "".join(f", {d['approval_id']} {d['status']} by the approver" for d in o.decisions)
+    print(f"\n== {o.run.run_id}  (agent run {o.agent_run_id}: {steps} step(s), ended {o.script.ended}{stopped}"
+          f"{approver}{chaos})")
     for check in o.result.checks:
         print(f"  {'PASS' if check.ok else 'FAIL'}  {check.name}{'  ' + check.detail if check.detail else ''}")
     for item in o.pending:
-        print(f"  PEND  {item}  (Day 3)")
+        print(f"  PEND  {item}  (Day 3.3)")
     print(f"  checkpoints {o.result.checkpoint_score:.0%}")
     for key, result in o.script.results.items():
         if result.data.get("already_done") or len(result.data.get("attempts", [])) > 1:
@@ -51,10 +53,9 @@ async def _main(args: argparse.Namespace) -> int:
                                      chaos_seed=args.chaos_seed, store=store)
                 _print(o, store, args.events)
                 results.append(o)
-    print("\nrun          oracle  DB checker  pending (Day 3)")
+    print("\nrun          ended       DB checker  pending (Day 3.3)")
     for o in results:
-        print(f"{o.run.run_id:<12} {'ok' if o.script.ok else 'STOP':<7} {'PASS' if o.result.passed else 'FAIL':<11} "
-              f"{len(o.pending)}")
+        print(f"{o.run.run_id:<12} {o.script.ended:<11} {'PASS' if o.result.passed else 'FAIL':<11} {len(o.pending)}")
     failed = [o for o in results if not o.passed]
     return 1 if failed and not args.chaos else 0
 

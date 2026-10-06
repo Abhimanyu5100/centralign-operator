@@ -1,15 +1,18 @@
 """AcmeBench oracles: one hand-written perfect agent per run, as a step list for the scripted agent.
 
 Each module `T<n>.py` defines `RUNS = {run_id: Oracle(...)}` (T9 has three runs, `T9:none/approve/reject`).
-Oracles go through the API channel and `registry.call` only, look rows up by business key (never by a database
-id, N.113), and never attempt a forbidden call (gate tests live in `bench/adversarial/`, Day 3). An oracle whose
-end state fails its checker means the checker is wrong: diagnose it, never loosen it.
+Oracles go through `registry.call` only (and so through the policy gate), look rows up by business key (never by a
+database id, N.113), and never attempt a forbidden call (gate tests live in `bench/adversarial/`). Each carries
+the plan it follows: a hand-written stand-in for the Day 4 planner, in the planner's own schema (`agent/plan.py`);
+for now just the SOP (with no SOP every write would need an action approval, ORG-009). An oracle whose end state
+fails its checker means the checker is wrong: diagnose it, never loosen it.
 """
 
 import importlib
 from dataclasses import dataclass, field
 from typing import Any
 
+from agent.plan import Plan
 from agent.scripted import Step
 from agent.tools.registry import ToolResult
 
@@ -17,7 +20,8 @@ from agent.tools.registry import ToolResult
 @dataclass(frozen=True)
 class Oracle:
     steps: list[Step]
-    pending: str = ""  # expected behaviour only the Day 3 gate or report can show (never counted as passed)
+    plan: Plan
+    pending: str = ""  # expected behaviour only the Day 3 report can show (never counted as passed)
     notes: list[str] = field(default_factory=list)
 
 
@@ -43,6 +47,9 @@ def ref(result: ToolResult, role: str, *, name: str | None = None, contains: str
 
 def shows(result: ToolResult, role: str, contains: str) -> bool:
     return any(e["role"] == role and contains in e["name"] for e in result.data["elements"])
+
+
+INVOICE = Plan(sop_id="process-invoice")
 
 
 def oracle_for(run_id: str, channel: str = "api") -> Oracle:

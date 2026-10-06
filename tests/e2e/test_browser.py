@@ -14,6 +14,7 @@ from agent.tools.browser import MAX_VIEW_CHARS
 from bench import tasks
 from bench.live import run_oracle, serve
 from bench.oracles import oracle_for, ref
+from tests.agent.agent_fixtures import AllowAllGate
 
 pytestmark = pytest.mark.e2e
 
@@ -32,7 +33,8 @@ def browse(acme, body, *, timeout=None, chaos=None):
     acme.admin("POST", "/__admin/reset", seed="base", now=NOW)
     if chaos:
         acme.admin("POST", "/__admin/chaos", profile=chaos)
-    run = start_run("browser test", datetime.fromisoformat(NOW), config=acme.agent_config(timeout))
+    # browser mechanics, not policy: the allow-all test gate (the policy gate holds a GUI void, ORG-008)
+    run = start_run("browser test", datetime.fromisoformat(NOW), config=acme.agent_config(timeout), gate=AllowAllGate())
 
     async def main():
         try:
@@ -233,3 +235,51 @@ def test_no_secret_reaches_the_run_store_after_a_gui_run(acme):
     assert blobs
     for secret in (acme.agent_password, acme.admin_token):
         assert not any(secret.encode() in blob for blob in blobs)
+
+
+# --- what the gate saw is what is sent (D-125, N.144) -------------------------------------------------------------
+
+def _compose(run_steps_after_fill):
+    async def body(run):
+        form = await run.call("browser_open", {"path": "/mail/compose"})
+        for label, value in (("Recipient", "neha.kulkarni@acme.example"), ("Subject", "Hello"), ("Message", "Hi")):
+            await run.call("browser_fill", {"ref": ref(form, "textbox", name=label), "value": value})
+        return await run_steps_after_fill(run, ref(form, "button", name="Send mail"))
+    return body
+
+
+def test_the_gate_sees_the_fields_a_gui_submit_sends(acme):
+    from tests.agent.agent_fixtures import FixedGate
+    from agent.policy.gate import Decision
+    seen = []
+
+    async def click(run, send):
+        recorder = FixedGate(Decision(effect="deny", policy_ids=["TEST-1"], reason="look, do not send"))
+        run.registry.gate = recorder
+        result = await run.call("browser_click", {"ref": send})
+        seen.extend(recorder.seen)
+        return result
+    result = browse(acme, _compose(click))
+    assert result.error_type == "policy_denied"
+    assert {k: seen[0].args[k] for k in ("to", "subject", "body")} == {
+        "to": "neha.kulkarni@acme.example", "subject": "Hello", "body": "Hi"}
+    assert "idempotency_token" not in seen[0].args and seen[0].trust_sensitive == ("to",)
+
+
+def test_a_form_changed_after_the_decision_is_not_submitted(acme):
+    import dataclasses
+    before = count(acme, "SELECT COUNT(*) FROM mail WHERE folder = 'outbox'")
+
+    async def click(run, send):
+        spec = run.registry.get("browser_click")
+        original = spec.gate_args_of
+
+        async def then_change(args):  # test-side surgery between the gate's read and the click
+            seen = await original(args)
+            await (await run.browser.page()).fill("#to", "someone@evil.example")
+            return seen
+        run.registry._tools["browser_click"] = dataclasses.replace(spec, gate_args_of=then_change)
+        return await run.call("browser_click", {"ref": send})
+    result = browse(acme, _compose(click))
+    assert result.error_type == "precondition_failed" and "changed after the gate decided" in result.detail
+    assert count(acme, "SELECT COUNT(*) FROM mail WHERE folder = 'outbox'") == before

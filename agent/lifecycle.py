@@ -1,5 +1,8 @@
-"""Run lifecycle: start a run (run id, frozen now, run store, a registry bound to this run's own Acme session)
-and roll it back (register 7.3, 5.4).
+"""Run lifecycle: start a run (run id, frozen now, run store, the policy gate, a registry bound to this run's own
+Acme session), mark where it starts in Acme's audit log, and roll it back (register 7.3, 5.4).
+
+Every run gets the policy gate (agent/policy/gate.py) over the policy file, this run's facts and the approval
+store; a test may inject another gate, the operator never does (P.2).
 
 Rollback walks the run's successful writes from its own event log, newest first, and calls each write's undo
 tool through `registry.call`, so every compensation passes the gate and is logged like any other call. Undo
@@ -17,11 +20,15 @@ from typing import Any
 import httpx
 
 from agent.config import load_config
+from agent.plan import Plan
+from agent.policy.approvals import ApprovalStore
+from agent.policy.facts import RunFacts
 from agent.policy.gate import PolicyGate
+from agent.policy.loader import load_policies
 from agent.store import RunStore
 from agent.tools.api import AcmeClient, load_catalog
 from agent.tools.browser import BrowserSession
-from agent.tools.registry import Registry, RunContext, ToolResult, build_registry
+from agent.tools.registry import Gate, Registry, RunContext, ToolResult, build_registry
 
 WRITES = ("reversible_write", "irreversible_write", "external_comms")
 
@@ -32,6 +39,8 @@ class Run:
     registry: Registry
     client: AcmeClient
     browser: BrowserSession
+    approvals: ApprovalStore
+    plan: Plan | None = None
 
     @property
     def run_id(self) -> str:
@@ -40,22 +49,44 @@ class Run:
     async def call(self, tool: str, args: Mapping[str, Any]) -> ToolResult:
         return await self.registry.call(tool, dict(args), self.ctx)
 
+    async def begin(self) -> ToolResult:
+        """Record, once, the last id in Acme's audit log before the run does anything (a `run_start` event). The
+        verifier's side-effect check and the gate's `created` facts read the audit log from that mark."""
+        events = self.ctx.store.events(self.run_id)
+        if any(e["type"] == "run_start" for e in events):
+            return ToolResult(ok=True, detail="already started")
+        since = 0
+        while True:
+            page = await self.call("list_audit", {"since": since, "limit": 1000})
+            if not page.ok:
+                return page
+            since = page.data["next_since"]
+            if not page.data["has_more"]:
+                break
+        self.ctx.store.append(self.run_id, "run_start", self.ctx.now.isoformat(), {"audit_since": since})
+        return ToolResult(ok=True, detail=f"audit start mark {since}", data={"audit_since": since})
+
     async def close(self) -> None:
         await self.browser.close()
         await self.client.aclose()
 
 
 def start_run(request: str, now: datetime, *, store: RunStore | None = None, config: Mapping[str, str] | None = None,
-              gate: PolicyGate | None = None, transport: httpx.AsyncBaseTransport | None = None) -> Run:
+              gate: Gate | None = None, transport: httpx.AsyncBaseTransport | None = None,
+              plan: Plan | None = None) -> Run:
     """`now` is the run's frozen business time: the task file's `now` when the harness runs a task, the caller's clock for a live
     request (agent/ never reads the wall clock itself). One HTTP client and one browser context, so one cookie jar
     each, per run; the browser starts only when a browser tool is first called."""
     store = store or RunStore()
     config = load_config() if config is None else config
-    client = AcmeClient(config, load_catalog(), transport)
+    catalog = load_catalog()
+    client = AcmeClient(config, catalog, transport)
     browser = BrowserSession(client, headed=config.get("HEADED") == "1")
-    ctx = RunContext(run_id=store.start_run(request, now), now=now, store=store)
-    return Run(ctx, build_registry(gate, client=client, browser=browser), client, browser)
+    approvals = ApprovalStore(store)
+    gate = gate or PolicyGate(load_policies(), RunFacts(store, catalog), approvals)  # a bad policy file raises here
+    ctx = RunContext(run_id=store.start_run(request, now), now=now, store=store, sop_id=plan.sop_id if plan else None)
+    registry = build_registry(gate, client=client, browser=browser, approvals=approvals)
+    return Run(ctx, registry, client, browser, approvals, plan)
 
 
 def run_writes(events: list[dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:

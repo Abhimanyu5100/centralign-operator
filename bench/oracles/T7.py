@@ -1,7 +1,7 @@
 """T7 "Process Patel Engineering's invoice.": the newest Patel mail (INV-5512, not the paid INV-5480); the PDF prints
 the PO number above the invoice number, and the invoice number is what is entered."""
 
-from bench.oracles import Oracle
+from bench.oracles import INVOICE, Oracle
 from bench.oracles.invoice import invoice_steps, read_back
 
 STEPS = invoice_steps(
@@ -10,4 +10,4 @@ STEPS = invoice_steps(
              "due_date": "2026-11-04", "amount_paise": 4_130_000, "tax_paise": 630_000},
 ) + [read_back()]
 
-RUNS = {"T7": Oracle(STEPS)}
+RUNS = {"T7": Oracle(STEPS, INVOICE)}

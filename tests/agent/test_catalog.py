@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from acme.app import create_app
 from agent.tools.api import CATALOG_PATH, AcmeClient, Catalog, CatalogError, api_tools, args_model, load_catalog
 from agent.tools.registry import build_registry
+from tests.agent.agent_fixtures import AllowAllGate
 
 RAW = yaml.safe_load(CATALOG_PATH.read_text())
 
@@ -27,8 +28,8 @@ def _with(change) -> dict:
 
 def test_the_real_catalog_loads_and_its_registry_validates():
     catalog = load_catalog()
-    registry = build_registry()
-    assert len(catalog.tools) >= 25 and len(registry.specs()) == len(catalog.tools) + 6  # + extract_pdf_text and five browser tools
+    registry = build_registry(AllowAllGate())
+    assert len(catalog.tools) >= 25 and len(registry.specs()) == len(catalog.tools) + 8  # + extract_pdf_text, five browser and two ask tools
     registry.validate()
 
 

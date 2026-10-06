@@ -3,7 +3,7 @@ INV-1012) -> entered -> over the ORG-001 limit, so Acme leaves it pending_approv
 business approval."""
 
 from agent.scripted import Step
-from bench.oracles import Oracle
+from bench.oracles import INVOICE, Oracle
 from bench.oracles.invoice import invoice_steps, read_back
 
 STEPS = invoice_steps(
@@ -16,4 +16,4 @@ STEPS = invoice_steps(
     read_back(),
 ]
 
-RUNS = {"T1": Oracle(STEPS)}
+RUNS = {"T1": Oracle(STEPS, INVOICE)}

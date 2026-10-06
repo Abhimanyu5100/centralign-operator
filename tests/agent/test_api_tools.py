@@ -272,4 +272,5 @@ def test_the_password_never_reaches_the_run_log(sandbox):
 
 def test_the_catalog_names_every_tool_the_registry_holds(sandbox):
     run = sandbox.run()
-    assert {s.name for s in run.registry.specs()} == {e.name for e in load_catalog().tools} | {"extract_pdf_text", "browser_open", "browser_observe", "browser_click", "browser_fill", "browser_select"}
+    assert {s.name for s in run.registry.specs()} == {e.name for e in load_catalog().tools} | {"extract_pdf_text", "browser_open", "browser_observe", "browser_click", "browser_fill", "browser_select",
+        "ask_user", "declare_infeasible"}

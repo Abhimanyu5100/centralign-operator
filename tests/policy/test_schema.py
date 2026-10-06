@@ -16,8 +16,12 @@ CONDITIONS = {
     "amount_gt": {"type": "amount_gt", "arg": "amount_paise", "paise": 5_000_000},
     "vendor_status_not_in": {"type": "vendor_status_not_in", "arg": "vendor_id", "statuses": ["approved"]},
     "recipient_domain_not_in": {"type": "recipient_domain_not_in", "arg": "to", "allowlist": "mail_allowlist.yaml"},
-    "field_source_untrusted": {"type": "field_source_untrusted", "args": ["payee", "bank_account"]},
+    "field_source_untrusted": {"type": "field_source_untrusted", "allowlist": "mail_allowlist.yaml"},
+    "side_effect_in": {"type": "side_effect_in", "side_effects": ["irreversible_write", "external_comms"]},
+    "run_has_no_sop": {"type": "run_has_no_sop"},
+    "target_not_created_by_run": {"type": "target_not_created_by_run"},
 }
+OPTIONAL_FIELDS = {"field_source_untrusted": {"allowlist"}}  # without it no address is exempt
 # for each type: variants that must be rejected (a field changed or added)
 BAD_CONDITIONS = {
     "tool_in": [{"tools": []}, {"tools": ["bad name"]}, {"tools": "send_mail"}, {"extra": 1}],
@@ -28,7 +32,11 @@ BAD_CONDITIONS = {
     "recipient_domain_not_in": [{"allowlist": "../mail_allowlist.yaml"}, {"allowlist": "/etc/passwd"},
                                 {"allowlist": "mail_allowlist.txt"}, {"allowlist": ["x.example"]},
                                 {"domains": ["x.example"]}, {"extra": 1}],
-    "field_source_untrusted": [{"args": []}, {"args": "payee"}, {"extra": 1}],
+    "field_source_untrusted": [{"args": ["to"]}, {"allowlist": "../mail_allowlist.yaml"}, {"allowlist": ["x"]},
+                               {"extra": 1}],
+    "side_effect_in": [{"side_effects": []}, {"side_effects": ["write"]}, {"side_effects": "read"}, {"extra": 1}],
+    "run_has_no_sop": [{"extra": 1}, {"sop_id": None}],
+    "target_not_created_by_run": [{"extra": 1}, {"entity": "invoice"}],
 }
 ACME_CHECKS = {
     "constant": {"kind": "constant", "ref": "acme.services.APPROVAL_LIMIT_PAISE", "equals": 5_000_000},
@@ -82,7 +90,7 @@ def test_each_condition_type_rejects_bad_values_and_unknown_keys(ctype, change):
 
 @pytest.mark.parametrize("ctype", CONDITIONS)
 def test_each_condition_type_needs_all_its_fields(ctype):
-    for key in set(CONDITIONS[ctype]) - {"type"}:
+    for key in set(CONDITIONS[ctype]) - {"type"} - OPTIONAL_FIELDS.get(ctype, set()):
         cond = {k: v for k, v in CONDITIONS[ctype].items() if k != key}
         rejects(policy(rule(when=[cond])))
 

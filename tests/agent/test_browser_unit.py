@@ -69,10 +69,21 @@ def test_chromium_is_launched_with_exactly_that_env(monkeypatch):
 
 # --- what the gate sees for a click (N.126, D-117) ----------------------------------------------------------------
 
-def _registry_with(elements: dict[str, Element], gate):
+class _FakeLocator:
+    """Stands in for a Playwright locator: `evaluate` returns the form's fields (D-125)."""
+
+    def __init__(self, fields: dict[str, str]):
+        self.fields = fields
+
+    async def evaluate(self, script: str) -> dict[str, str]:
+        return dict(self.fields)
+
+
+def _registry_with(elements: dict[str, Element], gate, fields: dict[str, str] | None = None):
     client = AcmeClient({"ACME_URL": "http://acme.test"}, load_catalog())
     session = BrowserSession(client)
     session.elements = elements
+    session.locator = lambda el: _FakeLocator(fields or {})
     return build_registry(gate, client=client, browser=session)
 
 
@@ -122,3 +133,52 @@ def test_every_ui_form_in_the_catalog_matches_its_api_twin():
 def test_open_only_takes_a_path_on_the_site(tmp_path, path):
     result = call(_registry_with({}, FixedGate()), "browser_open", {"path": path}, ctx_for(tmp_path))
     assert result.error_type == "invalid_args"
+
+
+# --- what a submit sends reaches the gate and the fingerprint (D-125, N.144); off-site targets (N.145) ----------------
+
+DENY = Decision(effect="deny", policy_ids=["TEST-1"], reason="stop before the browser starts")
+
+
+def test_a_submit_hands_the_gate_its_form_fields_and_their_trust_sensitivity(tmp_path):
+    gate = FixedGate(DENY)
+    fields = {"to": "accounts@sharmalogistics.example", "subject": "s", "body": "b"}
+    call(_registry_with(ELEMENTS, gate, fields), "browser_click", {"ref": "b7"}, ctx_for(tmp_path))
+    seen = gate.seen[0]
+    assert seen.args == {"ref": "b7", **fields} and seen.trust_sensitive == ("to",)
+
+
+def test_the_fingerprint_covers_the_form_so_an_approval_binds_the_content(tmp_path):
+    prints = []
+    for body in ("first", "second"):
+        gate = FixedGate(DENY)
+        call(_registry_with(ELEMENTS, gate, {"to": "a@b.example", "body": body}), "browser_click", {"ref": "b7"},
+             ctx_for(tmp_path / body))
+        prints.append(gate.seen[0].fingerprint)
+    assert prints[0] != prints[1]
+
+
+def test_a_link_or_a_get_form_sends_no_fields_to_the_gate(tmp_path):
+    for ref in ("l1", "b4"):
+        gate = FixedGate(DENY)
+        call(_registry_with(ELEMENTS, gate, {"q": "should not be read"}), "browser_click", {"ref": ref},
+             ctx_for(tmp_path / ref))
+        assert gate.seen[0].args == {"ref": ref}
+
+
+def test_a_form_field_named_like_a_tool_argument_fails_closed(tmp_path):
+    gate = FixedGate(DENY)
+    result = call(_registry_with(ELEMENTS, gate, {"ref": "b9"}), "browser_click", {"ref": "b7"}, ctx_for(tmp_path))
+    assert result.error_type == "tool_crashed" and gate.seen == []
+
+
+@pytest.mark.parametrize("raw, target", [
+    ("/invoices/3", "/invoices/3"), ("invoices?status=approved", "/mail/invoices?status=approved"),
+    ("/api/../__admin/reset", "/__admin/reset"), ("/%5F%5Fadmin/reset", "/%5F%5Fadmin/reset"),
+    ("", "/mail/12"), ("//__admin/reset", "http://__admin/reset"),
+    ("http://127.0.0.1:8100/api/approvals/A-1/approve", "http://127.0.0.1:8100/api/approvals/A-1/approve"),
+    ("https://evil.example/x", "https://evil.example/x"),
+])
+def test_targets_are_resolved_against_the_page_and_off_site_ones_stay_full_urls(raw, target):
+    from agent.tools.browser import site_target
+    assert site_target("http://acme.test/mail/12", raw) == target

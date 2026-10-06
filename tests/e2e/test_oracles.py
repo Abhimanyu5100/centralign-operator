@@ -1,7 +1,9 @@
 """Oracles end to end: a real Acme server (uvicorn on localhost, bench/live.py), the scripted agent through the
-registry and the pass-through gate, the task's checker on the result (Day 2.2).
+registry and the policy gate, the task's checker on the result (Day 2.2; the real gate from Day 3.1).
 
-- every oracle run's end state passes its DB checker with chaos off (report checks stay pending until Day 3);
+- every oracle run's end state passes its DB checker with chaos off and ends the way its task expects (T4 asks,
+  T5 declines, T9 pauses for the action approval and the scripted approver decides); report checks stay pending
+  until Day 3.3;
 - `commit_then_timeout` (3.5): the first IT ticket commits but its response is held past the client timeout; the
   tool reads back, reports already_done and Acme holds exactly one ticket of each type;
 - `flaky_500` seed 0 (attempts 1 and 2 fail before writing): exactly one invoice and one approval request;
@@ -44,10 +46,13 @@ def _count(acme, sql) -> int:
         conn.close()
 
 
+ENDED = {"T4": "asked", "T5": "infeasible", "T9:none": "paused", "T9:reject": "blocked"}
+
+
 @pytest.mark.parametrize("run_id", RUN_IDS)
 def test_every_oracle_passes_its_db_checker_with_chaos_off(acme, run_id):
     result = _oracle(acme, run_id)
-    assert result.script.ok, result.script.stopped_at
+    assert result.script.ended == ENDED.get(run_id, "done"), (result.script.ended, result.script.stopped_at)
     assert result.result.passed, [(c.name, c.detail) for c in result.result.checks if not c.ok]
     assert result.pending and result.pending[0].startswith("report: status")  # never counted as passed
 
@@ -80,11 +85,12 @@ def test_rollback_on_the_live_server_restores_net_entity_state(acme):
     acme.admin("POST", "/__admin/reset", seed=task.seed, now=task.now)
     snapshot = acme.admin("POST", "/__admin/snapshot")["snapshot"]
     from datetime import datetime
-    run = start_run(task.request, datetime.fromisoformat(task.now), config=acme.agent_config())
+    oracle = oracle_for("T1")
+    run = start_run(task.request, datetime.fromisoformat(task.now), config=acme.agent_config(), plan=oracle.plan)
 
     async def body():
         try:
-            assert (await run_script(run, oracle_for("T1").steps)).ok
+            assert (await run_script(run, oracle.steps)).ended == "done"
             return await rollback(run)
         finally:
             await run.close()
@@ -100,3 +106,19 @@ def test_the_harness_process_never_holds_the_admin_token(acme):
     # the token lives only in the Acme child's env, so the agent and the Playwright driver cannot inherit it (N.92)
     import os
     assert os.environ.get("ACME_ADMIN_TOKEN") != acme.admin_token
+
+
+def test_t9_pauses_before_the_send_and_the_approver_decides(acme):
+    """The send is held (ORG-005), filed with the predicted email, approved in the inbox, then run exactly once."""
+    from agent.store import RunStore
+    result = _oracle(acme, "T9:approve")
+    assert [d["status"] for d in result.decisions] == ["approved"]
+    events = RunStore().events(result.agent_run_id)
+    sends = [e for e in events if e["type"] == "tool_result" and e["payload"]["tool"] == "send_mail"]
+    approval = [e for e in events if e["type"] == "approval"]
+    assert [e["payload"]["error_type"] for e in sends] == ["approval_required", None]
+    assert [e["payload"]["action"] for e in approval] == ["requested", "decided", "consumed"]
+    # filed while the held call is answered, decided in the inbox, consumed just before the same call runs
+    assert approval[0]["seq"] < sends[0]["seq"] < approval[1]["seq"] < approval[2]["seq"] < sends[1]["seq"]
+    assert approval[0]["payload"]["predicted"]["args"]["to"] == "accounts@sharmalogistics.example"
+    assert _count(acme, "SELECT COUNT(*) FROM mail WHERE folder = 'outbox'") == 1

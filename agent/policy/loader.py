@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from agent.policy.models import PolicyFile, RecipientDomainNotIn
+from agent.policy.models import FieldSourceUntrusted, PolicyFile, RecipientDomainNotIn
 
 KNOWLEDGE_DIR = Path(__file__).resolve().parents[2] / "acme" / "knowledge"
 POLICIES_PATH = KNOWLEDGE_DIR / "policies.yaml"
@@ -76,7 +76,8 @@ def load_policies(path: Path | str = POLICIES_PATH) -> PolicyFile:
     allowlists = {}  # each file a rule names is read once, here, and kept on the policy (no re-read later)
     for rule in policies.rules:
         for cond in rule.when:
-            if isinstance(cond, RecipientDomainNotIn) and cond.allowlist not in allowlists:
+            if isinstance(cond, (RecipientDomainNotIn, FieldSourceUntrusted)) and cond.allowlist \
+                    and cond.allowlist not in allowlists:
                 allowlists[cond.allowlist] = load_allowlist_domains(path.parent / cond.allowlist)
     policies.attach_allowlists(allowlists)
     return policies

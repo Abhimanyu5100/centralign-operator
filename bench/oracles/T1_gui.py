@@ -1,5 +1,6 @@
-"""T1 through the GUI channel only (Day 2.3): the browser tools, by role and accessible name, from the inbox to
-the business approval request. The PDF is not read here (a browser cannot extract it); the values are the ones
+"""T1 with every write through the GUI (Day 2.3): the browser tools, by role and accessible name, from the inbox to
+the business approval request. One API read of the vendor master comes first: ORG-002 needs the vendor's status from
+a trusted read in the run (D-127), and a page is not one. The PDF is not read here (a browser cannot extract it); the values are the ones
 printed on it, as in the API oracle.
 
 The submit button is found by what it does (the form it submits, as the observation shows it), not by its label,
@@ -9,7 +10,7 @@ list: under `silent_drop_write` the success toast shows but no row exists, so it
 """
 
 from agent.scripted import Step
-from bench.oracles import Oracle, ref, shows
+from bench.oracles import INVOICE, Oracle, ref, shows
 
 FIELDS = [("Invoice number", "INV-1043"), ("PO number", "PO-2026-0412"), ("Invoice date", "2026-10-03"),
           ("Due date", "2026-11-02"), ("Total including tax (INR)", "62400.00"), ("Tax (INR)", "9518.64")]
@@ -43,6 +44,7 @@ def read_back(r) -> object:
 
 
 STEPS = [
+    Step("find_vendors", {"q": "Sharma"}),  # ORG-002 needs a trusted vendor read in the run (D-127); writes stay GUI
     Step("browser_open", {"path": "/mail"}, name="inbox"),
     Step("browser_click", lambda r: {"ref": ref(r["inbox"], "link", contains="– Invoice INV-1043")}, name="mail"),
     *enter_invoice("mail", ""),
@@ -53,4 +55,4 @@ STEPS = [
     Step("browser_click", lambda r: {"ref": ref(r["invoice"], "button", name="Request approval")}, name="request"),
 ]
 
-RUNS = {"T1": Oracle(STEPS)}
+RUNS = {"T1": Oracle(STEPS, INVOICE)}

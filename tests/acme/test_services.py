@@ -5,7 +5,7 @@ import json
 import pytest
 
 from acme import services as s
-from acme.models import ApprovalIn, DecisionIn, EmployeeIn, InvoiceIn, ItTicketIn, PaymentIn
+from acme.models import ApprovalIn, DecisionIn, EmployeeIn, InvoiceIn, ItTicketIn, MailIn, PaymentIn
 from acme.permissions import ACTION_ROLES, USER_ROLES, allowed
 
 
@@ -317,3 +317,47 @@ def test_audit_ids_are_monotonic(conn):
     over_limit_pending(conn)
     ids = [r["id"] for r in conn.execute("SELECT id FROM audit_log ORDER BY rowid")]
     assert ids == sorted(ids) and len(ids) == len(set(ids))
+
+
+# --- one service write = one audit ts group (D-135: the verifier's layer 3 relies on it) --------------------
+
+
+def test_every_service_write_is_exactly_one_audit_ts_group_cascades_included(conn):
+    """Layer 3 groups audit rows by `ts` into write calls. That holds only if each service write ticks the clock
+    once and stamps its cascaded rows (auto-approval, approval withdrawals) with the same `ts`."""
+    mark = conn.execute("SELECT COALESCE(MAX(id), 0) FROM audit_log").fetchone()[0]
+    calls = 0
+
+    def call(fn, *args):
+        nonlocal calls
+        calls += 1
+        return fn(conn, *args)
+
+    call(s.submit_invoice, "ops-agent", "api", invoice_in())                        # + system auto-approve row
+    pending = call(s.submit_invoice, "ops-agent", "ui", invoice_in(invoice_no="INV-9001", amount_paise=6_240_000,
+                                                                   tax_paise=951_864))
+    call(s.request_approval, "ops-agent", "api", ApprovalIn(entity_type="invoice", entity_id=pending["id"]))
+    call(s.void_invoice, "ops-agent", "api", pending["id"])                         # + approval withdrawn
+    approved = call(s.submit_invoice, "ops-agent", "api", invoice_in(invoice_no="INV-9002"))
+    payment = call(s.create_payment, "ops-agent", "api", PaymentIn(invoice_id=approved["id"]))
+    call(s.request_approval, "ops-agent", "api", ApprovalIn(entity_type="payment", entity_id=payment["id"]))
+    call(s.cancel_payment, "ops-agent", "api", payment["id"])                       # + approval withdrawn
+    employee = call(s.create_employee, "ops-agent", "api", employee_in())
+    ticket = call(s.create_it_ticket, "ops-agent", "api", ItTicketIn(type="laptop", employee_id=employee["id"]))
+    call(s.cancel_it_ticket, "ops-agent", "api", ticket["id"])
+    call(s.cancel_employee, "ops-agent", "api", employee["id"])
+    call(s.send_mail, "ops-agent", "api", MailIn(to="someone@acme.example", subject="Hello", body="Hi"))
+
+    rows = conn.execute("SELECT id, ts, action FROM audit_log WHERE id > ? ORDER BY id", (mark,)).fetchall()
+    groups: dict[str, list] = {}
+    for row in rows:
+        groups.setdefault(row["ts"], []).append(row)
+    assert len(groups) == calls
+    # a cascade's rows may come in any order (withdrawals are written before the void), so layer 3 must match a
+    # call to any row of its group, not only the first one
+    cascades = sorted(sorted(r["action"] for r in g) for g in groups.values() if len(g) > 1)
+    assert cascades == [["approval.withdraw", "invoice.void"], ["approval.withdraw", "payment.cancel"],
+                        ["invoice.auto_approve", "invoice.submit"], ["invoice.auto_approve", "invoice.submit"]]
+    for group in groups.values():  # a group's rows are consecutive: no other write's row lands in between
+        ids = [r["id"] for r in group]
+        assert ids == list(range(ids[0], ids[0] + len(ids)))

@@ -16,7 +16,8 @@ from pydantic import AwareDatetime, TypeAdapter
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PATH = ROOT / "runs" / "runs.db"
-EVENT_TYPES = ("tool_call", "precondition", "policy_decision", "tool_result")
+EVENT_TYPES = ("tool_call", "precondition", "policy_decision", "tool_result",
+               "approval", "security_finding", "run_start", "verifier_result")  # Day 3 (D-131)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
@@ -76,6 +77,18 @@ class RunStore:
             self._db.execute("ROLLBACK")
             raise
         return seq
+
+    def run(self, run_id: str) -> dict[str, str]:
+        row = self._db.execute("SELECT request, now FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+        if row is None:
+            raise KeyError(f"no run {run_id!r}")
+        return {"run_id": run_id, "request": row[0], "now": row[1]}
+
+    def events_of_type(self, type: str) -> list[dict[str, Any]]:
+        """Every event of one type across all runs, in run and seq order (the approval inbox lists them)."""
+        rows = self._db.execute("SELECT run_id, seq, payload FROM events WHERE type = ? ORDER BY run_id, seq",
+                                (type,)).fetchall()
+        return [{"run_id": r, "seq": s, "payload": json.loads(p)} for r, s, p in rows]
 
     def events(self, run_id: str) -> list[dict[str, Any]]:
         rows = self._db.execute("SELECT seq, type, logical_time, payload FROM events WHERE run_id = ? ORDER BY seq",

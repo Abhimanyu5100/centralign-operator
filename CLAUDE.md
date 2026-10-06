@@ -38,9 +38,11 @@ Request
          |   every tool call --> Policy gate --> Tool registry --> Acme
          |   failure classifier: retry / switch channel / replan / ask (two-strikes rule)
          |   predicts outcome before irreversible writes
-  -> [4] Verifier                        (postconditions, milestone predicates via a DIFFERENT channel,
-         |                                side-effect check over Acme's audit log since run start,
-         |                                fresh-context LLM judge for fuzzy criteria)
+  -> [4] Verifier                        (postconditions and milestone predicates as INDEPENDENT reads, never
+         |                                the write's own response (an API write is read back by an API GET;
+         |                                a GUI write through the API); side-effect check over Acme's audit
+         |                                log since run start, cross-checked by the harness's /__admin/diff
+         |                                (D-134); fresh-context LLM judge for fuzzy criteria)
          |   unmet criteria -> back to Planner (max 3 replans) -> else escalate with evidence
   -> [5] Report                          (status from verifier only; evidence from runtime artifacts;
                                           behavior narrative; side-effect list; security findings;
@@ -145,10 +147,12 @@ acme/                 # mock company: FastAPI app, SQLite, templates, seed data,
 agent/                # the operator runtime  (NOT named `operator` — that shadows Python's stdlib)
   llm/                # client, providers, cassette
   goal.py feasibility.py planner.py executor.py report.py store.py
+  plan.py             # Plan / Milestone / Predicate models: the planner's output, the verifier's input (D-131)
   scripted.py         # deterministic driver used in Phase A (no LLM)
   tools/              # registry.py + browser.py (Playwright) files.py api.py ask.py  (no general code tool, D-121)
   policy/             # gate.py, models, loader for acme/knowledge/policies.yaml, scanner.py
-                      # (deterministic payment/bank-instruction scanner for untrusted text)
+                      # (deterministic payment/bank-instruction scanner for untrusted text),
+                      # facts.py (the gate's read-only view of the run log), approvals.py (action approvals)
   verifier/           # predicates.py side_effects.py (audit log since run start) judge.py
   memory/             # knowledge.py run_memory.py findings.py
 bench/                # AcmeBench: tasks/*.yaml, checkers/, oracles/, adversarial/, run_bench.py, results/
@@ -208,7 +212,7 @@ author's manual curl check on Day 3 evening (outside the repo).
 | --- | --- | --- | --- | --- |
 | 1 | Oct 6 | A | Acme sandbox per `docs/acme-spec.md`: app, roles/login, business rules (auto-approval ≤ ₹50,000, payment requests, undo paths), read + write API incl. `GET /api/audit`, mailbox (incl. HR offer email), generated PDFs, knowledge (SOPs, policies with `enforced_by`), admin endpoints (reset with frozen `now`, snapshot, state hash, diff), five chaos profiles (`rename_submit_button`, `session_expiry_at_step_N`, `flaky_500`, `commit_then_timeout`, `silent_drop_write`); task YAMLs T1–T9 with frozen `now` + SQL checkers + checker tests | Every task doable by hand in the browser; checkers pass on a hand-made good state and fail on a bad one |
 | 2 | Oct 7 | A | Tool registry (uniform contract), tools: Playwright browser with pruned a11y view, Acme API, mailbox, files/PDF extraction; normalisers; typed results; run store + append-only event log; read-before-retry for writes; compensating actions; pass-through `PolicyGate` with the final interface (`check(call) -> Decision`: `allow \| deny \| require_approval` plus `policy_id` and `reason`) that allows and logs; scripted agent; test that `agent/` never reads `bench/` | Invoice oracle runs end to end through the registry and the pass-through gate; rollback restores net entity state (run rows void/cancelled) |
-| 3 | Oct 8 | A | Policy gate rules (YAML + evaluator, `enforced_by`, hierarchy, side-effect classes, provenance on trust-sensitive fields, action approvals + approval inbox UI); payment/bank-instruction scanner; deterministic verifier layers (postconditions, predicates via a different channel, side-effect check over `GET /api/audit` since run start); deterministic failure classifier; report generator; `bench/adversarial/` scripts; ~~remaining four chaos profiles~~ (done Day 2.3, D-116); AcmeBench harness running all oracles with chaos off and on. **Evening:** Dockerfile + compose (Acme plus runner); author's manual 5-minute curl check per provider | All oracles pass checkers with chaos off; under chaos, failures are detected and classified correctly and the report shows them; every adversarial script is stopped with the expected policy ID; verifier side-effect check agrees with `/__admin/diff`; `docker compose up` serves Acme |
+| 3 | Oct 8 | A | Policy gate rules (YAML + evaluator, `enforced_by`, hierarchy, side-effect classes, provenance on trust-sensitive fields, action approvals + approval inbox UI); payment/bank-instruction scanner; deterministic verifier layers (postconditions, predicates as independent reads, side-effect check over `GET /api/audit` since run start, D-134); deterministic failure classifier; report generator; `bench/adversarial/` scripts; ~~remaining four chaos profiles~~ (done Day 2.3, D-116); AcmeBench harness running all oracles with chaos off and on. **Evening:** Dockerfile + compose (Acme plus runner); author's manual 5-minute curl check per provider | All oracles pass checkers with chaos off; under chaos, failures are detected and classified correctly and the report shows them; every adversarial script is stopped with the expected policy ID; verifier side-effect check agrees with `/__admin/diff`; `docker compose up` serves Acme |
 | 4 | Oct 9 | B | LLM client + cassettes + smoke test through the client (first thing); Goal Spec + feasibility gate (`agent/feasibility.py`); planner; executor loop replacing the scripted agent | Invoice task completed by the LLM executor; impossible task declined |
 | 5 | Oct 10 | B | LLM judge, replanning, ask flow, recovery behaviour; remaining tasks with the LLM; start the benchmark runs (cassettes) | Onboarding, ambiguity and T9 predict-then-approve pass; chaos run recovers |
 | 6 | Oct 11 | B | Finish AcmeBench with the LLM (8 core tasks × 3 runs chaos off = pass^3, plus 4 tasks × 1 run chaos on; CuP, side effects, refusals); governed learning v1; run viewer polish; README; demo video; fresh-clone test; stretch only: GUI-trace-to-tool; SUBMIT tonight | Results table from one command |
@@ -247,7 +251,9 @@ make pdfs        # regenerate every PDF and MANIFEST.sha256 (only after an inten
 make oracle TASK=T1|all [CHANNEL=gui] [CHAOS=profile CHAOS_SEED=0] [LIVE=1] [EVENTS=1] [HEADED=1]
                  # Phase A: scripted agent runs the oracle, then the checker (in-process Acme unless LIVE=1)
 make run TASK="..." [CHAOS=profile] [REPLAY=1]   # Phase B: LLM agent (Day 4+)
-make bench       # AcmeBench -> bench/results/ (Day 3+)
+make bench       # AcmeBench -> bench/results/ (Day 3.3)
+make ui          # action-approval inbox on 127.0.0.1:8100 (approve or reject held calls)
+make adversarial # every bench/adversarial script against an in-process Acme (each must be stopped as expected)
 make test        # fast: unit, integration, checker (excludes the e2e marker)
 make test-e2e    # Playwright and oracle runs (from Day 2)
 ```

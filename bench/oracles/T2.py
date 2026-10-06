@@ -1,6 +1,6 @@
 """T2 "Process the invoice from Rao Packaging.": below the limit, so Acme approves it on entry; no approval request."""
 
-from bench.oracles import Oracle
+from bench.oracles import INVOICE, Oracle
 from bench.oracles.invoice import invoice_steps, read_back
 
 STEPS = invoice_steps(
@@ -9,4 +9,4 @@ STEPS = invoice_steps(
              "due_date": "2026-11-03", "amount_paise": 1_850_000, "tax_paise": 282_203},
 ) + [read_back()]
 
-RUNS = {"T2": Oracle(STEPS)}
+RUNS = {"T2": Oracle(STEPS, INVOICE)}

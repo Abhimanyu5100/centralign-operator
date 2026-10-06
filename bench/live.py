@@ -6,9 +6,12 @@ admin token and a random ops-agent password in that child's env only: the harnes
 Playwright driver it starts never hold the token (N.92, D-105), `make oracle` needs no exported token and never
 touches the author's dev database (N.136). `live()` targets an already running `make acme` instead. The agent gets
 an explicit config (URL, its own password, timeout) and never the admin token (N.30).
+A run that the policy gate pauses for an action approval is decided by the scripted approver (bench/approver.py,
+the task's `approver`: none / approve / reject) through the approval inbox, then resumed (Day 3.1).
 Harness side only: agent/ never imports bench/ (decision 11).
 """
 
+import asyncio
 import os
 import secrets
 import socket
@@ -30,8 +33,9 @@ from acme.db import connect, db_path as default_db_path
 from acme.seed import reset
 from agent.config import load_config
 from agent.lifecycle import Run as AgentRun, start_run
-from agent.scripted import ScriptResult, run_script
+from agent.scripted import ScriptResult, resume_script, run_script
 from agent.store import RunStore
+from bench.approver import decide
 from bench.checkers import engine
 from bench.oracles import Oracle
 from bench.tasks import Run, Task
@@ -125,8 +129,9 @@ class OracleRun:
     agent_run_id: str
     script: ScriptResult
     result: engine.Result
-    pending: list[str] = field(default_factory=list)  # what only the Day 3 report or gate can show
+    pending: list[str] = field(default_factory=list)  # what only the Day 3.3 report can show
     chaos_fired: bool | None = None
+    decisions: list[dict[str, Any]] = field(default_factory=list)  # what the scripted approver decided
 
     @property
     def passed(self) -> bool:
@@ -140,9 +145,13 @@ async def run_oracle(acme: Acme, task: Task, run: Run, oracle: Oracle, *, chaos:
         acme.admin("POST", "/__admin/chaos", profile=chaos, seed=chaos_seed)  # after reset: reset clears it
     snapshot = acme.admin("POST", "/__admin/snapshot")["snapshot"]
     agent: AgentRun = start_run(task.request, datetime.fromisoformat(task.now), store=store,
-                                config=acme.agent_config(timeout))
+                                config=acme.agent_config(timeout), plan=oracle.plan)
+    decisions: list[dict[str, Any]] = []
     try:
         script = await run_script(agent, oracle.steps)
+        if script.ended == "paused":  # the approver decides in the inbox, then the run resumes
+            decisions = await asyncio.to_thread(decide, agent.ctx.store.path, agent.run_id, run.approver)
+            script = await resume_script(agent, oracle.steps, script)
     finally:
         await agent.close()
     diff = acme.admin("GET", "/__admin/diff", since=snapshot)["tables"]
@@ -150,4 +159,4 @@ async def run_oracle(acme: Acme, task: Task, run: Run, oracle: Oracle, *, chaos:
     pending = [f"report: status == {run.expected_outcome}"] + [f"report: {rc.path}" for rc in run.report_checks]
     pending += [oracle.pending] if oracle.pending else []
     fired = acme.admin("GET", "/__admin/chaos/events")["fired"] if chaos else None
-    return OracleRun(run, agent.run_id, script, result, pending, fired)
+    return OracleRun(run, agent.run_id, script, result, pending, fired, decisions)

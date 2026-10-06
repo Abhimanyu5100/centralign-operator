@@ -14,6 +14,14 @@ IST = timezone(timedelta(hours=5, minutes=30))
 NOW = datetime(2026, 10, 7, 10, 30, tzinfo=IST)
 
 
+class AllowAllGate:
+    """No rules at all: for tests of the registry, tools and lifecycle mechanics only. It lives in tests, never in
+    agent/; the operator always runs with the policy gate (tests/agent/test_lifecycle.py checks start_run)."""
+
+    def check(self, call: ToolCall) -> Decision:
+        return Decision(effect="allow", reason="allow-all test gate: no rules evaluated")
+
+
 class EchoArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str = Field(description="Text to echo back")

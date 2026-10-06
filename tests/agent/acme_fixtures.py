@@ -18,8 +18,9 @@ from acme.app import create_app
 from acme.db import connect
 from acme.seed import reset
 from agent.lifecycle import Run, start_run
+from agent.plan import Plan
 from agent.store import RunStore
-from tests.agent.agent_fixtures import NOW
+from tests.agent.agent_fixtures import NOW, AllowAllGate
 
 ADMIN = {"X-Admin-Token": "test-admin-token"}
 PASSWORD = "test-agent-password"
@@ -77,8 +78,13 @@ class Sandbox:
     def faults(self, *faults: Fault) -> Faults:
         return Faults(httpx.ASGITransport(app=self.app), list(faults))
 
-    def run(self, transport: httpx.AsyncBaseTransport | None = None, request: str = "test request") -> Run:
-        return start_run(request, NOW, store=self.store, config=CONFIG,
+    def run(self, transport: httpx.AsyncBaseTransport | None = None, request: str = "test request", *,
+            plan: Plan | None = None, gate=None) -> Run:
+        """A run on this sandbox. With a `plan`, the operator's own policy gate decides, as in a real run; without
+        one, the allow-all test gate, for tests of tool and lifecycle mechanics that are not about policy."""
+        if gate is None and plan is None:
+            gate = AllowAllGate()
+        return start_run(request, NOW, store=self.store, config=CONFIG, gate=gate, plan=plan,
                          transport=transport or httpx.ASGITransport(app=self.app))
 
     def admin_call(self, method: str, path: str, **params) -> dict:

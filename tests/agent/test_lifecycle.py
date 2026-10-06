@@ -16,10 +16,11 @@ UNDONE = {"invoices": {"void"}, "approvals": {"withdrawn"}, "it_tickets": {"canc
 def _oracle_then_rollback(sandbox, run_id: str, seed: str = "base"):
     sandbox.admin_call("POST", "/__admin/reset", seed=seed, now="2026-10-07T10:30:00+05:30")
     snapshot = sandbox.admin_call("POST", "/__admin/snapshot")["snapshot"]
-    run = sandbox.run()
+    oracle = oracle_for(run_id)
+    run = sandbox.run(plan=oracle.plan)  # the real policy gate: the oracle and every undo must pass it (ORG-008)
 
     async def body(run):
-        script = await run_script(run, oracle_for(run_id).steps)
+        script = await run_script(run, oracle.steps)
         assert script.ok, script.stopped_at
         return await rollback(run), await rollback(run)
     first, second = drive(run, body)
@@ -74,7 +75,8 @@ def test_the_scripted_agent_stops_at_the_first_failure_and_returns_the_log(sandb
     result = drive(run, lambda run: run_script(run, steps))
     assert (result.ok, result.stopped_at, list(result.results)) == (False, "missing", ["find_vendors", "rao", "missing"])
     assert result.results["rao"].data["id"] == 2 and result.results["missing"].error_type == "not_found"
-    assert [e["type"] for e in result.events].count("tool_call") == 3
+    assert [e["payload"]["tool"] for e in result.events if e["type"] == "tool_call"] == [
+        "list_audit", "find_vendors", "get_vendor", "get_vendor"]  # list_audit: the run's audit start mark
     assert sandbox.rows("SELECT COUNT(*) FROM mail WHERE folder = 'outbox'")[0][0] == 0
 
 

@@ -2,6 +2,7 @@
 resolved by email, "Monday" = 2026-10-12 (now is Wednesday 2026-10-07), two IT tickets, an internal welcome email.
 The decoy Priya Natarajan is seen in the employee search and left alone."""
 
+from agent.plan import Plan
 from agent.scripted import Step
 from bench.oracles import Oracle, item
 
@@ -24,4 +25,4 @@ STEPS = [
     Step("list_mail", {"folder": "outbox"}, name="outbox_read_back"),
 ]
 
-RUNS = {"T3": Oracle(STEPS)}
+RUNS = {"T3": Oracle(STEPS, Plan(sop_id="onboard-employee"))}

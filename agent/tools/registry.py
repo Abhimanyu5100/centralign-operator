@@ -3,6 +3,11 @@
 `registry.call(name, args, ctx)`: find the tool -> validate the args -> `gate.check` -> preconditions -> the tool.
 Each step is logged in the run store as an event of this call. A bad call never raises: the caller (the scripted
 agent now, the LLM executor from Day 4) always gets a typed `ToolResult` back.
+
+Around the gate (Day 3): a held call is filed in the approval store with its predicted outcome and comes back as
+`approval_required` with the approval id; an allow that rests on an action approval consumes it just before the
+tool runs (single use, D-103). After every result tagged as untrusted text, the scanner's findings are logged as
+`security_finding` events; they never change the result (D-086).
 """
 
 import difflib
@@ -14,12 +19,13 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, get_args
+from typing import Any, NamedTuple, Protocol, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 
-from agent.policy.gate import GATE_ERROR, Channel, Decision, HttpRequest, PolicyGate, SideEffect, ToolCall
+from agent.policy.gate import GATE_ERROR, Channel, Decision, HttpRequest, SideEffect, Target, ToolCall
+from agent.policy.scanner import scan_result
 from agent.store import RunStore
 
 # Acme's API error types, passed through unchanged (a test keeps this equal to acme/web.py ERROR_TYPES) ...
@@ -59,11 +65,22 @@ class ToolResult(BaseModel):
         return cls(ok=False, error_type=error_type, detail=detail, data=data)
 
 
+class Gate(Protocol):
+    def check(self, call: ToolCall) -> Decision: ...
+
+
+class GateArgs(NamedTuple):
+    """What a tool adds to the call the gate sees: e.g. the fields a GUI form will submit (D-125)."""
+    args: dict[str, Any]
+    trust_sensitive: tuple[str, ...] = ()
+
+
 @dataclass(frozen=True)
 class RunContext:
     run_id: str
     now: datetime        # the run's frozen business time; nothing in agent/ reads the wall clock for it
     store: RunStore
+    sop_id: str | None = None   # the SOP the run follows; None means no SOP matched (ORG-009)
 
     def __post_init__(self) -> None:
         if self.now.tzinfo is None:
@@ -92,7 +109,10 @@ class ToolSpec:
     postconditions: tuple[Check, ...] = ()
     sensitive_args: tuple[str, ...] = ()              # shown as *** in logs and results (N.123)
     transport_args: tuple[str, ...] = ()              # e.g. an idempotency key: left out of the fingerprint
+    trust_sensitive_args: tuple[str, ...] = ()        # payee, bank details, recipients, amounts (ORG-007, D-131)
     request_of: Callable[[Any], HttpRequest] | None = None   # the HTTP request the call will make, if known
+    target_of: Callable[[Any], Target | None] | None = None  # the existing record the call changes, if known
+    gate_args_of: Callable[[Any], Awaitable[GateArgs]] | None = None  # extra args the gate must see (D-125)
     # A tool whose effect depends on its target (a GUI click: a link reads, a form submit writes) names it per call;
     # `side_effect` is then the declared worst case: a stronger answer fails closed, the tool does not run (D-117).
     side_effect_of: Callable[[Any], SideEffect] | None = None
@@ -123,11 +143,13 @@ def _contract_problems(spec: ToolSpec) -> list[str]:
     for prop, schema in model.model_json_schema().get("properties", {}).items():
         if not schema.get("description"):
             problems.append(f"argument {prop!r} has no description")
-    for arg in spec.sensitive_args + spec.transport_args:
+    for arg in spec.sensitive_args + spec.transport_args + spec.trust_sensitive_args:
         if arg not in model.model_fields:
-            problems.append(f"{arg!r} is listed as sensitive or transport but is not an argument")
+            problems.append(f"{arg!r} is listed as sensitive, transport or trust-sensitive but is not an argument")
     if not inspect.iscoroutinefunction(spec.fn):
         problems.append("fn must be an async function")
+    if spec.gate_args_of is not None and not inspect.iscoroutinefunction(spec.gate_args_of):
+        problems.append("gate_args_of must be an async function")
     if spec.side_effect == "read" and (spec.undo or spec.no_undo_reason):
         problems.append("a read has no undo")
     if spec.side_effect == "reversible_write" and (not spec.undo or spec.no_undo_reason):
@@ -180,8 +202,9 @@ def _explain(exc: Exception) -> str:
 
 
 class Registry:
-    def __init__(self, gate: PolicyGate):
+    def __init__(self, gate: Gate, approvals: Any = None):
         self.gate = gate
+        self.approvals = approvals  # agent.policy.approvals.ApprovalStore; None: a held call is not filed
         self._tools: dict[str, ToolSpec] = {}
 
     def register(self, spec: ToolSpec) -> ToolSpec:
@@ -218,23 +241,16 @@ class Registry:
         secrets = _secret_values(spec, args)
         try:  # validated as JSON, like Acme's API: ISO dates are fine, "62400" for an int is not (N.122)
             parsed = spec.args_model.model_validate_json(json.dumps(args), strict=True)
-            request = spec.request_of(parsed) if spec.request_of else None
-            side_effect = spec.side_effect_of(parsed) if spec.side_effect_of else spec.side_effect
-            if side_effect not in SIDE_EFFECTS:
-                raise RuntimeError(f"side_effect_of returned {side_effect!r}")
-            if STRENGTH[side_effect] > STRENGTH[spec.side_effect]:  # fail closed: never stronger than declared
-                raise RuntimeError(f"side_effect_of returned {side_effect!r}, stronger than the declared worst "
-                                   f"case {spec.side_effect!r}")
         except (TypeError, ValueError) as exc:  # ValidationError is a ValueError
             return self._log_attempt(ctx, name, args, secrets, ToolResult.fail("invalid_args", _explain(exc)), started)
-        except Exception as exc:  # a bug in the spec's request_of
-            result = ToolResult.fail("tool_crashed", f"request_of / side_effect_of: {type(exc).__name__}: {exc}")
+        try:  # what the gate sees comes from the spec, never from the caller (N.119)
+            call = await self._call_for(spec, parsed, ctx)
+        except (TypeError, ValueError) as exc:  # the spec's request_of / target_of refused these args
+            return self._log_attempt(ctx, name, args, secrets, ToolResult.fail("invalid_args", _explain(exc)), started)
+        except Exception as exc:  # a bug in the spec's hooks, or a form that cannot be read: fail closed
+            result = ToolResult.fail("tool_crashed", f"describing the call for the gate failed: "
+                                                     f"{type(exc).__name__}: {exc}")
             return self._log_attempt(ctx, name, args, secrets, result, started)
-
-        clean = parsed.model_dump(mode="json")
-        call = ToolCall(run_id=ctx.run_id, now=ctx.now, tool=name, args=clean, side_effect=side_effect,
-                        channel=spec.channel, request=request,
-                        fingerprint=fingerprint(name, clean, spec.transport_args))
         self._log(ctx, "tool_call", call.model_dump(mode="json", exclude={"run_id", "now"}), secrets)
 
         decision = self._decide(call)
@@ -244,11 +260,43 @@ class Registry:
             result = ToolResult.fail("policy_denied", f"{', '.join(decision.policy_ids)}: {decision.reason}",
                                      policy_ids=decision.policy_ids)
         elif decision.effect == "require_approval":
-            result = ToolResult.fail("approval_required", f"{', '.join(decision.policy_ids)}: {decision.reason}",
-                                     policy_ids=decision.policy_ids, fingerprint=call.fingerprint)
+            result = self._hold(spec, call, decision, ctx, secrets)
         else:
+            if decision.approval_id is not None:  # single use: consumed before the tool runs (D-103, N.151)
+                self.approvals.consume(ctx.run_id, decision.approval_id)
             result = await self._run(spec, parsed, ctx, secrets)
         return self._finish(ctx, name, result, secrets, started)
+
+    async def _call_for(self, spec: ToolSpec, parsed: BaseModel, ctx: RunContext) -> ToolCall:
+        request = spec.request_of(parsed) if spec.request_of else None
+        side_effect = spec.side_effect_of(parsed) if spec.side_effect_of else spec.side_effect
+        if side_effect not in SIDE_EFFECTS:
+            raise RuntimeError(f"side_effect_of returned {side_effect!r}")
+        if STRENGTH[side_effect] > STRENGTH[spec.side_effect]:  # fail closed: never stronger than declared
+            raise RuntimeError(f"side_effect_of returned {side_effect!r}, stronger than the declared worst "
+                               f"case {spec.side_effect!r}")
+        clean = parsed.model_dump(mode="json")
+        extra = await spec.gate_args_of(parsed) if spec.gate_args_of else GateArgs({})
+        if set(extra.args) & set(clean):
+            raise RuntimeError(f"gate args {sorted(set(extra.args) & set(clean))} clash with the tool's own args")
+        args = {**clean, **extra.args}
+        return ToolCall(run_id=ctx.run_id, now=ctx.now, tool=spec.name, args=args, side_effect=side_effect,
+                        channel=spec.channel, request=request, sop_id=ctx.sop_id,
+                        trust_sensitive=spec.trust_sensitive_args + tuple(extra.trust_sensitive),
+                        target=spec.target_of(parsed) if spec.target_of else None,
+                        fingerprint=fingerprint(spec.name, args, spec.transport_args))
+
+    def _hold(self, spec: ToolSpec, call: ToolCall, decision: Decision, ctx: RunContext,
+              secrets: list[str]) -> ToolResult:
+        """A held call: filed in the approval store with what it would do, so a human can decide (P.4, P.5)."""
+        predicted = _redact(predicted_outcome(spec, call), secrets)
+        approval_id = None
+        if self.approvals is not None:
+            approval_id = self.approvals.request(ctx.run_id, call.fingerprint, decision.policy_ids,
+                                                 _redact(decision.reason, secrets), predicted)
+        return ToolResult.fail("approval_required", f"{', '.join(decision.policy_ids)}: {decision.reason}",
+                               policy_ids=decision.policy_ids, fingerprint=call.fingerprint,
+                               approval_id=approval_id, predicted=predicted)
 
     def _decide(self, call: ToolCall) -> Decision:
         """Fail closed: a gate that raises or returns anything but a Decision denies the call (N.121)."""
@@ -292,6 +340,9 @@ class Registry:
         result = ToolResult.model_validate(_redact(result.model_dump(), secrets))  # the caller never sees a secret
         self._log(ctx, "tool_result", {"tool": name, **result.model_dump(),
                                        "duration_ms": round((time.perf_counter() - started) * 1000)}, [])
+        if result.ok and (result.data.get("provenance") or {}).get("source") == "untrusted":
+            for finding in scan_result(result.data):  # reported, never blocking (D-086)
+                self._log(ctx, "security_finding", {"tool": name, **finding.model_dump()}, [])
         return result
 
     def _log(self, ctx: RunContext, type: str, payload: dict[str, Any], secrets: list[str]) -> None:
@@ -300,18 +351,29 @@ class Registry:
         ctx.store.append(ctx.run_id, type, ctx.now.isoformat(), _redact(payload, secrets))
 
 
-def build_registry(gate: PolicyGate | None = None, client: Any = None, browser: Any = None) -> Registry:
+def predicted_outcome(spec: ToolSpec, call: ToolCall) -> dict[str, Any]:
+    """What a held call would do, from the call itself (Day 3 is deterministic; the Day 4 executor adds its own
+    structured prediction). The approval inbox shows it and the report lists it (D-098)."""
+    undo = f"undo with {spec.undo}" if spec.undo else (spec.no_undo_reason or "no undo")
+    request = f"{call.request.method} {call.request.path}" if call.request else None
+    return {"tool": call.tool, "args": {k: v for k, v in call.args.items() if k not in spec.transport_args},
+            "request": request, "side_effect": call.side_effect, "channel": call.channel,
+            "effect": f"{call.side_effect.replace('_', ' ')} through {request or call.tool}; {undo}"}
+
+
+def build_registry(gate: Gate, client: Any = None, browser: Any = None, approvals: Any = None) -> Registry:
     """The operator's registry for one run: the API tools from the endpoint catalog bound to `client` (that run's
-    AcmeClient; a fresh one from config when None), the local file tools, and the browser tools bound to `browser`
-    (that run's BrowserSession). Nothing does I/O until a tool is called."""
+    AcmeClient; a fresh one from config when None), the local file and ask tools, and the browser tools bound to
+    `browser` (that run's BrowserSession). Nothing does I/O until a tool is called."""
     from agent.config import load_config  # imported here: the tool modules import this one
     from agent.tools.api import AcmeClient, api_tools, load_catalog
+    from agent.tools.ask import ask_tools
     from agent.tools.browser import BrowserSession, browser_tools
     from agent.tools.files import file_tools
 
-    registry = Registry(gate or PolicyGate())
+    registry = Registry(gate, approvals)
     client = client or AcmeClient(load_config(), load_catalog())
-    for spec in [*api_tools(client), *file_tools(), *browser_tools(browser or BrowserSession(client))]:
+    for spec in [*api_tools(client), *file_tools(), *ask_tools(), *browser_tools(browser or BrowserSession(client))]:
         registry.register(spec)
     registry.validate()
     return registry

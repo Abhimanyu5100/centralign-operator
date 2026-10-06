@@ -1,13 +1,13 @@
-"""Schema of acme/knowledge/policies.yaml. DRAFT until the Day 3 gate design (schema_version 0).
+"""Schema of acme/knowledge/policies.yaml (schema_version 0).
 
 A rule says: when ALL of its conditions hold for a tool call, apply `effect`. The set of condition
-types is fixed (D-017, extended by D-077); an unknown type, an unknown key or a wrong value type is a
+types is fixed (D-017, extended by D-077 and D-126); an unknown type, an unknown key or a wrong value type is a
 load error, so a bad policy file fails closed. There is no `allow` effect: a rule can only deny or hold
-a call for approval, so a user or task rule can never loosen an org rule (P.11). The defaults live in the
-gate code by side-effect class, not here: reads are allowed, irreversible and external actions need
-approval unless a rule says otherwise.
+a call for approval, so a user or task rule can never loosen an org rule (P.11). The side-effect-class
+defaults are ordinary rules in the YAML too (ORG-005, ORG-008, ORG-009, D-126): no policy id lives in code
+except the registry's `GATE-ERROR`.
 
-This module is data only. The evaluator (Day 3) reads these models; it does not live here.
+This module is data only. The evaluator is agent/policy/gate.py.
 """
 
 from typing import Annotated, Literal
@@ -74,17 +74,38 @@ class RecipientDomainNotIn(_Strict):
 
 
 class FieldSourceUntrusted(_Strict):
-    """Any of the call arguments in `args` has a value that came only from untrusted text."""
+    """A trust-sensitive argument of the call (the tool declares which, D-131) has a value seen in untrusted text
+    (mail, documents, pages) and in nothing trusted (D-133). An email address in a domain of `allowlist` is
+    exempt: it cannot reach anyone outside what that allowlist already allows."""
     type: Literal["field_source_untrusted"]
-    args: list[Name] = Field(min_length=1)
+    allowlist: KnowledgeFile | None = None
+
+
+class SideEffectIn(_Strict):
+    """The call's own side-effect class (per call, as the registry classified it) is one of these."""
+    type: Literal["side_effect_in"]
+    side_effects: list[Literal["read", "reversible_write", "irreversible_write", "external_comms"]] = Field(
+        min_length=1)
+
+
+class RunHasNoSop(_Strict):
+    """No SOP matched the run's request (D-081): the run has no procedure to follow."""
+    type: Literal["run_has_no_sop"]
+
+
+class TargetNotCreatedByRun(_Strict):
+    """The call changes an existing record that this run did not create, or a record the gate cannot name."""
+    type: Literal["target_not_created_by_run"]
 
 
 Condition = Annotated[
-    ToolIn | RequestMatches | AmountGt | VendorStatusNotIn | RecipientDomainNotIn | FieldSourceUntrusted,
+    ToolIn | RequestMatches | AmountGt | VendorStatusNotIn | RecipientDomainNotIn | FieldSourceUntrusted
+    | SideEffectIn | RunHasNoSop | TargetNotCreatedByRun,
     Field(discriminator="type"),
 ]
 CONDITION_TYPES = ("tool_in", "request_matches", "amount_gt", "vendor_status_not_in",
-                   "recipient_domain_not_in", "field_source_untrusted")
+                   "recipient_domain_not_in", "field_source_untrusted", "side_effect_in", "run_has_no_sop",
+                   "target_not_created_by_run")
 
 
 # --- acme_check: how an `enforced_by: acme` rule is tied to a real check in Acme's code ----------------

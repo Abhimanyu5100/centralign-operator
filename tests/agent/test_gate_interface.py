@@ -1,11 +1,11 @@
-"""Pass-through PolicyGate and its final interface (agent/policy/gate.py, D-101). Risks P.2, N.121.
+"""The gate's interface (agent/policy/gate.py, D-101, extended by D-131). Risks P.2, N.121.
 
-The Day 3 evaluator replaces the body of `check`; these tests pin the interface it must keep."""
+The evaluator itself is tested in tests/policy/test_gate.py; these tests pin the models every caller relies on."""
 
 import pytest
 from pydantic import ValidationError
 
-from agent.policy.gate import GATE_ERROR, Decision, HttpRequest, PolicyGate, ToolCall
+from agent.policy.gate import GATE_ERROR, Decision, HttpRequest, Target, ToolCall
 from tests.agent.agent_fixtures import NOW
 
 CALL = dict(run_id="r1", now=NOW, tool="send_mail", args={"to": "accounts@example.com"},
@@ -13,11 +13,18 @@ CALL = dict(run_id="r1", now=NOW, tool="send_mail", args={"to": "accounts@exampl
             fingerprint="f" * 64)
 
 
-def test_the_pass_through_gate_allows_every_side_effect_and_cites_no_policy():
-    for side_effect in ("read", "reversible_write", "irreversible_write", "external_comms"):
-        decision = PolicyGate().check(ToolCall(**{**CALL, "side_effect": side_effect}))
-        assert decision == Decision(effect="allow", policy_ids=[],
-                                    reason="pass-through gate (Day 2): no rules evaluated")
+def test_the_day_3_fields_are_optional_so_day_2_callers_still_fit():
+    call = ToolCall(**CALL)
+    assert (call.sop_id, call.trust_sensitive, call.target) == (None, (), None)
+    assert Decision(effect="allow", reason="x").approval_id is None
+    assert ToolCall(**CALL, target=Target(entity="invoice", id=4)).target.id == 4
+
+
+@pytest.mark.parametrize("effect", ["deny", "require_approval"])
+def test_only_an_allow_can_rest_on_an_approval(effect):
+    with pytest.raises(ValidationError, match="only an allow"):
+        Decision(effect=effect, policy_ids=["ORG-005"], reason="x", approval_id="A-1")
+    assert Decision(effect="allow", policy_ids=["ORG-005"], reason="x", approval_id="A-1").approval_id == "A-1"
 
 
 @pytest.mark.parametrize("effect", ["deny", "require_approval"])
@@ -48,7 +55,7 @@ def test_a_malformed_tool_call_is_refused(change):
 
 def test_tool_call_and_decision_are_frozen():
     call = ToolCall(**CALL)
-    decision = PolicyGate().check(call)
+    decision = Decision(effect="allow", reason="x")
     with pytest.raises(ValidationError):
         call.tool = "other"
     with pytest.raises(ValidationError):

@@ -8,8 +8,10 @@ XPath; nothing here names an Acme page: paths come from the caller and the endpo
 
 A click's side effect and request are read from the observed control before the gate decides (N.126): a link
 reads (GET of its href); a submit button sends its form's method to its form's action, classified by the
-catalog's `ui_forms` (an unknown form is an irreversible write). At click time the form target is read again and
-a changed page refuses the click. Every navigation returns the page observed right after it, toasts and alerts
+catalog's `ui_forms` (an unknown form is an irreversible write). Targets are resolved against the page: one on
+another site is passed on as the full URL, which is no path, so the gate denies it (N.145). For a submit the gate
+also sees the form's visible fields, by their names (D-125). At click time the form target and the fields are read
+again and a changed page refuses the click. Every navigation returns the page observed right after it, toasts and alerts
 included (4.3). Landing on the login page means the session expired: the tool logs in again once over HTTP,
 repeats a navigation once, and never resubmits a form (the caller reads back first, 3.4).
 """
@@ -17,7 +19,7 @@ repeats a navigation once, and never resubmits a form (the caller reads back fir
 import re
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 from playwright.async_api import Locator, Page, async_playwright
 from playwright.async_api import TimeoutError as PlaywrightTimeout
@@ -26,7 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from agent.config import browser_env
 from agent.policy.gate import HttpRequest, SideEffect
 from agent.tools.api import AcmeClient
-from agent.tools.registry import RunContext, ToolResult, ToolSpec
+from agent.tools.registry import GateArgs, RunContext, ToolResult, ToolSpec
 
 MAX_VIEW_CHARS, MAX_REFS, MAX_TEXT = 8000, 150, 400  # observation cap (N.127); every result says if it was cut
 REF_PREFIX = {"link": "l", "button": "b", "textbox": "t", "searchbox": "t", "spinbutton": "t", "combobox": "c",
@@ -37,6 +39,9 @@ STATUS_ERRORS = {400: "invalid_request", 401: "session_expired", 403: "forbidden
                  409: "conflict", 415: "unsupported_media_type", 422: "invalid_input"}
 _HEAD = re.compile(r'([/\w-]+)(?: "((?:[^"\\]|\\.)*)")?((?: \[[^\]]*\])*)')
 FORM_TARGET = "e => e.form && e.type === 'submit' ? [e.form.method, e.form.getAttribute('action') || ''] : null"
+# The fields a submit sends, by name, as the gate sees them: hidden inputs (the form token) and buttons left out.
+FORM_FIELDS = ("e => e.form ? Object.fromEntries([...e.form.elements].filter(x => x.name && "
+               "!['hidden', 'submit', 'button', 'reset'].includes(x.type)).map(x => [x.name, x.value])) : {}")
 
 
 @dataclass
@@ -87,10 +92,20 @@ def _path(url: str) -> str:
     return parts.path + (f"?{parts.query}" if parts.query else "")
 
 
+def site_target(page_url: str, raw: str) -> str:
+    """A link's href or a form's action resolved against the page: the path (and query) when it stays on the
+    site, else the full URL, which the gate cannot read as a path and so denies (N.145)."""
+    resolved, page = urlparse(urljoin(page_url, raw)), urlparse(page_url)
+    if (resolved.scheme, resolved.netloc) != (page.scheme, page.netloc):
+        return urljoin(page_url, raw)
+    return resolved.path + (f"?{resolved.query}" if resolved.query else "")
+
+
 class BrowserSession:
     def __init__(self, client: AcmeClient, headed: bool = False):
         self.client, self.headed = client, headed
         self.elements: dict[str, Element] = {}  # refs from the latest observation
+        self.gate_fields: dict[str, dict[str, str]] = {}  # per submit ref: the fields the gate saw (D-125)
         self._pw = self._browser = self._context = self._page = None
 
     async def page(self) -> Page:
@@ -133,12 +148,13 @@ class BrowserSession:
                 nth = seen.get((role, name), 0)
                 seen[(role, name)] = nth + 1
                 el = Element(f"{REF_PREFIX[role]}{len(elements) + 1}", role, name, nth, value)
-                el.href = next((c[4] for c in children if c[1] == "/url"), None) if role == "link" else None
+                href = next((c[4] for c in children if c[1] == "/url"), None) if role == "link" else None
+                el.href = site_target(page.url, href) if href is not None else None
                 options = [c[2] for c in children if c[1] == "option"]
                 el.value = next((c[2] for c in children if c[1] == "option" and "selected" in c[3]), value) or value
                 if role == "button":
                     target = await self.locator(el).evaluate(FORM_TARGET)
-                    el.form = (target[0].upper(), urlparse(target[1]).path or urlparse(page.url).path) if target else None
+                    el.form = (target[0].upper(), site_target(page.url, target[1]).split("?")[0]) if target else None
                 elements[el.ref] = el
                 lines.append(_describe(el, options))
             elif role in ("status", "alert"):
@@ -147,7 +163,7 @@ class BrowserSession:
             elif role not in DROPPED and (name or value):
                 text = f'{role} "{name}"{attrs}' if name else f"{role}: {value[:MAX_TEXT]}"
                 lines.append(text + (" ..." if len(value) > MAX_TEXT else ""))
-        self.elements = elements
+        self.elements, self.gate_fields = elements, {}
         view, truncated = "\n".join(lines), False
         if len(view) > MAX_VIEW_CHARS:
             view, truncated = view[:view.rfind("\n", 0, MAX_VIEW_CHARS)] + "\n... (view cut at the size cap)", True
@@ -218,8 +234,19 @@ def browser_tools(session: BrowserSession) -> list[ToolSpec]:
     def click_request(args: RefArgs) -> HttpRequest | None:
         el = target(args)
         if el is not None and el.href:
-            return HttpRequest(method="GET", path=urlparse(el.href).path)
+            return HttpRequest(method="GET", path=el.href)
         return HttpRequest(method=el.form[0], path=el.form[1]) if el is not None and el.form else None
+
+    async def form_fields(args: RefArgs) -> GateArgs:
+        """For a POST submit: the fields it will send (the gate and the fingerprint see them, D-125) and which of
+        them the catalog marks trust-sensitive for that form."""
+        el = target(args)
+        if el is None or not el.form or el.form[0] != "POST":
+            return GateArgs({})
+        fields = await session.locator(el).evaluate(FORM_FIELDS)
+        session.gate_fields[args.ref] = fields
+        form = catalog.form(el.form[1])
+        return GateArgs(fields, tuple(f for f in (form.trust_sensitive_args if form else ()) if f in fields))
 
     async def navigated(response: Any, writes: bool, retry: Any) -> ToolResult:
         """Typed result of a navigation, with the page observed right after it; one re-login on a lost session."""
@@ -267,10 +294,14 @@ def browser_tools(session: BrowserSession) -> list[ToolSpec]:
         el, loc = found
         if el.form and el.form[0] == "POST":
             now = await loc.evaluate(FORM_TARGET)
-            if not now or (now[0].upper(), urlparse(now[1]).path or el.form[1]) != el.form:
+            if not now or (now[0].upper(), site_target(session._page.url, now[1]).split("?")[0]) != el.form:
                 return ToolResult.fail("precondition_failed", f"{args.ref} no longer submits {' '.join(el.form)}; "
                                        "observe again (the gate decided on what the page showed)")
-        if el.href is not None and await loc.get_attribute("href") != el.href:  # a re-rendered page (4.5)
+            if await loc.evaluate(FORM_FIELDS) != session.gate_fields.get(args.ref):
+                return ToolResult.fail("precondition_failed", f"the form behind {args.ref} changed after the gate "
+                                       "decided; observe again and submit what was checked")
+        href = await loc.get_attribute("href") if el.href is not None else None
+        if el.href is not None and (href is None or site_target(session._page.url, href) != el.href):  # 4.5
             return ToolResult.fail("precondition_failed", f"{args.ref} no longer leads to {el.href}; observe again")
         if el.role != "link" and not el.form:  # e.g. a checkbox: no navigation to wait for
             failed = await guarded(loc.click)
@@ -318,7 +349,7 @@ def browser_tools(session: BrowserSession) -> list[ToolSpec]:
         ToolSpec(name="browser_click", description="Click a link or button by ref; a form submit may write.",
                  args_model=RefArgs, side_effect="external_comms", channel="gui", fn=click,  # worst case: a mail form
                  no_undo_reason="a form sent from the browser is undone, if at all, by the matching API undo tool",
-                 side_effect_of=click_effect, request_of=click_request),
+                 side_effect_of=click_effect, request_of=click_request, gate_args_of=form_fields),
         ToolSpec(name="browser_fill", description="Type text into a text field by ref (nothing is sent until a submit).",
                  args_model=FillArgs, side_effect="read", channel="gui", fn=fill),
         ToolSpec(name="browser_select", description="Choose an option in a dropdown by ref and option label.",

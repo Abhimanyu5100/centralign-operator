@@ -8,6 +8,7 @@
 - agent/ does not import acme/ (Acme knowledge comes from acme/knowledge files, not Acme's code)
 - every tool a `tool_in` policy rule names is registered (N.77)
 - no Acme endpoint is written in agent/ code: no "/api/" literal (paths come from acme/knowledge/api.yaml, D-107)
+- no adversarial fixture tool (`test_only_` prefix, D-129) is ever in the real registry, agent/ or acme/knowledge/
 - no subprocess in agent/; the only process agent/ starts is the browser, and every `.launch(` passes an explicit
   `env=` (D-105; tests/agent/test_browser_unit.py checks it is `browser_env()`, without the admin token)
 """
@@ -18,11 +19,10 @@ from pathlib import Path
 
 import pytest
 
-from agent.policy.gate import PolicyGate
 from agent.policy.loader import load_policies
 from agent.policy.models import PolicyFile, ToolIn
 from agent.tools.registry import Registry, ToolSpec, build_registry
-from tests.agent.agent_fixtures import registry_with, spec
+from tests.agent.agent_fixtures import AllowAllGate, registry_with, spec
 
 ROOT = Path(__file__).resolve().parents[2]
 AGENT = ROOT / "agent"
@@ -195,12 +195,13 @@ def spec_target_violations(tool: ToolSpec) -> list[str]:
 
 
 def test_the_real_registry_is_not_empty_so_these_checks_are_not_vacuous():
-    specs = build_registry().specs()  # N.124
+    specs = build_registry(AllowAllGate()).specs()  # N.124
     assert len(specs) >= 25 and {"submit_invoice", "send_mail", "extract_pdf_text"} <= {s.name for s in specs}
 
 
 def test_no_registered_tool_names_the_acme_database_or_admin_paths():
-    assert {t.name: spec_target_violations(t) for t in build_registry().specs() if spec_target_violations(t)} == {}
+    specs = build_registry(AllowAllGate()).specs()
+    assert {t.name: spec_target_violations(t) for t in specs if spec_target_violations(t)} == {}
 
 
 @pytest.mark.parametrize("description", ["Reset Acme through /__admin/reset.", "Read rows from acme/data/acme.db."])
@@ -219,11 +220,36 @@ def missing_policy_tools(policies: PolicyFile, registry: Registry) -> list[str]:
 
 def test_every_tool_named_by_a_policy_is_registered():
     # policies.yaml has no tool_in rule today; the registry is real and non-empty, so a new rule is checked (N.77)
-    assert missing_policy_tools(load_policies(), build_registry()) == []
+    assert missing_policy_tools(load_policies(), build_registry(AllowAllGate())) == []
 
 
 def test_a_policy_naming_an_unregistered_tool_is_caught():
     policies = PolicyFile.model_validate({"schema_version": 0, "rules": [
         {"id": "ORG-901", "level": "org", "enforced_by": "runtime", "effect": "deny", "message": "test",
          "when": [{"type": "tool_in", "tools": ["echo", "no_such_tool"]}]}]})
-    assert missing_policy_tools(policies, registry_with(PolicyGate(), spec())) == ["no_such_tool"]
+    assert missing_policy_tools(policies, registry_with(AllowAllGate(), spec())) == ["no_such_tool"]
+
+
+# --- adversarial fixture tools never reach the real registry (D-129) ---------------------------------------------
+
+TEST_ONLY = "test_only_"
+
+
+def fixture_tool_violations(registry: Registry) -> list[str]:
+    return sorted(t.name for t in registry.specs() if t.name.startswith(TEST_ONLY))
+
+
+def test_the_real_registry_has_no_test_only_tool():
+    assert fixture_tool_violations(build_registry(AllowAllGate())) == []
+
+
+def test_a_registry_with_a_test_only_tool_is_caught():
+    assert fixture_tool_violations(registry_with(AllowAllGate(), spec(name="test_only_decide_approval"))) == [
+        "test_only_decide_approval"]
+
+
+def test_no_agent_source_or_knowledge_file_names_a_test_only_tool():
+    root = AGENT.parent
+    files = [*AGENT.rglob("*.py"), *(root / "acme" / "knowledge").rglob("*.yaml")]
+    assert len(files) > 10
+    assert [str(f.relative_to(root)) for f in files if TEST_ONLY in f.read_text(encoding="utf-8")] == []

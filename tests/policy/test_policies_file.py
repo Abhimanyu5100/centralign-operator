@@ -18,12 +18,12 @@ def app(tmp_path_factory):
     return create_app(tmp_path_factory.mktemp("acme") / "acme.db")
 
 
-def test_the_real_file_validates_and_holds_org_001_to_006():
-    assert list(RULES) == [f"ORG-00{n}" for n in range(1, 7)]
+def test_the_real_file_validates_and_holds_org_001_to_009():
+    assert list(RULES) == [f"ORG-00{n}" for n in range(1, 10)]
     assert {r.level for r in RULES.values()} == {"org"}
     assert {i: r.enforced_by for i, r in RULES.items()} == {
-        "ORG-001": "acme", "ORG-002": "runtime", "ORG-003": "acme",
-        "ORG-004": "runtime", "ORG-005": "runtime", "ORG-006": "acme"}
+        "ORG-001": "acme", "ORG-002": "runtime", "ORG-003": "acme", "ORG-004": "runtime", "ORG-005": "runtime",
+        "ORG-006": "acme", "ORG-007": "runtime", "ORG-008": "runtime", "ORG-009": "runtime"}
 
 
 def test_every_rule_can_only_deny_or_hold_for_approval():

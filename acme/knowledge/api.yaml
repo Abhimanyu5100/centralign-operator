@@ -11,6 +11,8 @@
 #   tool + args        the read tool, and its arguments taken from this call's arguments
 #   match / expect     row field <- this call's argument / row field = literal ($user = the agent's login)
 # response: file saves the bytes in the run's scratch folder; untrusted: provenance origin for returned text.
+# entity: what the tool reads or writes (D-131); trust_sensitive_args: payee, bank details, vendor identity,
+# recipients and amounts, which ORG-007 holds when their value came only from untrusted text (D-133).
 # Paths and args mirror acme/api.py; tests/agent/test_catalog.py checks every route exists with that method.
 schema_version: 0
 
@@ -23,6 +25,7 @@ session:
   idempotency_header: Idempotency-Key
   replay_header: Idempotent-Replayed
   login_page: /login      # the browser lands here (a 303 with ?next=) when its session is gone
+  creator_fields: [created_by, requested_by]   # a row the agent's account created is never trusted evidence
 
 # How the browser tool classifies a form submit (method POST) before the click (Day 2.3, D-117): the form's
 # action path ({x} = one path segment), its side effect, and the API tool that makes the same write (for
@@ -40,7 +43,7 @@ ui_forms:
   - {path: "/employees/{employee_id}/cancel", side_effect: irreversible_write, same_as: cancel_employee}
   - {path: /it-tickets/new, side_effect: reversible_write, same_as: create_it_ticket}
   - {path: "/it-tickets/{ticket_id}/cancel", side_effect: irreversible_write, same_as: cancel_it_ticket}
-  - {path: /mail/compose, side_effect: external_comms, same_as: send_mail}
+  - {path: /mail/compose, side_effect: external_comms, same_as: send_mail, trust_sensitive_args: [to]}
   - {path: /logout, side_effect: read}   # ends the browser's own session; no company state changes
 
 tools:
@@ -50,6 +53,7 @@ tools:
     method: GET
     path: /api/vendors
     side_effect: read
+    entity: vendor
     args:
       q: {type: string, required: false, description: "Part of the vendor name"}
 
@@ -58,6 +62,7 @@ tools:
     method: GET
     path: /api/vendors/{vendor_id}
     side_effect: read
+    entity: vendor
     args:
       vendor_id: {type: integer, description: Vendor id}
 
@@ -66,6 +71,7 @@ tools:
     method: GET
     path: /api/invoices
     side_effect: read
+    entity: invoice
     args:
       vendor: {type: integer, required: false, description: "Vendor id (from find_vendors)"}
       status:
@@ -79,6 +85,7 @@ tools:
     method: GET
     path: /api/invoices/{invoice_id}
     side_effect: read
+    entity: invoice
     args:
       invoice_id: {type: integer, description: Invoice id}
 
@@ -87,6 +94,7 @@ tools:
     method: GET
     path: /api/approvals
     side_effect: read
+    entity: approval
     args:
       status: {type: string, required: false, enum: [pending, approved, rejected, withdrawn], description: Approval status}
 
@@ -95,6 +103,7 @@ tools:
     method: GET
     path: /api/approvals/{approval_id}
     side_effect: read
+    entity: approval
     args:
       approval_id: {type: integer, description: Approval id}
 
@@ -103,6 +112,7 @@ tools:
     method: GET
     path: /api/payments
     side_effect: read
+    entity: payment
     args:
       invoice: {type: integer, required: false, description: Invoice id}
       status:
@@ -116,6 +126,7 @@ tools:
     method: GET
     path: /api/payments/{payment_id}
     side_effect: read
+    entity: payment
     args:
       payment_id: {type: integer, description: Payment id}
 
@@ -124,6 +135,7 @@ tools:
     method: GET
     path: /api/employees
     side_effect: read
+    entity: employee
     args:
       q: {type: string, required: false, description: "Part of the employee name"}
 
@@ -132,6 +144,7 @@ tools:
     method: GET
     path: /api/employees/{employee_id}
     side_effect: read
+    entity: employee
     args:
       employee_id: {type: integer, description: Employee id}
 
@@ -140,6 +153,7 @@ tools:
     method: GET
     path: /api/it-tickets
     side_effect: read
+    entity: it_ticket
     args:
       employee: {type: integer, required: false, description: Employee id}
 
@@ -148,6 +162,7 @@ tools:
     method: GET
     path: /api/it-tickets/{ticket_id}
     side_effect: read
+    entity: it_ticket
     args:
       ticket_id: {type: integer, description: IT ticket id}
 
@@ -156,6 +171,7 @@ tools:
     method: GET
     path: /api/audit
     side_effect: read
+    entity: audit
     args:
       since: {type: integer, required: false, description: "Return entries with an audit id greater than this"}
       limit: {type: integer, required: false, description: "Page size, 1 to 1000 (default 500)"}
@@ -165,6 +181,7 @@ tools:
     method: GET
     path: /api/mail
     side_effect: read
+    entity: mail
     untrusted: mailbox
     args:
       folder: {type: string, required: false, enum: [inbox, outbox], description: Mail folder}
@@ -174,6 +191,7 @@ tools:
     method: GET
     path: /api/mail/{mail_id}
     side_effect: read
+    entity: mail
     untrusted: "mail:{mail_id}"
     args:
       mail_id: {type: integer, description: Mail id (from list_mail)}
@@ -183,12 +201,14 @@ tools:
     method: GET
     path: /api/files
     side_effect: read
+    entity: file
 
   - name: download_file
     description: Download one of Acme's PDF files into this run's scratch folder.
     method: GET
     path: /api/files/{name}
     side_effect: read
+    entity: file
     response: file
     args:
       name: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*\.pdf$', description: "File name as listed by list_files or a mail"}
@@ -198,6 +218,7 @@ tools:
     method: GET
     path: /api/mail/{mail_id}/attachments/{name}
     side_effect: read
+    entity: file
     response: file
     args:
       mail_id: {type: integer, description: Mail id}
@@ -209,6 +230,7 @@ tools:
     method: POST
     path: /api/invoices
     side_effect: reversible_write
+    entity: invoice
     undo: {tool: void_invoice, args: {invoice_id: id}}
     transport_args: [idempotency_key]
     args:
@@ -226,6 +248,7 @@ tools:
     method: POST
     path: /api/approvals
     side_effect: reversible_write
+    entity: approval
     undo: {tool: withdraw_approval, args: {approval_id: id}}
     read_back:
       kind: new_row
@@ -242,6 +265,7 @@ tools:
     method: POST
     path: /api/payments
     side_effect: reversible_write
+    entity: payment
     undo: {tool: cancel_payment, args: {payment_id: id}}
     transport_args: [idempotency_key]
     args:
@@ -253,6 +277,7 @@ tools:
     method: POST
     path: /api/employees
     side_effect: reversible_write
+    entity: employee
     undo: {tool: cancel_employee, args: {employee_id: id}}
     read_back:
       kind: new_row
@@ -272,6 +297,7 @@ tools:
     method: POST
     path: /api/it-tickets
     side_effect: reversible_write
+    entity: it_ticket
     undo: {tool: cancel_it_ticket, args: {ticket_id: id}}
     read_back:
       kind: new_row
@@ -288,6 +314,8 @@ tools:
     method: POST
     path: /api/mail/send
     side_effect: external_comms
+    entity: mail
+    trust_sensitive_args: [to]
     no_undo_reason: sent mail cannot be recalled
     transport_args: [idempotency_key]
     args:
@@ -306,6 +334,7 @@ tools:
     method: POST
     path: /api/invoices/{invoice_id}/void
     side_effect: irreversible_write
+    entity: invoice
     no_undo_reason: a void invoice cannot be restored; enter it again instead
     read_back: {kind: target_state, tool: get_invoice, args: {invoice_id: invoice_id}, expect: {status: void}}
     args:
@@ -316,6 +345,7 @@ tools:
     method: POST
     path: /api/approvals/{approval_id}/withdraw
     side_effect: irreversible_write
+    entity: approval
     no_undo_reason: a withdrawn request cannot be reopened; request approval again instead
     read_back: {kind: target_state, tool: get_approval, args: {approval_id: approval_id}, expect: {status: withdrawn}}
     args:
@@ -326,6 +356,7 @@ tools:
     method: POST
     path: /api/payments/{payment_id}/cancel
     side_effect: irreversible_write
+    entity: payment
     no_undo_reason: a cancelled payment request cannot be reopened; create a new one instead
     read_back: {kind: target_state, tool: get_payment, args: {payment_id: payment_id}, expect: {status: cancelled}}
     args:
@@ -336,6 +367,7 @@ tools:
     method: POST
     path: /api/employees/{employee_id}/cancel
     side_effect: irreversible_write
+    entity: employee
     no_undo_reason: a cancelled onboarding cannot be reopened; create the record again instead
     read_back: {kind: target_state, tool: get_employee, args: {employee_id: employee_id}, expect: {status: cancelled}}
     args:
@@ -346,6 +378,7 @@ tools:
     method: POST
     path: /api/it-tickets/{ticket_id}/cancel
     side_effect: irreversible_write
+    entity: it_ticket
     no_undo_reason: a cancelled ticket cannot be reopened; open a new one instead
     read_back: {kind: target_state, tool: get_it_ticket, args: {ticket_id: ticket_id}, expect: {status: cancelled}}
     args:
