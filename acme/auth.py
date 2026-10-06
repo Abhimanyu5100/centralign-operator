@@ -62,6 +62,7 @@ def create_session(conn: sqlite3.Connection, actor: str, now: float) -> str:
 class SessionCheck:
     actor: str | None
     error_type: str | None  # None when valid, else "login_required" or "session_expired"
+    request_count: int = 0  # this request included; read by the session_expiry_at_step_N chaos profile
 
 
 def check_session(conn: sqlite3.Connection, token: str | None, now: float) -> SessionCheck:
@@ -70,12 +71,21 @@ def check_session(conn: sqlite3.Connection, token: str | None, now: float) -> Se
         return SessionCheck(None, "login_required")
     row = conn.execute(
         "UPDATE sessions SET request_count = request_count + 1 "
-        "WHERE token_hash = ? AND revoked = 0 AND expires_at > ? RETURNING actor",
+        "WHERE token_hash = ? AND revoked = 0 AND expires_at > ? RETURNING actor, request_count",
         (_hash(token), now),
     ).fetchone()
     if row is None:  # unknown (e.g. wiped by reset), revoked or past its expiry
         return SessionCheck(None, "session_expired")
-    return SessionCheck(row["actor"], None)
+    return SessionCheck(row["actor"], None, row["request_count"])
+
+
+def peek_actor(conn: sqlite3.Connection, token: str | None, now: float) -> str | None:
+    """The session's actor without counting a request (the UI chaos hook runs before `require_login`)."""
+    if not token:
+        return None
+    row = conn.execute("SELECT actor FROM sessions WHERE token_hash = ? AND revoked = 0 AND expires_at > ?",
+                       (_hash(token), now)).fetchone()
+    return row["actor"] if row else None
 
 
 def revoke(conn: sqlite3.Connection, token: str | None) -> None:

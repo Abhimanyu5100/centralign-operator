@@ -16,7 +16,8 @@ from tests.acme.test_api import INVOICE, assert_typed_error, count, post_invoice
 TOKEN = "harness-token-for-tests"
 H = {"X-Admin-Token": TOKEN}
 ADMIN_ROUTES = {("POST", "/__admin/reset"), ("GET", "/__admin/state_hash"), ("POST", "/__admin/snapshot"),
-                ("GET", "/__admin/diff"), ("GET", "/__admin/chaos"), ("POST", "/__admin/chaos")}
+                ("GET", "/__admin/diff"), ("GET", "/__admin/chaos"), ("POST", "/__admin/chaos"),
+                ("GET", "/__admin/chaos/events")}
 
 
 @pytest.fixture(autouse=True)
@@ -342,7 +343,7 @@ def test_chaos_is_none_until_set(admin):
 ])
 def test_chaos_set_and_get_round_trip(admin, profile, params):
     out = data(admin.post("/__admin/chaos", params={"profile": profile, "seed": 7}), 200)
-    assert out == {"profile": profile, "seed": 7, "active": True, "params": params, "wired": False}
+    assert out == {"profile": profile, "seed": 7, "active": True, "params": params, "wired": True}
     assert data(admin.get("/__admin/chaos")) == out
 
 

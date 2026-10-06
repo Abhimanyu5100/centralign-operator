@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, ValidationError
 
-from acme import auth, files, idempotency, mail, queries, services
+from acme import auth, chaos, files, idempotency, mail, queries, services
 from acme.forms import Form
 from acme.models import ApprovalIn, DecisionIn, EmployeeIn, InvoiceIn, ItTicketIn, MailIn, PaymentIn
 from acme.money import AMOUNT_HELP, format_inr
@@ -23,14 +23,14 @@ from acme.permissions import allowed, role_of
 from acme.services import AcmeError, Forbidden, Invalid, NotFound
 from acme.web import get_conn, pdf_response, require_login, templates
 
-router = APIRouter()
+router = APIRouter(route_class=chaos.ChaosRoute)  # every UI write passes the chaos hooks (N.102)
 FLASH_COOKIE = "acme_flash"
 CHANNEL = "ui"
 
 
-def invoice_submit_label() -> str:
-    """The invoice form's submit button name. The `rename_submit_button` chaos profile changes it (part 8)."""
-    return "Save invoice"
+def invoice_submit_label(conn: sqlite3.Connection, actor: str) -> str:
+    """The invoice form's submit button name. The `rename_submit_button` chaos profile changes it."""
+    return chaos.submit_label(conn, actor, "Save invoice")
 
 
 # --- rendering helpers ---------------------------------------------------------------------------
@@ -175,7 +175,7 @@ def invoices(request: Request, vendor: str | None = None, status: str | None = N
 
 def _invoice_form(request, conn, actor, values: dict, errors: dict, status: int = 200) -> Response:
     return page(request, "invoice_form.html", actor, status, values=values, errors=errors,
-                vendor_options=_vendor_options(conn), submit_label=invoice_submit_label(),
+                vendor_options=_vendor_options(conn), submit_label=invoice_submit_label(conn, actor),
                 token=values.get("idempotency_token") or _new_token(), amount_help=AMOUNT_HELP)
 
 

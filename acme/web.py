@@ -16,7 +16,7 @@ from fastapi import Depends, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from acme import auth, files
+from acme import auth, chaos, files
 from acme.db import connect
 from acme.money import format_inr
 from acme.services import Forbidden, NotFound
@@ -87,15 +87,22 @@ def get_conn(request: Request) -> Iterator[sqlite3.Connection]:
 
 def require_login(request: Request, conn: sqlite3.Connection = Depends(get_conn)) -> str | None:
     """Returns the actor for this request (None on public and admin paths). Runs once per request.
-    Everything under /__admin is token-only: a valid session without the token is still 403 (N.91)."""
+    Everything under /__admin is token-only: a valid session without the token is still 403 (N.91).
+    Admin and public paths return before any session count or chaos hook (N.104)."""
     if is_admin_path(request.url.path):
         check_admin_token(request)
         return None
     if request.url.path in PUBLIC_PATHS:
         return None
-    check = auth.check_session(conn, request.cookies.get(auth.COOKIE_NAME), request.app.state.time_fn())
+    token = request.cookies.get(auth.COOKIE_NAME)
+    check = auth.check_session(conn, token, request.app.state.time_fn())
     if check.actor is None:
         raise LoginRequired(check.error_type)
+    limit = chaos.session_step_limit(conn, check.actor)
+    if limit is not None and check.request_count > limit:  # chaos: request N+1 finds the session gone
+        auth.revoke(conn, token)
+        chaos.record_session_expiry(conn, check.actor, request.method, request.url.path, check.request_count)
+        raise LoginRequired("session_expired")
     request.state.actor = check.actor  # lets error pages show the nav for the right user
     return check.actor
 

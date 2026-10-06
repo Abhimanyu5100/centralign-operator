@@ -8,6 +8,7 @@ import os
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 DEFAULT_DB_PATH = Path(__file__).parent / "data" / "acme.db"
@@ -15,7 +16,8 @@ DEFAULT_DB_PATH = Path(__file__).parent / "data" / "acme.db"
 # Entity tables in dependency order. `state_hash` and `/__admin/diff` cover exactly these plus `meta`.
 # `sessions` and `idempotency_keys` are deliberately not listed: logging in or replaying a key must not
 # change the state hash or the diff (risks N.32, N.45). Both are dropped by reset. So are the harness tables
-# `snapshots` and `chaos` (part 8): they are not company state either (N.93, N.97).
+# `snapshots`, `chaos`, `chaos_attempts` and `chaos_events` (parts 8, 9): they are not company state either
+# (N.93, N.97).
 ENTITY_TABLES = ["vendors", "employees", "invoices", "approvals", "payments", "it_tickets", "mail", "audit_log"]
 
 SCHEMA = [
@@ -127,9 +129,26 @@ SCHEMA = [
         state_json TEXT NOT NULL          -- {table: [rows in primary-key order]} for every entity table
     )""",
     """CREATE TABLE chaos (
-        id      INTEGER PRIMARY KEY CHECK (id = 1),   -- at most one active profile
-        profile TEXT NOT NULL,
-        seed    INTEGER NOT NULL
+        id           INTEGER PRIMARY KEY CHECK (id = 1),   -- at most one active profile
+        profile      TEXT NOT NULL,
+        seed         INTEGER NOT NULL,
+        set_at_event INTEGER NOT NULL DEFAULT 0            -- last chaos_events id when the profile was set
+    )""",
+    """CREATE TABLE chaos_attempts (
+        fingerprint TEXT PRIMARY KEY,     -- actor, channel, method, path and Idempotency-Key or body hash
+        number      INTEGER NOT NULL      -- 1, 2, 3 ... since the profile was set; feeds the seeded schedule
+    )""",
+    """CREATE TABLE chaos_events (
+        id          INTEGER PRIMARY KEY,
+        profile     TEXT NOT NULL,
+        seed        INTEGER NOT NULL,
+        effect      TEXT NOT NULL,        -- server_error, response_delayed, write_dropped, session_expired, label_renamed
+        actor       TEXT NOT NULL,
+        channel     TEXT NOT NULL,
+        method      TEXT NOT NULL,
+        path        TEXT NOT NULL,
+        attempt     INTEGER,              -- attempt number (writes) or the session's request count (expiry)
+        logical_now TEXT NOT NULL         -- Acme's logical clock (no wall clock in Acme, N.12); order by id
     )""",
     """CREATE TABLE audit_log (
         id          INTEGER PRIMARY KEY,
@@ -162,6 +181,11 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
     return conn
 
 
+# Set (to an empty list) only by the `silent_drop_write` chaos profile around one UI handler call: the
+# outermost commit rolls back instead and appends True, so the caller knows a write was dropped (N.105).
+DISCARD_COMMITS: ContextVar[list[bool] | None] = ContextVar("discard_commits", default=None)
+
+
 @contextmanager
 def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     """One short write transaction; rolls back everything (including audit rows) on any exception.
@@ -177,12 +201,18 @@ def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     except BaseException:
         conn.execute("ROLLBACK")
         raise
+    discarded = DISCARD_COMMITS.get()
+    if discarded is not None:
+        conn.execute("ROLLBACK")
+        discarded.append(True)
+        return
     conn.execute("COMMIT")
 
 
 def create_schema(conn: sqlite3.Connection) -> None:
     """Drop and recreate every table. Must run inside a transaction (see `seed.reset`)."""
-    for table in reversed(["meta", "sessions", "idempotency_keys", "snapshots", "chaos", *ENTITY_TABLES]):
+    for table in reversed(["meta", "sessions", "idempotency_keys", "snapshots", "chaos", "chaos_attempts",
+                          "chaos_events", *ENTITY_TABLES]):
         conn.execute(f"DROP TABLE IF EXISTS {table}")
     for statement in SCHEMA:
         conn.execute(statement)

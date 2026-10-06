@@ -91,6 +91,13 @@ def get_chaos(conn: sqlite3.Connection = Depends(get_conn)) -> JSONResponse:
     return ok(chaos.state(conn))
 
 
+@router.get("/chaos/events")
+def chaos_events(conn: sqlite3.Connection = Depends(get_conn)) -> JSONResponse:
+    """`fired` says whether the active profile injected a fault since it was set (D-095); `items` is every
+    event since reset, in order."""
+    return ok(chaos.events(conn))
+
+
 @router.post("/chaos")
 def set_chaos(profile: str = Query(...), seed: int = Query(0, ge=0, le=2**31 - 1),
               conn: sqlite3.Connection = Depends(get_conn)) -> JSONResponse:

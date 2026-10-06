@@ -236,8 +236,9 @@ list as the API (403 `forbidden`, 404 `not_found`, 422 `invalid_input` or `inval
 | `POST /__admin/snapshot` | `201 {snapshot, state_hash, now}`; `snapshot` is a random id, valid until the next reset |
 | `GET /__admin/state_hash` | `{state_hash, now}`: meta and every entity table; not sessions, idempotency keys, snapshots or chaos |
 | `GET /__admin/diff?since=<snapshot>` | `{since, snapshot_now, now, snapshot_state_hash, state_hash, unchanged, tables}`; `tables` holds only tables that changed, each `{added: [rows], removed: [rows], changed: [{id, before, after}]}`, all in id order. No paging, no cap. Unknown or pre-reset id: 404 |
-| `POST /__admin/chaos?profile=&seed=` | `{profile, seed, active, params, wired}`; `profile=none` clears. `session_expiry_at_step_N` takes N from 1 to 999 |
-| `GET /__admin/chaos` | the same shape; `wired` is false for a profile with no effect built yet |
+| `POST /__admin/chaos?profile=&seed=` | `{profile, seed, active, params, wired}`; `profile=none` clears. `session_expiry_at_step_N` takes N from 1 to 999. A Day 3 profile (`slow_server`, `toast_2s`, `field_moved`, `delayed_write`) is a typed 422 until it is built. Setting a profile restarts its attempt numbering |
+| `GET /__admin/chaos` | the same shape |
+| `GET /__admin/chaos/events` | the same shape plus `fired` (the active profile injected a fault since it was set), `fired_count`, `first_fired_at` and `items`: every injected fault since reset, in order, as `{id, profile, seed, effect, actor, channel, method, path, attempt, logical_now}`. Reset clears it (D-095) |
 
 `/__admin/diff` is the harness's independent ground truth. The runtime verifier uses
 `GET /api/audit` instead; comparing the two measures the verifier's side-effect accuracy. Bank numbers are masked
@@ -247,15 +248,23 @@ in the rows themselves and in the audit log; the last four digits show only for 
 
 | Profile | Effect | Exercises | Built |
 | --- | --- | --- | --- |
-| `rename_submit_button` | "Save invoice" becomes "Submit invoice" | UI drift (0.2, 5.1) | Day 1 |
-| `session_expiry_at_step_N` | Session invalidated after N requests | 3.4 | Day 1 |
-| `flaky_500` | 30% of first write attempts return 500 | Transient retry | Day 1 |
-| `commit_then_timeout` | On IT-ticket creation and approval requests: write commits, response never returns | 3.5 double write | Day 1 |
-| `silent_drop_write` | UI shows success, row not saved | 4.4, 6.1 | Day 1 |
+| `rename_submit_button` | "Save invoice" becomes "Submit invoice"; behaviour unchanged | UI drift (0.2, 5.1) | Day 1 |
+| `session_expiry_at_step_N` | The first ops-agent session to make an (N+1)th authenticated request is revoked: API 401 `session_expired`, UI 303 to `/login`. Once per activation; counts from login | 3.4 | Day 1 |
+| `flaky_500` | 30% of first write attempts return 500 (`server_error`) before anything is written; a retry of the same attempt (same Idempotency-Key or body) passes | Transient retry | Day 1 |
+| `commit_then_timeout` | The first committed IT-ticket creation or approval request (API or UI) is held `ACME_CHAOS_TIMEOUT_DELAY_SECONDS` (default 120 s) after the commit. Once per activation | 3.5 double write | Day 1 |
+| `silent_drop_write` | The first UI write is rolled back whole (row, audit row, idempotency record) while the 303 and the success toast still say saved; the redirect goes to the section list. UI only, once per activation | 4.4, 6.1 | Day 1 |
 | `slow_server` | 1.5–3 s latency on writes | 3.3 | Day 3 |
 | `toast_2s` | Error toast disappears after 2 s | 4.3 | Day 3 |
 | `field_moved` | Alternate invoice-form layout | 2.5 | Day 3 |
 | `delayed_write` | Write becomes visible after 5 s | 6.9 | Day 3 |
+
+Rules for every profile (D-094): one active profile at most; only the operator under test (`ops-agent`) is
+faulted, never `meera`, `admin` or `/__admin/*` traffic, and admin calls touch no counter. Which write attempts
+`flaky_500` fails is a pure function of (profile, seed, attempt number), where attempts are numbered 1, 2, 3 ...
+in order of first sight since the profile was set; seed 0 fails attempts 1, 2 and 7. A rejected write (4xx)
+does not use up a once-per-activation fault. Chaos state lives in `chaos`, `chaos_attempts` and
+`chaos_events`: outside the state hash and the diff, dropped by reset, so the harness sets chaos after reset.
+API writes meet chaos in `api._write`; UI writes in `chaos.ChaosRoute`, the route class of the UI router.
 
 ## Tasks (`bench/tasks/*.yaml`)
 
@@ -315,4 +324,4 @@ Seed states differ per task: T8 seeds INV-1043 as already approved; T9 seeds it 
   is stable across resets.
 - All nine tasks can be done by hand in the browser, including payment requests and every undo path.
 - `GET /api/audit?since=` returns the entries after a given id.
-- Checker tests pass; the five Day 1 chaos profiles can be switched on and observed by hand.
+- Checker tests pass; the five Day 1 chaos profiles can be switched on and observed by hand (curl walk in part 9).

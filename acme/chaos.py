@@ -1,43 +1,280 @@
-"""Chaos profile registry and state (part 8; the effects are wired into `_write` in part 9).
+"""Chaos profiles: named, seeded faults injected into Acme (part 8 stores the profile, part 9 the effects).
 
-One active profile at most, stored in the `chaos` table: outside `ENTITY_TABLES`, so setting it never changes
-the state hash or the diff, and dropped by reset so a profile cannot outlive its run (risk N.97).
-`WIRED_PROFILES` lists the profiles whose effect exists; part 9 adds the names as it builds them, so a harness
-can see that a profile it set does nothing yet (risk N.98).
+One active profile at most, stored in the `chaos` table. Three small tables hold all chaos state, all outside
+`ENTITY_TABLES` (so never in the state hash or the diff) and all dropped by reset (risks N.18, N.97):
+- `chaos`           the active profile and seed, and `set_at_event`: the last event id when it was set;
+- `chaos_attempts`  every distinct write attempt seen since the profile was set, numbered 1, 2, 3 ...;
+- `chaos_events`    every injected fault, for the harness (`GET /__admin/chaos/events`, risk N.107).
+
+Where the effects enter (one point per channel, no per-route edits; risks N.55, N.102):
+- API writes: `api._write` calls `before_write` and `after_write`.
+- UI writes: `ChaosRoute`, the route class of `ui.router`, wraps every UI handler and calls the same two.
+- Session expiry: `web.require_login` calls `session_step_limit` (every authenticated request passes there).
+- The invoice button label: `ui.invoice_submit_label` calls `submit_label`.
+Only the operator under test (`ops-agent`) is ever faulted; meera, admin and `/__admin/*` never are (N.104).
+
+Profiles (D-094):
+- `rename_submit_button`  the invoice form's button reads "Submit invoice"; behaviour is unchanged.
+- `session_expiry_at_step_N`  the first ops-agent session to make an (N+1)th authenticated request is revoked:
+  the API gets 401 `session_expired`, the UI a 303 to /login. Once per activation.
+- `flaky_500`  30 % of first write attempts fail with a 500 before anything is written (N.19). Which attempts
+  fail is a pure function of (profile, seed, attempt number) (N.103); a retry of the same attempt passes.
+- `commit_then_timeout`  the first committed IT-ticket creation or approval request (D-008) is held for
+  `ACME_CHAOS_TIMEOUT_DELAY_SECONDS` (default 120 s) after the commit, past any sane client timeout.
+- `silent_drop_write`  the first UI write is rolled back whole (row, audit row, idempotency record) while the
+  redirect and success toast still say it saved; the redirect goes to the section list (N.105).
 """
 
+import asyncio
+import hashlib
+import os
 import re
 import sqlite3
+from collections.abc import Callable, Coroutine
+from contextlib import closing
+from dataclasses import dataclass, replace
+from typing import Any
 
-from acme.db import transaction
-from acme.services import Invalid
+from fastapi import Request
+from fastapi.responses import Response
+from fastapi.routing import APIRoute
+
+from acme import auth, clock
+from acme.db import DISCARD_COMMITS, connect, transaction
+from acme.services import AcmeError, Invalid
 
 PROFILES = ("rename_submit_button", "flaky_500", "commit_then_timeout", "silent_drop_write")
 STEP_PROFILE = re.compile(r"session_expiry_at_step_([1-9][0-9]{0,2})")  # N = 1..999 authenticated requests
+PLANNED = ("slow_server", "toast_2s", "field_moved", "delayed_write")  # Day 3 (D-028); refused until built
 NONE = "none"
-WIRED_PROFILES: frozenset[str] = frozenset()
+WIRED_PROFILES: frozenset[str] = frozenset(PROFILES)  # session_expiry_at_step_N is wired too (pattern)
+
+TARGET_ACTOR = "ops-agent"
+FLAKY_RATE = 0.3
+RENAMED_LABEL = "Submit invoice"
+DEFAULT_TIMEOUT_DELAY_SECONDS = 120.0
+TIMEOUT_ENDPOINTS = frozenset({  # D-008: no idempotency key and no natural uniqueness (register 3.5)
+    "api:POST /api/it-tickets", "api:POST /api/approvals",
+    "ui:POST /it-tickets/new", "ui:POST /invoices/{invoice_id}/request-approval",
+    "ui:POST /payments/{payment_id}/request-approval",
+})
+UI_NON_WRITES = frozenset({"/logout"})  # UI POSTs that change no company state
+
+
+class InjectedFault(AcmeError):
+    """The `flaky_500` failure. Same status, type and text as a real 500, so a client cannot tell them apart;
+    an AcmeError, so the normal handler maps it and Starlette does not re-raise it (N.107)."""
+    status_code = 500
+    error_type = "server_error"
+
+
+# --- profile state -------------------------------------------------------------------------------
 
 
 def validate(profile: str) -> None:
-    if profile not in PROFILES and not STEP_PROFILE.fullmatch(profile):
+    if profile in PLANNED:
+        raise Invalid(f"chaos profile {profile!r} is planned for Day 3 and not implemented yet", "profile")
+    if profile not in WIRED_PROFILES and not STEP_PROFILE.fullmatch(profile):
         known = ", ".join([*PROFILES, "session_expiry_at_step_<N> (N = 1 to 999)", NONE])
         raise Invalid(f"unknown chaos profile {profile!r}; known: {known}", "profile")
 
 
+@dataclass(frozen=True)
+class Active:
+    profile: str
+    seed: int
+    set_at_event: int  # events with a larger id belong to this activation
+
+
+def active(conn: sqlite3.Connection) -> Active | None:
+    row = conn.execute("SELECT profile, seed, set_at_event FROM chaos WHERE id = 1").fetchone()
+    return Active(row["profile"], row["seed"], row["set_at_event"]) if row else None
+
+
 def state(conn: sqlite3.Connection) -> dict:
-    row = conn.execute("SELECT profile, seed FROM chaos WHERE id = 1").fetchone()
-    profile, seed = (row["profile"], row["seed"]) if row else (NONE, 0)
+    current = active(conn)
+    profile, seed = (current.profile, current.seed) if current else (NONE, 0)
     step = STEP_PROFILE.fullmatch(profile)
-    return {"profile": profile, "seed": seed, "active": row is not None,
+    return {"profile": profile, "seed": seed, "active": current is not None,
             "params": {"step": int(step.group(1))} if step else {},
-            "wired": profile in WIRED_PROFILES}
+            "wired": profile in WIRED_PROFILES or step is not None}
 
 
 def set_profile(conn: sqlite3.Connection, profile: str, seed: int) -> dict:
+    """Setting any profile (or none) restarts the attempt numbering; the event log is kept until reset."""
     if profile != NONE:
         validate(profile)
     with transaction(conn):
         conn.execute("DELETE FROM chaos")
+        conn.execute("DELETE FROM chaos_attempts")
         if profile != NONE:
-            conn.execute("INSERT INTO chaos (id, profile, seed) VALUES (1, ?, ?)", (profile, seed))
+            last = conn.execute("SELECT COALESCE(MAX(id), 0) FROM chaos_events").fetchone()[0]
+            conn.execute("INSERT INTO chaos (id, profile, seed, set_at_event) VALUES (1, ?, ?, ?)",
+                         (profile, seed, last))
     return state(conn)
+
+
+def fires(profile: str, seed: int, attempt: int, rate: float) -> bool:
+    """Deterministic: the same (profile, seed, attempt) always gives the same answer (N.103)."""
+    digest = hashlib.sha256(f"{profile}:{seed}:{attempt}".encode()).hexdigest()
+    return int(digest[:8], 16) < rate * 16**8
+
+
+def timeout_delay() -> float:
+    return float(os.environ.get("ACME_CHAOS_TIMEOUT_DELAY_SECONDS", DEFAULT_TIMEOUT_DELAY_SECONDS))
+
+
+# --- event log -----------------------------------------------------------------------------------
+
+
+def record(conn: sqlite3.Connection, current: Active, effect: str, actor: str, channel: str, method: str,
+           path: str, attempt: int | None = None) -> None:
+    conn.execute(
+        "INSERT INTO chaos_events (profile, seed, effect, actor, channel, method, path, attempt, logical_now)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (current.profile, current.seed, effect, actor, channel, method, path, attempt, clock.now(conn)),
+    )
+
+
+def _fired(conn: sqlite3.Connection, current: Active) -> bool:
+    return conn.execute("SELECT 1 FROM chaos_events WHERE id > ? LIMIT 1", (current.set_at_event,)).fetchone() is not None
+
+
+def events(conn: sqlite3.Connection) -> dict:
+    """Every event since reset, plus whether the ACTIVE profile has fired since it was set. AcmeBench uses
+    `fired` to mark a chaos run "fault fired: yes/no" (D-095)."""
+    current = active(conn)
+    items = [dict(r) for r in conn.execute("SELECT * FROM chaos_events ORDER BY id")]
+    mine = [e for e in items if current and e["id"] > current.set_at_event]
+    return {**state(conn), "fired": bool(mine), "fired_count": len(mine),
+            "first_fired_at": mine[0]["logical_now"] if mine else None, "items": items}
+
+
+# --- hooks ---------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Attempt:
+    """A write the active profile will act on after it runs: `delay` (commit_then_timeout) or `drop`."""
+    current: Active
+    actor: str
+    channel: str
+    method: str
+    path: str
+    number: int
+    delay: float = 0.0
+    drop: bool = False
+
+
+def _number(conn: sqlite3.Connection, fingerprint: str) -> int | None:
+    """The attempt's number if this is its first sight, else None (a retry of the same write)."""
+    with transaction(conn):
+        if conn.execute("SELECT 1 FROM chaos_attempts WHERE fingerprint = ?", (fingerprint,)).fetchone():
+            return None
+        number = conn.execute("SELECT COUNT(*) FROM chaos_attempts").fetchone()[0] + 1
+        conn.execute("INSERT INTO chaos_attempts (fingerprint, number) VALUES (?, ?)", (fingerprint, number))
+        return number
+
+
+def before_write(conn: sqlite3.Connection, actor: str | None, channel: str, method: str, route: str, path: str,
+                 attempt_key: str) -> Attempt | None:
+    """Called before a write runs. Raises `InjectedFault` (nothing written yet), or returns an Attempt whose
+    effect `after_write` applies once the write has run, or None. `attempt_key` is the Idempotency-Key or a
+    hash of the body, so a retry of the same write is recognised (N.19)."""
+    current = active(conn)
+    if actor != TARGET_ACTOR or current is None or current.profile not in ("flaky_500", "commit_then_timeout",
+                                                                            "silent_drop_write"):
+        return None
+    fingerprint = hashlib.sha256(f"{actor}|{channel}|{method} {path}|{attempt_key}".encode()).hexdigest()
+    number = _number(conn, fingerprint)
+    if number is None:
+        return None
+    if current.profile == "flaky_500":
+        if fires(current.profile, current.seed, number, FLAKY_RATE):
+            record(conn, current, "server_error", actor, channel, method, path, number)
+            raise InjectedFault("Internal server error; nothing was saved. Read back before retrying.")
+        return None
+    if _fired(conn, current):  # commit_then_timeout and silent_drop_write fire once per activation
+        return None
+    attempt = Attempt(current, actor, channel, method, path, number)
+    if current.profile == "commit_then_timeout" and f"{channel}:{method} {route}" in TIMEOUT_ENDPOINTS:
+        return replace(attempt, delay=timeout_delay())
+    if current.profile == "silent_drop_write" and channel == "ui":
+        return replace(attempt, drop=True)
+    return None
+
+
+async def after_write(conn: sqlite3.Connection, attempt: Attempt | None, *, committed: bool,
+                      dropped: bool = False) -> None:
+    """Record and apply the effect of a write that ran. Only a write that really committed (or really was
+    dropped) counts as the fault firing, so a rejected write leaves the fault for the next eligible one."""
+    if attempt is None:
+        return
+    a = attempt
+    if a.drop and dropped:
+        record(conn, a.current, "write_dropped", a.actor, a.channel, a.method, a.path, a.number)
+    elif a.delay and committed:
+        record(conn, a.current, "response_delayed", a.actor, a.channel, a.method, a.path, a.number)
+        await asyncio.sleep(a.delay)  # the event loop keeps serving other clients meanwhile (N.106)
+
+
+def session_step_limit(conn: sqlite3.Connection, actor: str) -> int | None:
+    """N while `session_expiry_at_step_N` is active and has not fired yet, for ops-agent only."""
+    current = active(conn)
+    step = STEP_PROFILE.fullmatch(current.profile) if current else None
+    if actor != TARGET_ACTOR or step is None or _fired(conn, current):
+        return None
+    return int(step.group(1))
+
+
+def record_session_expiry(conn: sqlite3.Connection, actor: str, method: str, path: str, count: int) -> None:
+    current = active(conn)
+    if current is not None:
+        record(conn, current, "session_expired", actor, "api" if path.startswith("/api/") else "ui", method, path, count)
+
+
+def submit_label(conn: sqlite3.Connection, actor: str | None, default: str) -> str:
+    current = active(conn)
+    if actor != TARGET_ACTOR or current is None or current.profile != "rename_submit_button":
+        return default
+    record(conn, current, "label_renamed", actor, "ui", "GET", "/invoices/new")
+    return RENAMED_LABEL
+
+
+# --- the one UI insertion point ------------------------------------------------------------------
+
+
+def _section(location: str) -> str:
+    """`/invoices/42` -> `/invoices`: where a dropped write's redirect goes, so no 404 gives it away."""
+    return "/" + location.lstrip("/").split("/", 1)[0].split("?", 1)[0]
+
+
+class ChaosRoute(APIRoute):
+    """Route class for `ui.router`: wraps every UI handler (FastAPI's documented per-router hook), so a UI
+    route added later gets chaos too. Mirrors what `api._write` does for the API (N.102)."""
+
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        handler = super().get_route_handler()
+        route = self.path
+
+        async def chaotic(request: Request) -> Response:
+            if request.method != "POST" or route in UI_NON_WRITES:
+                return await handler(request)
+            with closing(connect(request.app.state.db_path)) as conn:
+                actor = auth.peek_actor(conn, request.cookies.get(auth.COOKIE_NAME), request.app.state.time_fn())
+                request.state.actor = actor  # so an injected 500 page still shows the nav
+                body_hash = hashlib.sha256(await request.body()).hexdigest()  # Starlette caches the body
+                attempt = before_write(conn, actor, "ui", "POST", route, request.url.path, body_hash)
+                discarded: list[bool] = []
+                token = DISCARD_COMMITS.set(discarded if attempt and attempt.drop else None)
+                try:
+                    response = await handler(request)
+                finally:
+                    DISCARD_COMMITS.reset(token)
+                committed = response.status_code == 303  # forms answer a saved write with Post/Redirect/Get
+                if discarded:
+                    response.headers["location"] = _section(response.headers.get("location", "/"))
+                await after_write(conn, attempt, committed=committed and not discarded, dropped=bool(discarded))
+            return response
+
+        return chaotic

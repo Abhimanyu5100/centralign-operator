@@ -8,9 +8,11 @@ handlers, with `error_type` from `web.ERROR_TYPES` (risk N.50). Every write goes
   store `idempotency.run` (endpoint "api:POST /api/invoices"), replaying the original status and body with
   `Idempotent-Replayed: true` (risks 3.5, N.45, N.52);
 - calls the service with `channel="api"` and the session actor only.
-`_write` is also the single place the part-9 chaos profiles will wrap (risk N.55).
+`_write` is also the single place the chaos profiles enter API writes (`chaos.before_write` / `after_write`,
+risk N.55): after the body is parsed and before anything is written.
 """
 
+import hashlib
 import sqlite3
 from collections.abc import Callable
 
@@ -18,7 +20,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ValidationError
 
-from acme import idempotency, mail, queries, services
+from acme import chaos, idempotency, mail, queries, services
 from acme.models import ApprovalIn, DecisionIn, EmployeeIn, InvoiceIn, ItTicketIn, MailIn, PaymentIn
 from acme.services import Invalid, MalformedBody, NotFound, UnsupportedMediaType
 from acme.web import get_conn, pdf_response, require_login
@@ -59,18 +61,22 @@ async def _write(request: Request, conn: sqlite3.Connection, actor: str, service
                                       "intended write; reuse it only to retry the same write)", "idempotency_key")
     body = await _body(request, model) if model is not None else None
     call_args = (*args, body) if body is not None else args
+    route = request.scope["route"].path
+    attempt = chaos.before_write(conn, actor, CHANNEL, request.method, route, request.url.path,
+                                 key or hashlib.sha256(await request.body()).hexdigest())
 
     def write() -> dict:
         return service(conn, actor, CHANNEL, *call_args)
 
     if idempotent:
-        endpoint = f"{CHANNEL}:{request.method} {request.scope['route'].path}"
+        endpoint = f"{CHANNEL}:{request.method} {route}"
         row, replayed = idempotency.run(conn, actor, endpoint, key, body, write)
     else:
         row, replayed = write(), False
     response = ok(row, status, detail)
     if replayed:
         response.headers["Idempotent-Replayed"] = "true"
+    await chaos.after_write(conn, attempt, committed=not replayed)
     return response
 
 

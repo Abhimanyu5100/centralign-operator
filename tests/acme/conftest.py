@@ -84,3 +84,9 @@ def agent(db_file):
 @pytest.fixture
 def meera(db_file):
     return make_client(db_file, "meera")
+
+
+@pytest.fixture(autouse=True)
+def short_chaos_delay(monkeypatch):
+    """`commit_then_timeout` holds a response for 120 s by default; no test may wait that long (N.106)."""
+    monkeypatch.setenv("ACME_CHAOS_TIMEOUT_DELAY_SECONDS", "0.05")
