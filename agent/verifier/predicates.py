@@ -13,7 +13,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agent.plan import Milestone, Plan, Predicate, Ref
 
@@ -35,6 +35,7 @@ class MilestoneCheck(BaseModel):
     awaits_business_approval: bool
     unverifiable: bool = False
     checks: list[Check] = []
+    rows: list[dict[str, Any]] = Field(default=[], exclude=True)  # what its reads picked: the judge's record
 
 
 def _rows(data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -97,13 +98,13 @@ def _problems(row: dict[str, Any], predicate: Predicate) -> list[str]:
     return wrong
 
 
-async def _predicate(run, predicate: Predicate, found: dict[str, int], absence_at: float) -> tuple[Check, int | None]:
+async def _predicate(run, predicate: Predicate, found: dict[str, int], absence_at: float) -> tuple[Check, list]:
     name = f"{predicate.read}({', '.join(f'{k}={v}' for k, v in predicate.args.items())})"
     try:
         args, where = _resolve(predicate.args, found), _resolve(predicate.where, found)
     except KeyError as missing:
         return Check(name=name, ok=False, detail=f"{missing} found no row to refer to"), None
-    picked_ids: list[Any] = []
+    picked_rows: list[dict[str, Any]] = []
 
     async def check() -> Check:
         read = await run.call(predicate.read, args)
@@ -112,7 +113,7 @@ async def _predicate(run, predicate: Predicate, found: dict[str, int], absence_a
         picked = [row for row in _rows(read.data) if all(row.get(k) == v for k, v in where.items())]
         wrong = [] if len(picked) == predicate.count else [f"{len(picked)} matching row(s), expected {predicate.count}"]
         wrong += [p for row in picked for p in _problems(row, predicate)]
-        picked_ids[:] = [row.get("id") for row in picked]
+        picked_rows[:] = picked
         return Check(name=name, ok=not wrong, detail="; ".join(wrong)[:300])
 
     if predicate.count == 0:  # absence: only believed once the read-lag window is over
@@ -121,7 +122,7 @@ async def _predicate(run, predicate: Predicate, found: dict[str, int], absence_a
         result = await check()
     else:
         result = await until_held(check, run.client.read_lag)
-    return result, picked_ids[0] if result.ok and predicate.count == 1 else None
+    return result, picked_rows if result.ok else []
 
 
 async def milestones(run, plan: Plan, absence_at: float) -> list[MilestoneCheck]:
@@ -142,10 +143,11 @@ async def _milestone(run, m: Milestone, found: dict[str, int], earlier: dict[str
     if unmet:
         return MilestoneCheck(**head, ok=False, checks=[Check(name="after", ok=False,
                                                                  detail=f"needs {', '.join(unmet)} first")])
-    checks = []
+    checks, rows = [], []
     for i, predicate in enumerate(m.predicates):
-        check, row_id = await _predicate(run, predicate, found, absence_at)
-        if i == 0 and row_id is not None:
-            found[m.id] = row_id
+        check, picked = await _predicate(run, predicate, found, absence_at)
+        if i == 0 and predicate.count == 1 and picked:
+            found[m.id] = picked[0].get("id")
         checks.append(check)
-    return MilestoneCheck(**head, ok=all(c.ok for c in checks), checks=checks)
+        rows += picked
+    return MilestoneCheck(**head, ok=all(c.ok for c in checks), checks=checks, rows=rows)

@@ -11,9 +11,12 @@ import json
 import httpx
 import pytest
 
-from agent.llm.client import BudgetExceeded, CassetteMiss, LLMClient, LLMError, LLMUnavailable
+from agent.llm.client import CHAINS, BudgetExceeded, CassetteMiss, LLMClient, LLMError, LLMUnavailable, QuotaBook
 
 NOW = "2026-10-07T10:30:00+05:30"
+# The retry and fallback mechanics are tested on a fixed two-model chain; the real order has its own test.
+MECHANICS = {**CHAINS, "reason": [("GEMINI", "GEMINI_MODEL"), ("GEMINI", "GEMINI_LITE_MODEL"),
+                                  ("OPENROUTER", "OPENROUTER_FALLBACK_MODEL")]}
 MESSAGES = [{"role": "user", "content": "Say pong."}]
 
 
@@ -44,13 +47,15 @@ class Provider:
         return httpx.Response(status, json=payload, headers=headers)
 
 
-def client(tmp_path, script, *, events=None, sleeps=None, **extra):
+def client(tmp_path, script, *, events=None, sleeps=None, quota=None, chains=MECHANICS, clock=None, paced=None,
+           **extra):
     provider = Provider(script)
 
     async def sleep(seconds):
         (sleeps if sleeps is not None else []).append(seconds)
     c = LLMClient(config(tmp_path, **extra), now=NOW, log=(events.append if events is not None else lambda event: None),
-                  forbidden=("run-abc123",), transport=httpx.MockTransport(provider), sleep=sleep)
+                  forbidden=("run-abc123",), transport=httpx.MockTransport(provider), sleep=sleep, quota=quota,
+                  chains=chains, **({"clock": clock, "paced": paced} if clock else {}))
     return c, provider
 
 
@@ -193,3 +198,62 @@ def test_every_call_is_one_llm_call_event_without_the_key(tmp_path):
     assert provider.requests[0][2]["authorization"] == "Bearer gk-secret-1"  # the key travels in the header only
     stored = "".join(p.read_text() for p in (tmp_path / "cassettes").rglob("*.json"))
     assert "gk-secret-1" not in stored and "gk-secret-1" not in json.dumps(events)
+
+
+# --- daily quota book (D-179, R.5) ------------------------------------------------------------------------------
+
+def test_the_lite_models_come_first_and_the_plan_role_tries_groq_first(tmp_path):
+    """D-187: the Lite models (500 a day each) before the Flash models (20 a day each); gate and planner on Groq."""
+    c, _ = client(tmp_path, {}, chains=CHAINS, GROQ_PLAN_MODEL="oss-120b", GEMINI_FLASH2_MODEL="flash-2",
+                  GEMINI_LITE2_MODEL="lite-2")
+    assert [e[3] for e in c.chain("reason")] == ["flash-lite", "lite-2", "flash", "flash-2"]
+    assert [e[3] for e in c.chain("plan")] == ["oss-120b", "flash-lite", "lite-2", "flash", "flash-2"]
+
+
+def test_a_model_at_its_estimated_daily_limit_is_skipped_before_any_request(tmp_path):
+    book = QuotaBook(tmp_path / "quota.json", "2026-10-09", "flash=2, flash-lite=100")
+    c, provider = client(tmp_path, {"flash": [(200, answer(), {})] * 2, "flash-lite": [(200, answer(), {})]}, quota=book)
+    assert [chat(c, "reason", [{"role": "user", "content": f"q{i}"}]).model for i in range(3)] == \
+        ["flash", "flash", "flash-lite"]
+    assert [r[1]["model"] for r in provider.requests] == ["flash", "flash", "flash-lite"]
+    again = QuotaBook(tmp_path / "quota.json", "2026-10-09", "flash=2, flash-lite=100")  # read back from the file
+    assert (again.left("flash"), again.left("flash-lite"), again.left("unlisted")) == (0, 99, None)
+
+
+def test_a_long_429_marks_the_model_spent_for_the_day_and_a_new_day_resets(tmp_path):
+    book = QuotaBook(tmp_path / "quota.json", "2026-10-09")
+    daily = (429, {"error": {"details": [{"retryDelay": "34017s"}]}}, {})
+    c, provider = client(tmp_path, {"flash": [daily], "flash-lite": [(200, answer(), {})] * 2}, quota=book)
+    chat(c, "reason", MESSAGES)
+    chat(c, "reason", [{"role": "user", "content": "again"}])
+    assert [r[1]["model"] for r in provider.requests] == ["flash", "flash-lite", "flash-lite"]  # flash asked once
+    assert QuotaBook(tmp_path / "quota.json", "2026-10-09").left("flash") == 0
+    assert QuotaBook(tmp_path / "quota.json", "2026-10-10").left("flash") is None
+
+
+def test_replay_never_counts_against_the_quota(tmp_path):
+    book = QuotaBook(tmp_path / "quota.json", "2026-10-09", "flash=5")
+    c, _ = client(tmp_path, {"flash": [(200, answer(), {})]}, quota=book)
+    chat(c, "reason", MESSAGES)
+    replay = LLMClient({**config(tmp_path), "REPLAY": "1"}, now=NOW, quota=book)
+    asyncio.run(replay.chat("reason", MESSAGES))
+    assert book.left("flash") == 4
+
+
+def test_calls_to_a_model_are_spaced_by_its_rpm_on_a_fake_clock(tmp_path):
+    """LLM_RPM: at most n calls a minute per model, so a burst never earns a 429; other models are not slowed."""
+    now, sleeps = [100.0], []
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+    c = LLMClient(config(tmp_path, LLM_RPM="flash=15"), now=NOW, chains=MECHANICS, sleep=sleep, clock=lambda: now[0],
+                  paced={}, transport=httpx.MockTransport(Provider({"flash": [(200, answer(), {})] * 3})))
+    for i in range(3):
+        asyncio.run(c.chat("reason", [{"role": "user", "content": f"q{i}"}]))
+        now[0] += 1.0  # one second of work between calls
+    assert sleeps == [0.0, 3.0, 3.0]  # 60 / 15 = 4 s apart
+    c, provider = client(tmp_path, {"flash": [(200, answer(), {})] * 2}, sleeps=sleeps, clock=lambda: now[0], paced={})
+    chat(c, "reason", [{"role": "user", "content": "a"}])
+    chat(c, "reason", [{"role": "user", "content": "b"}])
+    assert sleeps == [0.0, 3.0, 3.0] and len(provider.requests) == 2  # no LLM_RPM: no spacing

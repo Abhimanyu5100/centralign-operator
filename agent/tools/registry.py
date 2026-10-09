@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 
 from agent.policy.gate import GATE_ERROR, Channel, Decision, HttpRequest, SideEffect, Target, ToolCall
-from agent.policy.scanner import scan_result
+from agent.policy.scanner import normalise_value, scan_result
 from agent.store import RunStore
 
 # Acme's API error types, passed through unchanged (a test keeps this equal to acme/web.py ERROR_TYPES) ...
@@ -264,6 +264,8 @@ class Registry:
         else:
             if decision.approval_id is not None:  # single use: consumed before the tool runs (D-103, N.151)
                 self.approvals.consume(ctx.run_id, decision.approval_id)
+            if STRENGTH[call.side_effect] >= STRENGTH["irreversible_write"]:  # predicted before it runs (2.8)
+                self._log(ctx, "prediction", self._predict(spec, call), secrets)
             result = await self._run(spec, parsed, ctx, secrets)
         return self._finish(ctx, name, result, secrets, started)
 
@@ -286,10 +288,18 @@ class Registry:
                         target=spec.target_of(parsed) if spec.target_of else None,
                         fingerprint=fingerprint(spec.name, args, spec.transport_args))
 
+    def _predict(self, spec: ToolSpec, call: ToolCall) -> dict[str, Any]:
+        """The predicted outcome, with where each trust-sensitive value was seen (N.13: master record or mail)."""
+        facts = self.gate.facts.of(call.run_id) if hasattr(getattr(self.gate, "facts", None), "of") else None
+        seen = {a: "trusted record" if (v := normalise_value(call.args[a])) in facts.trusted else "untrusted text only"
+                if v in facts.untrusted else "not seen in any read" for a in call.trust_sensitive
+                if call.args.get(a) is not None} if facts else {}
+        return {**predicted_outcome(spec, call), **({"sources": seen} if seen else {})}
+
     def _hold(self, spec: ToolSpec, call: ToolCall, decision: Decision, ctx: RunContext,
               secrets: list[str]) -> ToolResult:
         """A held call: filed in the approval store with what it would do, so a human can decide (P.4, P.5)."""
-        predicted = _redact(predicted_outcome(spec, call), secrets)
+        predicted = _redact(self._predict(spec, call), secrets)
         approval_id = None
         if self.approvals is not None:
             approval_id = self.approvals.request(ctx.run_id, call.fingerprint, decision.policy_ids,

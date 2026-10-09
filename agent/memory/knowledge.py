@@ -19,6 +19,16 @@ class Sop:
     steps: list[str]
     text: str
 
+    def sections(self) -> dict[str, str]:
+        parts = STEP.split(self.text)[1:]
+        return {step: f"### {step} {body.strip()}" for step, body in zip(parts[::2], parts[1::2])}
+
+    def write_steps(self, optional: bool = False) -> list[str]:
+        """Steps whose Source names a POST (an endpoint or a page action): each needs a milestone (N.177), unless its
+        title makes it conditional ("... when required"); `optional=True` lists only those (D-195)."""
+        return [step for step, text in self.sections().items()
+                if "POST " in text and (not optional or " when " in text.split("\n", 1)[0])]
+
 
 def load_sops(folder: Path = SOP_DIR) -> dict[str, Sop]:
     sops = {}

@@ -1,7 +1,7 @@
 ---
 id: notify-vendor
 title: Send a message to a vendor
-triggers: [email vendor, notify vendor, tell vendor, message vendor, email the vendor]
+triggers: [email vendor, notify vendor, tell vendor, message vendor, email the vendor, email, notify, tell]
 ---
 Sends one email to a vendor about an entity in Acme. Email to a vendor is external, so it needs an action approval.
 

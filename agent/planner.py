@@ -3,7 +3,10 @@
 One LLM call, no tools. In: the Goal Spec, the SOP, the gathered facts and the API read tools. Out: one
 `agent/plan.Plan` (target states, SOP-cited, API-read predicates; the verifier's input, D-131). Code checks the
 reply (the Plan model, then `plan_errors`); one retry with the problems listed; failing again gives no plan, so
-the run never acts and the verifier says `unverified`."""
+the run never acts and the verifier says `unverified`.
+
+Replan (docs/day5-plan.md C, approved): the same call and checks plus the plan and its unmet milestones; met ones
+come back unchanged, unmet ones change only how rows are found (args, where), never what they assert (N.182)."""
 
 import json
 from typing import Any
@@ -25,7 +28,17 @@ schema given. Rules:
    that milestone M1's first predicate found (that predicate must find exactly one row).
 4. Every value comes from the facts, the goal, the procedure or the tool list. Never invent one.
 5. The procedure's "leave everything else unchanged" step becomes a count 0 predicate.
-6. awaits_business_approval: true on a milestone whose record will wait for a business approval."""
+6. awaits_business_approval: true on a milestone whose record will wait for a business approval.
+7. Every procedure step that writes (its Source names a POST) is the sop_step of a milestone. Only a step whose
+   title says "when ..." may instead be a key of not_applicable, with the reason it does not apply here.
+8. judge: at most 3 short criteria that no exact predicate can check (tone; whether a text says something in
+   words), on a milestone whose predicates find the record. Exact checks stay predicates."""
+REPLAN = """
+
+Revise the plan: an independent check found the milestones in `unmet` not met (what each read found is given).
+Keep every met milestone exactly as it is. For an unmet milestone keep its target, step and what each predicate
+asserts (read, expect, contains, count); correct only how the row is found (args, where), with sourced values. If
+the plan was right and the work is missing, send it back unchanged."""
 
 
 def read_tools(run, seen: dict[str, list[str]]) -> list[dict[str, Any]]:
@@ -46,7 +59,17 @@ def plan_errors(plan: Plan, run, goal: GoalSpec, sop: Sop | None, facts: list[Fa
     problems = plan_problems(plan, run.registry) + ([] if plan.milestones else ["give 1 to 7 milestones"])
     sourced = {str(v).lower() for f in facts for v in (f.value, f.raw)} | {f.value.lower() for f in goal.fields}
     text = ((sop.text if sop else "") + CATALOG_PATH.read_text(encoding="utf-8")).lower()
-    for m in plan.milestones:
+    cited = {m.sop_step for m in plan.milestones}
+    optional = sop.write_steps(optional=True) if sop else []
+    problems += [f"write step {s} needs a milestone" + (" or a not_applicable reason" if s in optional else
+                 ": the procedure does not make it optional") for s in (sop.write_steps() if sop else [])
+                 if s not in cited and not (s in optional and plan.not_applicable.get(s, "").strip())]
+    exists = {(p.read, json.dumps(p.where, default=str)) for m in plan.milestones for p in m.predicates if p.count}
+    for m in plan.milestones:  # rule 1 in code: a state the run writes, or a "must not exist" check
+        if sop and m.sop_step not in sop.write_steps() and any(p.count for p in m.predicates):
+            problems.append(f"{m.id}: {m.sop_step} writes nothing; only a count 0 check may cite it (rule 1)")
+        problems += [f"{m.id}: count 0 on {p.read} rows another milestone expects to exist" for p in m.predicates
+                     if not p.count and (p.read, json.dumps(p.where, default=str)) in exists]
         if sop and m.sop_step not in sop.steps:
             problems.append(f"{m.id}: sop_step {m.sop_step!r} is not a step of {sop.id}")
         for p in m.predicates:
@@ -65,24 +88,45 @@ def plan_errors(plan: Plan, run, goal: GoalSpec, sop: Sop | None, facts: list[Fa
     return problems
 
 
-async def make_plan(run, llm, goal: GoalSpec, sop: Sop | None, facts: list[Fact],
-                    seen: dict[str, list[str]]) -> Plan | None:
-    brief = {"goal": goal.model_dump(exclude={"decision", "question", "candidates", "reason"}),
+def replan_errors(old: Plan, new: Plan, unmet: set[str]) -> list[str]:
+    now, problems = {m.id: m for m in new.milestones}, []
+    for m in old.milestones:
+        n = now.get(m.id)
+        if n is None or m.id not in unmet and n != m:
+            problems.append(f"{m.id} {'was dropped' if n is None else 'is met'}: keep it exactly as it was")
+        elif m.id in unmet and not (n.model_dump(exclude={"predicates"}) == m.model_dump(exclude={"predicates"})
+                                    and len(n.predicates) == len(m.predicates) and all(
+                a.model_dump(exclude={"args", "where"}) == b.model_dump(exclude={"args", "where"})
+                for a, b in zip(m.predicates, n.predicates))):
+            problems.append(f"{m.id}: correct only how its rows are found (args, where), never what it asserts")
+    return problems
+
+
+async def make_plan(run, llm, goal: GoalSpec, sop: Sop | None, facts: list[Fact], seen: dict[str, list[str]],
+                    current: Plan | None = None, unmet: list = (), replan: int = 0) -> Plan | None:
+    brief = {"goal": goal.model_dump(exclude={"decision", "question", "candidates", "reason", "lookups"}),
              "facts": {f.name: f.value for f in facts}, "sop_id": goal.sop_id,
              "read_tools": read_tools(run, seen), "schema": Plan.model_json_schema()}
-    messages = [{"role": "system", "content": PROMPT}, {"role": "user", "content": json.dumps(
+    if current is not None:
+        brief |= {"current_plan": current.model_dump(exclude_defaults=True),
+                  "unmet": {c.id: [x.detail for x in c.checks if not x.ok] for c in unmet}}
+    messages = [{"role": "system", "content": PROMPT + (REPLAN if current else "")}, {"role": "user", "content": json.dumps(
         brief, ensure_ascii=False) + (f"\n\nProcedure:\n{sop.text}" if sop else "")}]
     for attempt in (1, 2):
-        reply = await llm.chat("reason", messages)
+        reply = await llm.chat("reason", messages)  # Gemini: gpt-oss-120b planned reads and pre-states (D-193)
         content = reply.content or ""
         try:
             plan = Plan.model_validate({**json.loads(content[content.index("{"):content.rindex("}") + 1]),
                                         "sop_id": goal.sop_id})  # the gate's SOP, whatever the reply says
             problems = plan_errors(plan, run, goal, sop, facts, seen)
+            problems += replan_errors(current, plan, {c.id for c in unmet}) if current else []
         except ValueError as exc:  # no JSON object, bad JSON, or the Plan model's own checks (a ValidationError)
             plan, problems = None, [str(exc)[:600]]
         run.ctx.store.append(run.run_id, "plan", run.ctx.now.isoformat(), {
-            "attempt": attempt, "plan": plan.model_dump() if plan else None, "problems": problems})
+            "attempt": attempt, "plan": plan.model_dump() if plan else None, "problems": problems, **({
+                "replan": replan, "reasons": [f"{c.id} not met: {c.target}" for c in unmet],
+                "changed": [m.id for m in plan.milestones if m not in current.milestones] if plan else []}
+                if current else {})})
         if not problems:
             return plan
         messages += [reply.message, {"role": "user", "content": "Fix these problems and send the whole plan again:\n- "

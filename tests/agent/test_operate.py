@@ -12,9 +12,14 @@ import pytest
 from agent.feasibility import names_in
 from agent.goal import Fact, Field, GoalSpec
 from agent.llm.client import LLMClient
-from agent.memory.knowledge import load_sops
+from agent.memory.knowledge import load_sops, match_sops
 from agent.plan import Plan
-from agent.planner import plan_errors
+from agent.policy.approvals import ApprovalStore
+from agent.llm.client import LLMUnavailable
+from agent.planner import plan_errors, replan_errors
+from agent.run import _plan_failed
+from agent.verifier import Verdict
+from agent.verifier.predicates import Check, MilestoneCheck
 from agent.run import operate
 from tests.acme.sop_format import load_sops as strict_sops
 from tests.agent.acme_fixtures import CONFIG, drive, sandbox  # noqa: F401  (sandbox is a fixture)
@@ -33,7 +38,11 @@ def gate(decision, sop="process-invoice", **extra):
 PLAN = {"sop_id": "process-invoice", "milestones": [{
     "id": "M1", "target": "an invoice from Sharma Logistics Pvt Ltd waits for approval", "sop_step": "PI-5",
     "predicates": [{"read": "list_invoices", "args": {"status": "pending_approval"},
-                    "where": {"vendor_name": "Sharma Logistics Pvt Ltd"}}]}]}
+                    "where": {"vendor_name": "Sharma Logistics Pvt Ltd"}}]},
+    {"id": "M2", "target": "that invoice shows its source file", "sop_step": "PI-6",
+     "predicates": [{"read": "list_invoices", "args": {"status": "pending_approval"},
+                     "where": {"vendor_name": "Sharma Logistics Pvt Ltd"}}]}],
+        "not_applicable": {"PI-7": "a test plan: no approval request"}}
 VENDOR_FACT = {"facts": [{"name": "vendor_name", "raw": "Sharma Logistics Pvt Ltd", "result": 1}]}
 
 
@@ -58,20 +67,43 @@ def test_an_unknown_vendor_is_declined_with_evidence_written_by_code(sandbox):
     assert "find_vendors q='Kapoor': 0 match(es)" in llm.requests[0]["messages"][1]["content"]
 
 
-def test_a_decline_with_no_empty_lookup_becomes_a_question(sandbox):
-    """1.6: the vendor was found (only the employee lookups were empty), so the model's decline is not trusted; the
-    run asks instead and writes nothing."""
-    report, _, _ = operate_with(sandbox, SHARMA, gate("decline", reason="I would rather not."))
-    assert report["status"] == "needs_clarification" and report["questions"][0]["text"] == "I would rather not."
+def test_a_decline_or_an_ask_with_nothing_unknown_or_ambiguous_proceeds(sandbox):
+    """1.6, D-171, D-194: Sharma Logistics is one vendor, so neither the model's decline nor its "which invoice
+    number?" is trusted: the run proceeds and the gather phase, with the documents, asks or acts."""
+    for reply in (gate("decline", reason="I would rather not."), gate("ask", question="Which invoice number?")):
+        report, _, events = operate_with(sandbox, SHARMA, reply, calls(("ask_user", {"question": "Which one?"})))
+        goal = next(e["payload"] for e in events if e["type"] == "goal")
+        assert goal["decision"] == "proceed" and report["questions"][0]["text"] == "Which one?"
+
+
+def test_an_ask_stands_when_a_named_party_matches_two_or_more_records(sandbox):
+    """D-194: "Ra" matches two vendors (Rao Packaging, Verma Traders): the gate's ask goes to the requester."""
+    report, llm, _ = operate_with(sandbox, "Pay Ra for the invoice.",
+                                  gate("ask", "schedule-payment", question="Which vendor?"))
+    assert "find_vendors q='Ra': 2 match(es)" in llm.requests[0]["messages"][1]["content"]
+    assert report["status"] == "needs_clarification" and report["questions"][0]["text"] == "Which vendor?"
 
 
 def test_an_sop_outside_the_candidates_and_an_unseen_field_are_dropped(sandbox):
     reply = gate("ask", "schedule-payment", question="Which one?",
                  fields=[{"name": "vendor", "value": "Sharma Logistics Pvt Ltd", "source": "probe"},
                          {"name": "invoice_no", "value": "INV-9999", "source": "request"}])
-    _, _, events = operate_with(sandbox, SHARMA, reply)
+    _, _, events = operate_with(sandbox, SHARMA, reply, calls(("ask_user", {"question": "?"})))
     goal = next(e["payload"] for e in events if e["type"] == "goal")
     assert goal["sop_id"] is None and [f["value"] for f in goal["fields"]] == ["Sharma Logistics Pvt Ltd"]
+
+
+def test_an_email_request_matches_the_notify_vendor_sop_by_a_generic_word():
+    """N.178: "Email <vendor> that ..." has no "email vendor" phrase; the generic trigger "email" matches it."""
+    assert "notify-vendor" in match_sops("Email Sharma Logistics that invoice INV-1043 is under review.", load_sops())
+
+
+def test_write_steps_are_the_steps_whose_source_names_a_post():
+    sops = load_sops()
+    assert sops["process-invoice"].write_steps() == ["PI-5", "PI-6", "PI-7"]
+    assert sops["notify-vendor"].write_steps() == ["NV-4"]
+    assert sops["process-invoice"].write_steps(optional=True) == ["PI-7"]  # "... when required" (D-195)
+    assert [s for sop in sops.values() for s in sop.write_steps(optional=True)] == ["PI-7"]
 
 
 def test_the_agent_loader_agrees_with_the_strict_sop_parser():
@@ -82,12 +114,22 @@ def test_the_agent_loader_agrees_with_the_strict_sop_parser():
 
 # --- planner and the whole path --------------------------------------------------------------------------------
 
-def test_the_agents_done_never_sets_the_status(sandbox):
-    """6.10: the plan's milestone is not met and the agent says it is done: the verifier says failed."""
-    report, _, events = operate_with(sandbox, SHARMA, gate("proceed"), calls(("find_vendors", {"q": "Sharma"})),
-                                     calls(("facts_ready", VENDOR_FACT)), say(json.dumps(PLAN)), say("All done."))
-    assert report["status"] == "failed" and report["narrative"] == ["All done."]
-    assert [e["payload"]["problems"] for e in events if e["type"] == "plan"] == [[]]
+def test_the_agents_done_never_sets_the_status_and_replanning_stops_after_three(sandbox):
+    """6.10: the milestone is not met and the agent says it is done: the verifier says failed. Register 2.6: the
+    planner is asked again (here it sends the same plan back, which is allowed) and the agent acts again, exactly
+    three times; then an escalation event with the unmet milestone. Not-applicable SOP steps are listed (N.177)."""
+    report, llm, events = operate_with(sandbox, SHARMA, gate("proceed"), calls(("find_vendors", {"q": "Sharma"})),
+                                       calls(("facts_ready", VENDOR_FACT)), say(json.dumps(PLAN)), say("All done."),
+                                       *[say(json.dumps(PLAN)), say("All done.")] * 3)
+    assert report["status"] == "failed" and report["narrative"] == ["All done."] * 4 and not llm.replies
+    assert [e["payload"].get("replan", 0) for e in events if e["type"] == "plan"] == [0, 1, 2, 3]
+    targets = [f"{m['id']}: {m['target']}" for m in PLAN["milestones"]]
+    assert report["escalation"] == {"replans": 3, "unmet": targets,
+                                    "reasons": [f"milestone {t.replace(': ', ' not met: ', 1)}" for t in targets]}
+    act_brief = llm.requests[-1]["messages"][1]["content"]
+    assert "An independent check found these milestones unmet: M1 (0 matching row(s)" in act_brief
+    assert act_brief.endswith("Records you already wrote stay: read before you write again.")
+    assert report["skipped_steps"] == PLAN["not_applicable"] and len(report["replans"]) == 3
 
 
 def test_a_bad_plan_gets_one_retry_then_the_run_never_acts(sandbox):
@@ -102,7 +144,7 @@ def test_a_bad_plan_gets_one_retry_then_the_run_never_acts(sandbox):
 
 
 def plan_with(**milestone):
-    return Plan.model_validate({**PLAN, "milestones": [{**PLAN["milestones"][0], **milestone}]})
+    return Plan.model_validate({**PLAN, "milestones": [{**PLAN["milestones"][0], **milestone}, *PLAN["milestones"][1:]]})
 
 
 @pytest.mark.parametrize("plan, problem", [
@@ -113,6 +155,16 @@ def plan_with(**milestone):
     (plan_with(predicates=[{"read": "submit_invoice"}]), "'submit_invoice' is not an API read tool"),
     (plan_with(predicates=[{"read": "list_invoices", "where": {"invoice_no": "INV-4040"}}]), "'INV-4040' is not from"),
     (Plan(sop_id="process-invoice"), "give 1 to 7 milestones"),
+    (plan_with(sop_step="PI-1"), "M1: PI-1 writes nothing; only a count 0 check may cite it"),
+    (Plan.model_validate({**PLAN, "milestones": [PLAN["milestones"][0], {
+        "id": "M2", "target": "not there yet", "sop_step": "PI-8", "predicates": [{**PLAN["milestones"][0]["predicates"][0],
+                                                                                  "count": 0}]}]}),
+     "M2: count 0 on list_invoices rows another milestone expects to exist"),
+    (plan_with().model_copy(update={"not_applicable": {}}), "write step PI-7 needs a milestone or a not_applicable reason"),
+    (plan_with().model_copy(update={"not_applicable": {"PI-7": " "}}), "write step PI-7 needs a milestone or a not_"),
+    (Plan.model_validate({**PLAN, "milestones": PLAN["milestones"][:1], "not_applicable": {
+        "PI-6": "handled by the ingestion pipeline", "PI-7": "x"}}),
+     "write step PI-6 needs a milestone: the procedure does not make it optional"),  # D-195: an invented reason
 ])
 def test_each_planner_rule_has_a_failing_plan(sandbox, plan, problem):
     run = sandbox.run(plan=Plan(sop_id="process-invoice"))
@@ -138,6 +190,100 @@ def test_a_fact_counts_as_a_source_by_its_value_or_its_raw_text(sandbox):
     assert plan_errors(by_raw, run, goal, sop, [amount, vendor]) == []
     assert plan_errors(by_value, run, goal, sop, [vendor]) != []
     drive(run, lambda run: asyncio.sleep(0))
+
+
+# --- replan (register 2.5, 2.6, N.182) -----------------------------------------------------------------------------
+
+def two_milestones(m2=None, m1=None):
+    base = [{"id": "M1", "target": "Sharma is in the vendor master", "sop_step": "PI-2",
+             "predicates": [{"read": "find_vendors", "args": {"q": "Sharma"}, "where": {"name": "Sharma Logistics Pvt Ltd"}}]},
+            {"id": "M2", "target": "INV-1012 is paid", "sop_step": "PI-5",
+             "predicates": [{"read": "list_invoices", "where": {"invoice_no": "INV-1012"}, "expect": {"status": "paid"}}]}]
+    base[0] |= m1 or {}
+    base[1]["predicates"][0] |= m2 or {}
+    return Plan.model_validate({**PLAN, "milestones": base})
+
+
+@pytest.mark.parametrize("change, problem", [
+    (dict(m2={"count": 0}), "M2: correct only how its rows are found"),                # loosened count
+    (dict(m2={"expect": {"status": "approved"}}), "M2: correct only how its rows are found"),  # status changed
+    (dict(m2={"expect": {}}), "M2: correct only how its rows are found"),             # assertion dropped
+    (dict(m1={"target": "a vendor exists"}), "M1 is met: keep it exactly as it was"),  # met milestone changed
+    (dict(m2={"where": {"invoice_no": "INV-0987"}}), None),                             # a lookup fixed: allowed
+    (dict(m2={"args": {"vendor": 1}}), None),
+])
+def test_a_replan_may_correct_only_how_an_unmet_milestones_rows_are_found(change, problem):
+    problems = replan_errors(two_milestones(), two_milestones(**change), {"M2"})
+    assert (problems == []) if problem is None else any(problem in p for p in problems), problems
+
+
+def test_a_replan_may_not_drop_an_unmet_milestone_but_may_add_one():
+    old = two_milestones()
+    dropped = Plan.model_validate({**PLAN, "milestones": [old.milestones[0].model_dump()]})
+    assert replan_errors(old, dropped, {"M2"}) == ["M2 was dropped: keep it exactly as it was"]
+    extra = {"id": "M3", "target": "x", "sop_step": "PI-5", "predicates": [{"read": "list_invoices"}]}
+    added = Plan.model_validate({**PLAN, "milestones": [m.model_dump() for m in old.milestones] + [extra]})
+    assert replan_errors(old, added, {"M2"}) == []
+
+
+def test_a_replan_that_corrects_a_lookup_lets_the_run_pass(sandbox):
+    """The first plan looks for INV-1012 under the wrong vendor (0 rows); the replan corrects the lookup only."""
+    facts = {"facts": [{"name": "invoice_no", "raw": "INV-1012", "result": 1},
+                       {"name": "vendor_name", "raw": "Sharma Logistics Pvt Ltd", "result": 1},
+                       {"name": "other_vendor", "raw": "Rao Packaging Industries", "result": 1}]}
+    one = lambda vendor: {**PLAN, "milestones": [{"id": m, "target": "INV-1012 is paid", "sop_step": step,  # noqa: E731
+        "predicates": [{"read": "list_invoices", "where": {"invoice_no": "INV-1012", "vendor_name": vendor},
+                        "expect": {"status": "paid"}}]} for m, step in (("M1", "PI-5"), ("M2", "PI-6"))]}
+    report, llm, _ = operate_with(sandbox, SHARMA, gate("proceed"), calls(("list_invoices", {})),
+                                  calls(("facts_ready", facts)), say(json.dumps(one("Rao Packaging Industries"))),
+                                  say("Done."), say(json.dumps(one("Sharma Logistics Pvt Ltd"))), say("Done."))
+    assert report["status"] == "completed" and not llm.replies
+    assert [(r["replan"], r["changed"]) for r in report["replans"]] == [(1, ["M1", "M2"])] and report["escalation"] is None
+
+
+def test_no_replan_after_a_failed_postcondition_an_unexplained_change_or_a_stopped_executor(sandbox):
+    unmet = MilestoneCheck(id="M1", target="t", ok=False, critical=True, awaits_business_approval=False)
+    assert _plan_failed(Verdict(status="failed", milestones=[unmet])) == [unmet]
+    assert _plan_failed(Verdict(status="failed", milestones=[unmet], postconditions=[Check(name="p", ok=False)])) == []
+    assert _plan_failed(Verdict(status="completed_with_exceptions", milestones=[unmet])) == []
+
+    def down(messages):
+        raise LLMUnavailable("every configured model failed")
+    report, llm, events = operate_with(sandbox, SHARMA, gate("proceed"), calls(("find_vendors", {"q": "Sharma"})),
+                                       calls(("facts_ready", VENDOR_FACT)), say(json.dumps(PLAN)), down)
+    assert report["status"] == "failed" and [e["type"] for e in events].count("plan") == 1
+    assert report["replans"] == [] and report["escalation"] is None
+
+
+# --- resume after an action approval (P.5) -----------------------------------------------------------------------
+
+def test_a_rejected_action_ends_blocked_and_rolls_back_what_the_run_wrote(sandbox):
+    """Onboarding: the employee is created, then an external email is held (ORG-005) and rejected, so the run ends
+    blocked_by_policy and the rollback cancels the employee the run created (passes ORG-008: the run's own row).
+    The card names the recipient's source; the model never sees an approval id."""
+    async def approver(approval_id):
+        ApprovalStore(sandbox.store).decide(approval_id, "rejected", "tester")
+        return "rejected"
+    request = "Onboard Priya Nair, she joins Monday."
+    plan = {"sop_id": "onboard-employee", "milestones": [{
+        "id": m, "target": "Priya Nair is onboarded", "sop_step": step,
+        "predicates": [{"read": "find_employees", "args": {"q": "Priya Nair"}}]} for m, step in (
+            ("M1", "OE-3"), ("M2", "OE-4"), ("M3", "OE-5"))]}
+    employee = {"name": "Priya Nair", "email": "priya.nair@acme.example", "role": "Analyst", "department": "Finance",
+                "manager_id": 1, "start_date": "2026-10-12"}
+    mail = {"to": "priya@gmail.example", "subject": "Welcome", "body": "Welcome aboard."}
+    llm = FakeLLM(gate("proceed", sop="onboard-employee"),
+                  calls(("facts_ready", {"facts": [{"name": "employee_name", "raw": "Priya Nair", "result": 0}]})),
+                  say(json.dumps(plan)), calls(("create_employee", employee)), calls(("send_mail", mail)))
+    report = asyncio.run(operate(request, NOW, store=sandbox.store, config=CONFIG, approver=approver,
+                                 transport=httpx.ASGITransport(app=sandbox.app), make_llm=lambda run: llm))
+    assert report["status"] == "blocked_by_policy"
+    assert [a["decision"] for a in report["action_approvals"]] == ["rejected"]
+    assert report["action_approvals"][0]["predicted"]["sources"] == {"to": "not seen in any read"}
+    assert [(u["tool"], u["ok"]) for u in report["rollback"]["undone"]] == [("cancel_employee", True)]
+    assert [tuple(r) for r in sandbox.rows("SELECT status FROM employees WHERE name = 'Priya Nair'")] == [("cancelled",)]
+    assert sandbox.rows("SELECT COUNT(*) FROM mail WHERE folder = 'outbox'")[0][0] == 0
+    assert report["action_approvals"][0]["approval_id"] not in json.dumps([r["messages"] for r in llm.requests])
 
 
 # --- record, then replay with a fresh run id and no key ---------------------------------------------------------
@@ -176,8 +322,8 @@ def test_a_recorded_run_replays_with_a_fresh_run_id_and_no_key(sandbox, tmp_path
         return LLMClient({**CONFIG, **folder, "REPLAY": "1"}, now=NOW.isoformat(), forbidden=(run.run_id,),
                          transport=httpx.MockTransport(lambda r: pytest.fail("a replay must not call a provider")))
     again, _, _ = operate_with(sandbox, SHARMA, config={**CONFIG, **folder, "REPLAY": "1"}, make_llm=replaying)
-    assert again["run_id"] != first["run_id"] and len(files) == 5  # gate, 2 gather turns, plan, act
+    assert again["run_id"] != first["run_id"] and len(files) == 7  # gate, 2 gather turns, plan, act, replan, act again
     assert sorted(p.name for p in (tmp_path / "cassettes").rglob("*.json")) == files
-    assert (again["status"], again["narrative"]) == (first["status"], first["narrative"]) == ("failed", ["All done."])
+    assert (again["status"], again["narrative"]) == (first["status"], first["narrative"]) == ("failed", ["All done."] * 4)
     stored = "".join(p.read_text() for p in (tmp_path / "cassettes").rglob("*.json"))
     assert first["run_id"] not in stored and "gk-test-key-1" not in stored

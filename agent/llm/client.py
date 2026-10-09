@@ -5,6 +5,9 @@ per-run token budget, one `llm_call` event per call, record/replay cassettes (ag
 - 429, 5xx and transport errors: up to 3 tries per model (Retry-After or retryDelay, else backoff with full
   jitter); another 4xx or a wait over a minute (a spent daily quota) goes to the next model at once (D-166).
 - REPLAY=1 serves from cassettes only and needs no key; a miss raises. Otherwise every call is live and recorded.
+- `LLM_RPM` (optional, `model=n,...`) spaces live calls to a model by 60/n seconds, so a burst never earns a 429.
+- A `QuotaBook` (optional) counts live calls per model per day (the day comes from the caller: agent/ reads no wall
+  clock) and skips a model at its `LLM_DAILY_LIMITS` estimate, or once a long 429 says its quota is spent (D-179).
 - A request holding a forbidden value (the run id, D-106) is refused before it is hashed or sent.
 - Tool calls keep the provider's own object (Gemini's thought signature goes back unchanged); an empty id gets a
   stable one.
@@ -17,6 +20,7 @@ import random
 import re
 import time
 from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -25,8 +29,11 @@ from pydantic import BaseModel
 from agent.config import ROOT
 from agent.llm import cassette
 
-CHAINS = {  # role -> (provider env prefix, model id key), first choice first
-    "reason": [("GEMINI", "GEMINI_MODEL"), ("GEMINI", "GEMINI_LITE_MODEL"), ("OPENROUTER", "OPENROUTER_FALLBACK_MODEL")],
+REASON = [("GEMINI", "GEMINI_LITE_MODEL"), ("GEMINI", "GEMINI_LITE2_MODEL"), ("GEMINI", "GEMINI_MODEL"),  # Lite: 500 a
+          ("GEMINI", "GEMINI_FLASH2_MODEL"), ("OPENROUTER", "OPENROUTER_FALLBACK_MODEL")]  # day; Flash: 20 (D-187)
+CHAINS = {  # role -> (provider env prefix, model id key), first choice first (D-176, D-178)
+    "reason": REASON,                                 # the executor loop
+    "plan": [("GROQ", "GROQ_PLAN_MODEL"), *REASON],   # the feasibility gate: one small call (D-178, D-193)
     "compact": [("GEMINI", "GEMINI_LITE_MODEL"), ("GROQ", "GROQ_COMPACTION_MODEL")],
     "judge": [("GROQ", "GROQ_JUDGE_MODEL"), ("GEMINI", "GEMINI_LITE_MODEL")],
 }
@@ -58,6 +65,33 @@ class LLMReply(BaseModel):
     provider: str
     model: str
     usage: dict[str, int] = {}
+
+
+PACED: dict[str, float] = {}  # model -> when its last live call started (monotonic), shared by a process's clients
+
+
+def _per_model(text: str) -> dict[str, int]:
+    return {m.strip(): int(n) for m, _, n in (p.partition("=") for p in text.split(",")) if n.strip()}
+
+
+class QuotaBook:
+    """Estimated live calls per model for one provider day, kept in a small JSON file (runs/llm_quota.json)."""
+
+    def __init__(self, path: Path, day: str, limits: str = ""):
+        self.path, self.day = path, day
+        self.limits = _per_model(limits)
+        data = json.loads(path.read_text()) if path.is_file() else {}
+        self.calls, self.spent = (data.get("calls", {}), set(data.get("spent", []))) if data.get("day") == day else ({}, set())
+
+    def left(self, model: str) -> int | None:
+        limit = self.limits.get(model)
+        return 0 if model in self.spent else None if limit is None else max(0, limit - self.calls.get(model, 0))
+
+    def add(self, model: str, spent: bool = False) -> None:
+        self.calls[model] = self.calls.get(model, 0) + (not spent)
+        self.spent |= {model} if spent else set()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps({"day": self.day, "calls": self.calls, "spent": sorted(self.spent)}))
 
 
 def _parse(data: dict[str, Any], provider: str, model: str) -> LLMReply:
@@ -92,8 +126,12 @@ def _wait(response: httpx.Response | None, attempt: int) -> float | None:
 class LLMClient:
     def __init__(self, config: Mapping[str, str], *, now: str, log: Callable[[dict[str, Any]], None] = lambda event: None,
                  forbidden: tuple[str, ...] = (), transport: httpx.AsyncBaseTransport | None = None,
-                 sleep: Callable[[float], Any] = asyncio.sleep, chains: dict[str, list[tuple[str, str]]] | None = None):
+                 sleep: Callable[[float], Any] = asyncio.sleep, chains: dict[str, list[tuple[str, str]]] | None = None,
+                 quota: QuotaBook | None = None, clock: Callable[[], float] = time.monotonic,
+                 paced: dict[str, float] | None = None):
         self.config, self.now, self.log, self.forbidden = config, now, log, tuple(f for f in forbidden if f)
+        self.quota, self.rpm, self.clock = quota, _per_model(config.get("LLM_RPM", "")), clock
+        self.paced = PACED if paced is None else paced
         self.transport, self.sleep, self.chains = transport, sleep, chains or CHAINS
         self.replay = config.get("REPLAY") == "1"
         self.cassettes = ROOT / config.get("CASSETTE_DIR", "cassettes")
@@ -139,18 +177,27 @@ class LLMClient:
             raise LLMUnavailable(f"no provider configured for the {role} role")
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, transport=self.transport) as http:
             for provider, url, key, model in chain:
+                if self.quota and self.quota.left(model) == 0:
+                    notes.append(f"{provider}/{model}: daily limit reached (estimated)")
+                    continue
                 for attempt in range(1, TRIES + 1):
                     response = None
+                    if model in self.rpm:  # at most n calls a minute to this model (LLM_RPM)
+                        await self.sleep(max(0.0, self.paced.get(model, -1e9) + 60 / self.rpm[model] - self.clock()))
+                        self.paced[model] = self.clock()
                     try:
                         response = await http.post(url, json={"model": model, **body, "temperature": 0},
                                                    headers={"Authorization": f"Bearer {key}"})
                         if response.status_code == 200:
+                            self.quota and self.quota.add(model)
                             return _parse(response.json(), provider, model), notes
                         problem = f"HTTP {response.status_code} {response.text[:160]!r}"
                     except httpx.TransportError as exc:
                         problem = type(exc).__name__
                     notes.append(f"{provider}/{model} try {attempt}: {problem}")
                     wait = _wait(response, attempt)
+                    if wait is None and self.quota and response is not None and response.status_code == 429:
+                        self.quota.add(model, spent=True)  # a quota that resets in hours: spent for today
                     if wait is None or (response is not None and response.status_code not in RETRYABLE):
                         break  # a wrong model id or key, or a quota that resets in hours: the next model, at once
                     if attempt < TRIES:

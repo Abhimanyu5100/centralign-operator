@@ -16,6 +16,7 @@ from agent.failures import classify
 from agent.plan import Plan, coverage_warnings, plan_problems
 from agent.policy.facts import calls
 from agent.tools.registry import ToolResult
+from agent.verifier.judge import judge
 from agent.verifier.predicates import Check, MilestoneCheck, milestones, postconditions
 from agent.verifier.side_effects import SideEffects, side_effects
 
@@ -29,6 +30,8 @@ class Verdict(BaseModel):
     postconditions: list[Check] = []
     milestones: list[MilestoneCheck] = []
     side_effects: SideEffects | None = None
+    judge: list[dict] = []          # the judge's answer per fuzzy criterion (judge.py)
+    judge_flags: list[str] = []     # unmet fuzzy criteria on a status the judge does not lower
 
 
 @dataclass(frozen=True)
@@ -72,9 +75,10 @@ def decide_status(e: Evidence) -> tuple[str, list[str]]:
     return "completed", []
 
 
-async def verify(run, plan: Plan | None = None, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> Verdict:
+async def verify(run, plan: Plan | None = None, timeout: float = DEFAULT_TIMEOUT_SECONDS, llm=None) -> Verdict:
+    """`llm`: the judge's client; None (the scripted oracles) means no fuzzy criteria are judged."""
     try:
-        verdict = await asyncio.wait_for(_verify(run, plan if plan is not None else run.plan), timeout)
+        verdict = await asyncio.wait_for(_verify(run, plan if plan is not None else run.plan, llm), timeout)
     except Exception as exc:  # noqa: BLE001 - a verifier that cannot finish never reports success
         reason = "timed out" if isinstance(exc, TimeoutError) else f"{type(exc).__name__}: {exc}"
         verdict = Verdict(status="unverified", reasons=[f"the verifier could not finish: {reason}"])
@@ -82,7 +86,7 @@ async def verify(run, plan: Plan | None = None, timeout: float = DEFAULT_TIMEOUT
     return verdict
 
 
-async def _verify(run, plan: Plan | None) -> Verdict:
+async def _verify(run, plan: Plan | None, llm=None) -> Verdict:
     loop = asyncio.get_running_loop()
     absence_at = loop.time() + run.client.read_lag     # one shared wait for every "must not exist" check
     events = run.ctx.store.events(run.run_id)          # the run as it ended, before the verifier reads anything
@@ -120,5 +124,13 @@ async def _verify(run, plan: Plan | None) -> Verdict:
                        minor=[f"milestone {m.id} not met: {m.target}" for m in checked if not m.critical and not m.ok],
                        awaits=any(m.ok and m.awaits_business_approval for m in checked))
     status, reasons = decide_status(evidence)
+    judged, flags = [], []
+    if llm is not None and plan is not None and status in ("completed", "completed_with_exceptions",
+                                                            "awaiting_business_approval"):
+        judged, more = await judge(llm, run.ctx.store.run(run.run_id)["request"], plan, checked)
+        notes += more
+        flags = [f"judge ({j['model']}): {j['milestone']} not met: {j['criterion']}" for j in judged if not j["met"]]
+        if status == "completed" and flags:  # the judge only lowers, and only `completed` (6.6)
+            status, reasons, flags = "completed_with_exceptions", reasons + flags, []
     return Verdict(status=status, reasons=reasons, notes=notes, postconditions=post, milestones=checked,
-                   side_effects=effects)
+                   side_effects=effects, judge=judged, judge_flags=flags)

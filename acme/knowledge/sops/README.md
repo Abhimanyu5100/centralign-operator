@@ -17,7 +17,10 @@ Optional one-paragraph intro.
 - Ask when: the condition under which the agent stops and asks, declines or escalates.
 ```
 
-- Every step is required. Step order is the dependency order.
+- Every step is required. Step order is the dependency order. A step that writes (its Source names a `POST`) and
+  applies only in some cases says so in its title with "when ..." (`### PI-7 Request the business approval when
+  required`); only such a step may be marked not applicable by a plan, with a reason (D-195). Every other write
+  step needs a milestone.
 - SOPs are generic: no vendor, employee, invoice number, amount or task name from the seed data.
 - A reference in backticks that looks like `GET /api/...` or `/invoices/new` must exist in Acme; a policy
   reference such as ORG-001 must exist in `policies.yaml`. Tests check both.

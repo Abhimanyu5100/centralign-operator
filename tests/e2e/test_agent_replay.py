@@ -14,7 +14,7 @@ pytestmark = pytest.mark.e2e
 
 @pytest.mark.parametrize("task", ["T1", "T5"])
 def test_the_recorded_llm_run_replays_with_no_key_and_passes_its_checker(task, tmp_path, capsys):
-    args = argparse.Namespace(task=task, replay=True, chaos=None, chaos_seed=0, events=False,
+    args = argparse.Namespace(task=task, replay=True, chaos=None, chaos_seed=0, events=False, approve_wait=0.0,
                               store=str(tmp_path / "runs" / "runs.db"))
     assert asyncio.run(_main(args)) == 0
     out = capsys.readouterr().out

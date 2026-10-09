@@ -125,12 +125,13 @@ check of each provider on Day 3 evening, outside the repo. Full plan, limits and
 
 | Role | Default | Fallback | Why |
 | --- | --- | --- | --- |
-| Feasibility gate, planner, executor | Gemini Flash (`gemini-3.5-flash`, Google AI Studio) | Gemini Flash-Lite (`gemini-3.5-flash-lite`); OpenRouter only if a key is ever added (D-165) | Function calling, vision, long context |
-| Compaction, extraction clean-up | Gemini Flash-Lite | Groq `qwen/qwen3.8-27b` (`GROQ_COMPACTION_MODEL`) | Higher free RPM; small inputs |
+| Executor loop | Gemini Flash-Lite (`gemini-3.5-flash-lite`, Google AI Studio; 15 RPM, 500 RPD) | Flash-Lite `gemini-3.1-flash-lite` (500 RPD) → Flash `gemini-3.5-flash` → Flash `gemini-3.7-flash` (20 RPD each, quality fallback; D-187); OpenRouter only if a key is ever added (D-165) | Function calling, long context; T1 passes on Lite |
+| Feasibility gate, planner | Groq `openai/gpt-oss-120b` (`GROQ_PLAN_MODEL`, D-178) | The executor's Gemini chain | Single small calls (measured: gate under 300 tokens, planner under 4,300); 1,000 requests a day |
 | Verifier judge | Groq `openai/gpt-oss-120b` | Gemini Flash-Lite (logged: same family as executor) | Different model family from the executor = more independent judge; small inputs fit Groq's 8K TPM |
 
-Groq is used only for the judge and compaction: its 8K tokens-per-minute cap cannot carry the executor's
-growing context.
+Groq never carries the executor loop: its 8K tokens-per-minute cap cannot hold the growing context. No compaction
+code (D-174); free tier only, no billing (D-175). The client keeps a per-model daily call estimate and skips a
+model before its 429 (D-179) and spaces calls by `LLM_RPM` (D-187); `make run` prints what is left.
 
 - All providers are called through one `LLMClient` interface (OpenAI-compatible endpoints first).
 - Model IDs and base URLs come from `.env` / config, never hard-coded.
@@ -215,7 +216,7 @@ author's manual curl check on Day 3 evening (outside the repo).
 | 3 | Oct 8 | A | Policy gate rules (YAML + evaluator, `enforced_by`, hierarchy, side-effect classes, provenance on trust-sensitive fields, action approvals + approval inbox UI); payment/bank-instruction scanner; deterministic verifier layers (postconditions, predicates as independent reads, side-effect check over `GET /api/audit` since run start, D-134); deterministic failure classifier; report generator; `bench/adversarial/` scripts; ~~remaining four chaos profiles~~ (done Day 2.3, D-116); AcmeBench harness running all oracles with chaos off and on. **Evening:** Dockerfile + compose (Acme plus runner); author's manual 5-minute curl check per provider | All oracles pass checkers with chaos off; under chaos, failures are detected and classified correctly and the report shows them; every adversarial script is stopped with the expected policy ID; verifier side-effect check agrees with `/__admin/diff`; `docker compose up` serves Acme |
 | 4 | Oct 9 | B | LLM client + cassettes + smoke test through the client (first thing); Goal Spec + feasibility gate (`agent/feasibility.py`); planner; executor loop replacing the scripted agent | Invoice task completed by the LLM executor; impossible task declined |
 | 5 | Oct 10 | B | LLM judge, replanning, ask flow, recovery behaviour; remaining tasks with the LLM; start the benchmark runs (cassettes) | Onboarding, ambiguity and T9 predict-then-approve pass; chaos run recovers |
-| 6 | Oct 11 | B | Finish AcmeBench with the LLM (8 core tasks × 3 runs chaos off = pass^3, plus 4 tasks × 1 run chaos on; CuP, side effects, refusals); governed learning v1; run viewer polish; README; demo video; fresh-clone test; stretch only: GUI-trace-to-tool; SUBMIT tonight | Results table from one command |
+| 6 | Oct 11 | B | Finish AcmeBench with the LLM (8 core tasks × 3 runs chaos off = pass^3, plus 4 tasks × 1 run chaos on, on Flash-Lite's 1,000 calls a day (D-188); cassettes recorded and replayed with no key; CuP, side effects, refusals); ~~governed learning v1~~ (cut, D-173); run viewer polish; README; demo video; fresh-clone test; stretch only: GUI-trace-to-tool; SUBMIT tonight | Results table from one command |
 | 7 | Oct 12 | — | Buffer only: video retakes, README polish | Form submitted |
 
 Hard gate: if the LLM executor cannot complete the invoice task by the end of Day 4, cut governed

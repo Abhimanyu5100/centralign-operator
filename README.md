@@ -17,3 +17,10 @@ Work in progress: the full README (setup, demo, results, tools used) is written 
   Docker); dev-only default passwords can be overridden by environment variables.
 - **`toast_2s` chaos accounting (D-132).** An error page made by an exception handler loses its alert after 2 s but
   is not counted as "fired".
+- **Judge independence (D-189, D-193).** The verifier's judge runs on Groq `openai/gpt-oss-120b`, another model
+  family than the executor and the planner (both Gemini), so it is independent of the model that did the work and of
+  the one that wrote its criteria; the feasibility gate shares its model. When Groq is unavailable the judge falls
+  back to Gemini Flash-Lite and the report says so. It can only lower `completed` (to `completed_with_exceptions`)
+  or add flags; it never raises a status, and the deterministic layers stay authoritative.
+- **Resume after an action approval is in-process (N.185).** A held call waits for the approver while the run is
+  alive (`make run APPROVE_WAIT=s`); an approval given after the process ended needs a new run.

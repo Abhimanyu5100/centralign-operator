@@ -36,6 +36,92 @@ are resent every turn. At 20 requests a day per model on the free tier, one T1 r
 the benchmark matrix (28 runs, about 600 calls and 3.5M tokens) needs Plan B (billing) or several days of quota.
 Day 5 levers: fewer tool schemas per phase, compaction of old tool results.
 
+## Day 5 changes (Oct 9, 2026; D-174 to D-181)
+
+**Free tier only, no billing (D-175):** Plan B below is withdrawn. Instead:
+
+- **Two more Gemini models (D-176),** each with its own daily quota. Smoke test (`make smoke
+  MODELS=GEMINI_FLASH2_MODEL,GEMINI_LITE2_MODEL`, Oct 9):
+
+  | Model (env var) | Plain | Forced tool call | Tool round trip | JSON schema | Long input | Empty tool-call ids | Limits seen |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | `gemini-3.7-flash` (`GEMINI_FLASH2_MODEL`) | ok 21 s | ok, args exact | ok | ok | 503 "high demand" | no | no 429, no headers: daily limit unknown |
+  | `gemini-3.1-flash-lite` (`GEMINI_LITE2_MODEL`) | ok 26 s | ok, args exact | ok | ok | 503 "high demand" | no | no 429, no headers: daily limit unknown |
+
+  Latency was 15-30 s per call at the time (high demand). A daily limit cannot be measured without spending it:
+  the author reads it on AI Studio's rate-limit page and adds it to `LLM_DAILY_LIMITS`; until then the client
+  learns it from the first 429 (marked spent for the day).
+- **Routing by measured size (D-178):** the feasibility gate (266-292 prompt tokens on T1) and the planner (3,432,
+  and 4,254 on its retry) are under the 5K bar, so both use the `plan` role: Groq `openai/gpt-oss-120b` first, then
+  the Gemini chain. Gemini keeps only the executor loop. A planner retry inside the same minute can pass Groq's 8K
+  tokens a minute; its Retry-After is seconds, which the client waits.
+- **Daily quota book (D-179):** `runs/llm_quota.json` counts live calls per model per Pacific day (when Gemini's
+  free quota resets); `LLM_DAILY_LIMITS` holds the known limits (`gemini-3.5-flash=20,openai/gpt-oss-120b=1000`
+  in `.env` so far); a model at its limit is skipped before any request, a long 429 marks it spent; `make run`
+  prints what is left before and after.
+- **No compaction code (D-174).** Token cost is cut by sending less (D-180, D-181): tools scoped by the SOP (2,500-
+  4,000 tokens of schemas per turn before), the gate's lookups in the gather brief (no re-probe), the act brief with
+  only the cited SOP steps and no self-checking reads, results without empty fields (4,000-character cap), facts
+  kept across `facts_ready` calls and read after their labels (T1 had three refusals).
+
+| Run | Before (Oct 9, Day 4) | After (Day 5, one live T1) |
+| --- | --- | --- |
+| T1 LLM calls (gate, gather, planner, act) | 24 (1, 13, 2, 8) | 17 (1 Groq, 8, 2, 6) |
+| T1 tokens (prompt) | 138,069 (135,145) | **76,283 (73,199): -45%, target 60K not met** |
+
+Measured on the recorded run 288ca95898e4f4cb (Oct 9, after D-191 to D-195), whose cassettes are committed: gather
+about 32K prompt tokens over 8 calls, planner about 8K over 2 (the first attempt is refused every time so far:
+`status: "any"` in an enum arg and a missing PI-6 milestone), act about 32.5K over 6 calls (the browser view adds
+about 1.2K per turn after the attach page opens). Levers left, not taken before the Day 5.2 commit (each is a prompt
+edit after the freeze and a re-record): drop an enum arg whose value is "any" in code instead of refusing the plan
+(saves the planner retry, about 5.6K); a smaller first gather result (the inbox list, about 1K, is resent 7 times);
+the browser observation cap (8,000 characters) for the attach page.
+
+### Free-tier limits (AI Studio rate-limit page, read by the author on Oct 9, 2026; Groq from its headers)
+
+| Model | RPM | RPD | TPM | Role |
+| --- | --- | --- | --- | --- |
+| `gemini-3.5-flash-lite` | 15 | 500 | 250K | executor, first |
+| `gemini-3.1-flash-lite` | 15 | 500 | 250K | executor, second |
+| `gemini-3.5-flash` | 5 | 20 | 250K | executor, quality fallback |
+| `gemini-3.7-flash` | 5 | 20 | 250K | executor, last |
+| Groq `openai/gpt-oss-120b` | 30 | 1,000 | 8K | gate, planner, judge |
+
+These go into `LLM_DAILY_LIMITS` and `LLM_RPM` (`.env.example`, D-187); the client skips a model at its daily
+estimate and spaces calls to it by 60/RPM seconds.
+
+**Role routing now (D-187):** executor Flash-Lite 3.5 → Flash-Lite 3.1 → Flash 3.5 → Flash 3.7 (T1 passed on Lite on
+Day 4; the Flash models are a quality fallback with 20 calls a day); gate and planner Groq gpt-oss-120b → the executor
+chain; judge Groq gpt-oss-120b → Gemini Flash-Lite (logged as same family). **Planner moved back to the executor's
+Gemini chain (D-193):** on Groq gpt-oss-120b two live T1 plans in a row had read-step milestones and a pre-state
+check that contradicted the entry, and its retry kept them; the gate stays on Groq. So the judge (Groq) is
+independent of both the executor and the planner (Gemini) that wrote its criteria; it can only lower `completed` or
+add `judge_flags`. Cost: about 2 Flash-Lite calls per run (about 62 on Day 6).
+
+### Day 6 benchmark estimate (pass^3 restored, D-188)
+
+Calls per task: T1 measured on Day 4 (22 executor calls, 2 planner, 1 gate) and T5 measured on Day 5 (1 gate call);
+every other figure is an estimate from T1's shape, to be replaced by the Day 5 live counts (5.3). Day 4 figures are
+before the Day 5 token cuts, so the estimate is on the high side.
+
+| Run | Runs | Executor (Lite) calls each | Groq calls each (gate, planner, judge) | Lite total | Groq total |
+| --- | --- | --- | --- | --- | --- |
+| T1, T2, T6, T7 (process-invoice) | 4 x 3 | 22 (T1 measured) | 3 | 264 | 36 |
+| T3 (onboarding) | 3 | 22 | 4 | 66 | 12 |
+| T4 (ask) | 3 | 8 | 1 | 24 | 3 |
+| T5 (decline) | 3 | 0 | 1 (measured) | 0 | 3 |
+| T8 (schedule payment) | 3 | 18 | 3 | 54 | 9 |
+| Chaos on (4 tasks x 1) | 4 | 22 | 3 | 88 | 12 |
+| T9 none / approve / reject | 3 | 8 | 3 | 24 | 9 |
+| Replans (up to 3 per failing run; allow 10%) | | | | about 52 | about 9 |
+| **Total** | **31** | | | **about 572** | **about 93** |
+
+Against the limits: about 572 of the 1,000 Flash-Lite calls a day (500 + 500), so the matrix fits one day with room
+for a re-run, without touching the 40 Flash calls. Groq: about 93 of 1,000. **Time, not count, binds:** at 15 RPM the
+Lite calls need at least 38 minutes; Groq's 8K tokens a minute allows about one planner call (about 4K prompt tokens
+plus its answer) every 40 seconds, so the 31 planner calls add at least 20 minutes. Tokens: about 5K per Lite call x
+15 a minute = 75K, under 250K TPM. Cassettes recorded on Day 5 (one live run per task) do not count against Day 6.
+
 ## Providers (as checked on Oct 5, 2026; superseded where the table above differs)
 
 | Provider | Free models of interest | Published free limits | Notes |
@@ -89,8 +175,8 @@ When the judge falls back to Flash-Lite (same family as the executor), the run i
 - One task run ≈ 15–30 LLM calls (gate 1–2, planner 1–3, executor 10–20, compaction 0–3, judge 1).
 - AcmeBench matrix: 8 core tasks (T1–T8) × 3 runs with chaos off (pass^3) = 24 runs, plus 4 tasks × 1 run
   with chaos on = 4 runs. 28 runs ≈ 420–840 calls.
-- **Plan B, approved now:** if the Day 3 check or Day 4 shows under about 500 requests per day on
-  Gemini Flash, enable billing on that AI Studio project.
+- ~~**Plan B, approved now:** if the Day 3 check or Day 4 shows under about 500 requests per day on
+  Gemini Flash, enable billing on that AI Studio project.~~ Withdrawn on Day 5: free tier only (D-175).
 - Other measures:
   - Spread the benchmark over Days 5–6, recording cassettes as it runs.
   - Cache: re-running checkers or the report never re-calls the LLM.

@@ -17,7 +17,8 @@ import httpx
 from agent.config import load_config
 from agent.llm.client import LLMClient, LLMError
 
-MODELS = [("GEMINI", "GEMINI_MODEL"), ("GEMINI", "GEMINI_LITE_MODEL"), ("GROQ", "GROQ_JUDGE_MODEL"),
+MODELS = [("GEMINI", "GEMINI_MODEL"), ("GEMINI", "GEMINI_FLASH2_MODEL"), ("GEMINI", "GEMINI_LITE_MODEL"),
+          ("GEMINI", "GEMINI_LITE2_MODEL"), ("GROQ", "GROQ_PLAN_MODEL"), ("GROQ", "GROQ_JUDGE_MODEL"),
           ("GROQ", "GROQ_COMPACTION_MODEL")]
 TOOL = {"type": "function", "function": {
     "name": "record_invoice", "description": "Record an invoice number and its total.",
@@ -121,7 +122,7 @@ async def _contains(client, messages, wanted):
 async def main() -> int:
     config = load_config()
     rows = []
-    only = set(sys.argv[1:])  # e.g. GEMINI_MODEL: probe only these model keys
+    only = {k for a in sys.argv[1:] for k in a.split(",")}  # e.g. GEMINI_MODEL: probe only these model keys
     for prefix, model_key in MODELS:
         if only and model_key not in only:
             continue

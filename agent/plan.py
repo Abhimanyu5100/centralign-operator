@@ -10,7 +10,7 @@ In Phase A each oracle passes a hand-written plan in as data, in exactly this sc
 - A milestone with no readable effect says why in `unverifiable_reason` instead of having predicates.
 """
 
-from typing import Self
+from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -48,17 +48,21 @@ class Milestone(_Strict):
     unverifiable_reason: str | None = None              # no read can show this effect; a human must confirm
     critical: bool = True                                # False: unmet gives completed_with_exceptions
     awaits_business_approval: bool = False               # met means the record now waits for a business approval
+    judge: list[Annotated[str, Field(max_length=200)]] = Field(default_factory=list, max_length=3)  # fuzzy criteria
 
     @model_validator(mode="after")
     def _checkable(self) -> Self:
         if bool(self.predicates) == bool(self.unverifiable_reason):
             raise ValueError(f"{self.id}: give predicates, or an unverifiable_reason instead, not both or neither")
+        if self.judge and (not self.predicates or self.predicates[0].count == 0):
+            raise ValueError(f"{self.id}: judge criteria need a milestone whose predicates find the record")
         return self
 
 
 class Plan(_Strict):
     sop_id: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9-]{1,40}$")
     milestones: list[Milestone] = Field(default_factory=list, max_length=7)
+    not_applicable: dict[str, str] = Field(default_factory=dict)  # SOP write step -> why this run skips it (N.177)
 
     @model_validator(mode="after")
     def _a_small_dag_with_backward_refs(self) -> Self:

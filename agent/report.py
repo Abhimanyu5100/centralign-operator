@@ -88,6 +88,8 @@ def build_report(run) -> dict[str, Any]:
     verdict = next((e["payload"] for e in reversed(events) if e["type"] == "verifier_result"),
                    {"status": "unverified", "reasons": ["the verifier never ran"], "notes": []})
     pairs = _pairs(events)
+    plans = [e["payload"] for e in events if e["type"] == "plan" and e["payload"].get("plan")
+             and not e["payload"]["problems"]]  # the accepted plans only
     ok_calls = [(call, result) for call, result, _ in pairs if result.get("ok")]
     tables = catalog.session.entity_tables
     effects = verdict.get("side_effects") or {}
@@ -105,6 +107,7 @@ def build_report(run) -> dict[str, Any]:
         "request": store.run(run.run_id)["request"],
         "status": verdict["status"],
         "status_reasons": verdict.get("reasons", []),
+        "judge_flags": verdict.get("judge_flags", []),  # unmet fuzzy criteria the status does not show
         "notes": verdict.get("notes", []),
         "questions": [{"text": c["args"]["question"], "candidates": c["args"].get("candidates", [])}
                       for c, _ in ok_calls if c["tool"] == "ask_user"],
@@ -115,7 +118,8 @@ def build_report(run) -> dict[str, Any]:
         "action_approvals": [{
             "approval_id": a.approval_id, "tool": a.predicted.get("tool"),
             "predicted": {**a.predicted.get("args", {}), "request": a.predicted.get("request"),
-                          "side_effect": a.predicted.get("side_effect"), "effect": a.predicted.get("effect")},
+                          "side_effect": a.predicted.get("side_effect"), "effect": a.predicted.get("effect"),
+                          "sources": a.predicted.get("sources", {})},
             "policy_ids": a.policy_ids, "reason": a.reason, "decision": a.status, "decided_by": a.decided_by,
             "used": a.consumed} for a in run.approvals.for_run(run.run_id)],
         "side_effects": [
@@ -127,9 +131,15 @@ def build_report(run) -> dict[str, Any]:
               for w in effects.get("claimed_not_audited", []))],
         "failures": [_failure(c, r, seq) for c, r, seq in pairs if not r.get("ok")],
         "recovered": [r for r in (_recovered(c, res, seq) for c, res, seq in pairs) if r],
+        "skipped_steps": plans[-1]["plan"].get("not_applicable", {}) if plans else {},  # SOP write steps, with why
+        "replans": [{k: p.get(k) for k in ("replan", "reasons", "changed")} for p in plans if p.get("replan")],
+        "escalation": next((e["payload"] for e in events if e["type"] == "escalation"), None),
+        "rollback": next((e["payload"] for e in events if e["type"] == "rollback"), None),
+        "predictions": [e["payload"] for e in events if e["type"] == "prediction"],  # before each irreversible write
         "narrative": [e["payload"]["text"] for e in events if e["type"] == "agent_message"],  # the agent's words
         "stops": [e["payload"]["reason"] for e in events if e["type"] == "executor_stop"],
-        "verifier": {"postconditions": verdict.get("postconditions", []), "milestones": verdict.get("milestones", [])},
+        "verifier": {"postconditions": verdict.get("postconditions", []), "milestones": verdict.get("milestones", []),
+                     "judge": verdict.get("judge", [])},
     }
 
 
@@ -137,6 +147,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     """One screen: outcome first, then what a person must look at (register 7.4)."""
     lines = [f"# Run {report['run_id']}: {report['status']}", "", f"Request: {report['request']}", ""]
     lines += [f"- {r}" for r in report["status_reasons"] + [f"stopped early: {x}" for x in report.get("stops", [])]]
+    lines += [f"- **judge flag:** {flag}" for flag in report.get("judge_flags", [])]
     lines += [f"- note: {note}" for note in report["notes"]]
     for q in report["questions"]:
         lines += ["", f"**Question:** {q['text']}", f"Candidates: {', '.join(q['candidates']) or 'none'}"]
@@ -144,7 +155,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines += ["", f"**Declined:** {report['refusal']['reason']}"] + [f"- {e}" for e in report["refusal"]["evidence"]]
     for a in report["action_approvals"]:
         shown = {k: v for k, v in a["predicted"].items()
-                 if k not in ("request", "side_effect", "effect") and v is not None}
+                 if k not in ("request", "side_effect", "effect") and v not in (None, {})}
         lines += ["", f"**Action approval {a['approval_id']}** ({', '.join(a['policy_ids'])}): {a['decision']}",
                   f"Would do: {a['predicted']['effect']}", "```", json.dumps(shown, indent=2, ensure_ascii=False), "```"]
     if report["security_findings"]:
@@ -158,6 +169,10 @@ def render_markdown(report: dict[str, Any]) -> str:
     if report["recovered"]:
         lines += ["", "**Recovered**"] + [f"- {r['tool']}: {r['error_type']} x{r['count']} ({r['kind']}): {r['read_back']}"
                                           for r in report["recovered"]]
+    lines += [f"- SOP step {k} not applicable: {v}" for k, v in report.get("skipped_steps", {}).items()]
+    lines += [f"- replan {r['replan']}: {'; '.join(r['reasons'] or [])[:300]}" for r in report.get("replans", [])]
+    lines += [f"- escalated: {report['escalation']}"] if report.get("escalation") else []
+    lines += [f"- rolled back after the rejection: {report['rollback']}"] if report.get("rollback") else []
     lines += [f"\n**The agent's own summary** (not the status): {t[:400]}" for t in report.get("narrative", [])]
     lines += ["", f"Evidence: {len(report['evidence'])} tool results in the run log."]
     return "\n".join(lines) + "\n"
