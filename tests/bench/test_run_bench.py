@@ -74,6 +74,15 @@ def test_the_markdown_has_every_column_and_flags_a_wrong_status():
     assert "completed (expected needs_clarification)" in text and "| NO |" in text
 
 
+def test_a_recovered_failure_shows_in_the_failures_column_and_changes_nothing_else():
+    from dataclasses import asdict
+    recovered = row("T1", chaos="flaky_500:0", fired=True, recovered=["server_error (recovered)"])
+    result = {"meta": {"started": "now", "commit": "abc", "k": 1}, "rows": [asdict(recovered)], "pass_k": {},
+              "adversarial": [], "summary": summary([recovered], [])}
+    assert "| server_error (recovered) |" in markdown(result)
+    assert summary([recovered], [])["recovered_when_fired"] == "1/1" and problems(result) == []
+
+
 def test_the_real_chaos_variants_all_can_fire_or_are_marked_gui_only():
     """D-161: no variant runs where its profile cannot act; T7's UI-only one is marked gui, the T2 slot is on T8."""
     from acme import chaos

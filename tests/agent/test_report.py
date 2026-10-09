@@ -1,5 +1,8 @@
 """The run report (agent/report.py) beyond the contract test: a write Acme never stored is listed under side effects
-(D-156), failures carry their class, a run never verified is `unverified`, and the markdown fits one screen."""
+(D-156), failures carry their class, recovered failures are listed without changing the status or showing a key
+(7.2, 7.6), a run never verified is `unverified`, and the markdown fits one screen."""
+
+import json
 
 from agent.report import build_report, render_markdown
 from agent.scripted import run_script
@@ -55,3 +58,26 @@ def test_a_run_that_was_never_verified_reports_unverified(sandbox):
 def test_the_markdown_leads_with_the_status_and_stays_short(sandbox):
     text = render_markdown(_t2(sandbox))
     assert text.splitlines()[0].endswith(": completed") and len(text.splitlines()) < 40
+
+
+def test_t1_under_flaky_500_lists_the_recovered_server_errors_without_any_key(sandbox):
+    """Both T1 writes fail once with a 500 inside the tool and then succeed: the report lists them as recovered
+    (the keyed invoice retried, the keyless approval read back first), the status is unchanged and no idempotency
+    key field appears anywhere in the report (7.6)."""
+    sandbox.admin_call("POST", "/__admin/reset", seed="base", now=NOW)
+    sandbox.admin_call("POST", "/__admin/chaos", profile="flaky_500", seed=0)
+    oracle = oracle_for("T1")
+
+    async def body(run):
+        await run_script(run, oracle.steps)
+        await verify(run)
+        return build_report(run)
+    report = drive(sandbox.run(plan=oracle.plan), body)
+    assert report["status"] == "awaiting_business_approval" and report["failures"] == []
+    assert [{k: r[k] for k in ("tool", "error_type", "kind", "count", "read_back")} for r in report["recovered"]] == [
+        {"tool": "submit_invoice", "error_type": "server_error", "kind": "transient", "count": 1,
+         "read_back": "retried once"},
+        {"tool": "request_approval", "error_type": "server_error", "kind": "transient", "count": 1,
+         "read_back": "read back: not written, so retried once"}]
+    assert "idempotency" not in json.dumps(report)
+    assert "- submit_invoice: server_error x1 (transient): retried once" in render_markdown(report)

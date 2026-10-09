@@ -12,9 +12,12 @@ event log and the approval store:
 - `side_effects`: every audit row since the run started (from the verifier's layer 3), plus each write the run
   claimed that Acme never stored (D-156);
 - `failures`: every failed result with its class and next step (agent/failures.py);
+- `recovered`: every call that succeeded only after a failed attempt inside the tool (its `data.attempts`): the
+  error, its class, how many attempts failed and what settled it. It never changes the status (register 7.2);
 - `verifier`: what each check found.
 
-The event log is already redacted (D-104), so the report never holds a secret. `write_report` saves
+The event log is already redacted (D-104), so the report never holds a secret; transport args (the idempotency
+key) are left out of the evidence and `recovered` copies no args at all (7.6). `write_report` saves
 `runs/<run_id>/report.json` and a one-screen `report.md`.
 """
 
@@ -23,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from agent.failures import classify
-from agent.tools.registry import ToolResult
+from agent.tools.registry import ERROR_TYPES, ToolResult
 
 
 def _pairs(events: list[dict[str, Any]]) -> list[tuple[dict[str, Any], dict[str, Any], int]]:
@@ -49,10 +52,33 @@ def _summary(result: dict[str, Any]) -> str:
     return str(result.get("detail", ""))[:120] or "ok"
 
 
+def _business_args(run, call: dict[str, Any]) -> dict[str, Any]:
+    spec = run.registry.get(call["tool"])
+    hidden = spec.transport_args if spec else ()
+    return {k: v for k, v in (call.get("args") or {}).items() if k not in hidden}
+
+
 def _failure(call: dict[str, Any], result: dict[str, Any], seq: int) -> dict[str, Any]:
     typed = ToolResult.model_validate({k: v for k, v in result.items() if k in ToolResult.model_fields})
     return {"seq": seq, "tool": call["tool"], "error_type": result.get("error_type"), **classify(typed).model_dump(),
             "detail": str(result.get("detail", ""))[:200]}
+
+
+def _recovered(call: dict[str, Any], result: dict[str, Any], seq: int) -> dict[str, Any] | None:
+    """A call that succeeded after a failed attempt inside the tool (D-108's one retry), or None."""
+    attempts = (result.get("data") or {}).get("attempts") or []
+    failed = [a.split(": ", 1)[1] for a in attempts
+              if a.startswith("attempt ") and a.split(": ", 1)[1] not in ("ok", "replayed by Acme")]
+    if not result.get("ok") or not failed:
+        return None
+    last = attempts[-1]
+    settled = (last.removeprefix("read-back ") if last.startswith("read-back found")
+               else "read back: not written, so retried once" if "read-back: not written; retrying" in attempts
+               else "logged in again and retried once" if "logged in again" in attempts
+               else "replayed by Acme: stored once" if last.endswith("replayed by Acme") else "retried once")
+    kind = classify(ToolResult.fail(failed[0], "")).kind if failed[0] in ERROR_TYPES else "escalate"
+    return {"seq": seq, "tool": call["tool"], "error_type": failed[0], "kind": kind, "count": len(failed),
+            "read_back": settled}
 
 
 def build_report(run) -> dict[str, Any]:
@@ -83,7 +109,7 @@ def build_report(run) -> dict[str, Any]:
                       for c, _ in ok_calls if c["tool"] == "ask_user"],
         "refusal": refusal,
         "security_findings": list(findings.values()),
-        "evidence": [{"seq": seq, "tool": c["tool"], "args": c.get("args", {}), "ok": bool(r.get("ok")),
+        "evidence": [{"seq": seq, "tool": c["tool"], "args": _business_args(run, c), "ok": bool(r.get("ok")),
                       "summary": _summary(r)} for c, r, seq in pairs],
         "action_approvals": [{
             "approval_id": a.approval_id, "tool": a.predicted.get("tool"),
@@ -99,6 +125,7 @@ def build_report(run) -> dict[str, Any]:
                "action": "claimed, but not in Acme's audit log", "tool": w["tool"], "claimed_not_audited": True}
               for w in effects.get("claimed_not_audited", []))],
         "failures": [_failure(c, r, seq) for c, r, seq in pairs if not r.get("ok")],
+        "recovered": [r for r in (_recovered(c, res, seq) for c, res, seq in pairs) if r],
         "verifier": {"postconditions": verdict.get("postconditions", []), "milestones": verdict.get("milestones", [])},
     }
 
@@ -125,6 +152,9 @@ def render_markdown(report: dict[str, Any]) -> str:
     if report["failures"]:
         lines += ["", "**Calls that did not succeed**"] + [f"- {f['tool']}: {f['error_type']} ({f['kind']}): {f['next']}"
                                         for f in report["failures"]]
+    if report["recovered"]:
+        lines += ["", "**Recovered**"] + [f"- {r['tool']}: {r['error_type']} x{r['count']} ({r['kind']}): {r['read_back']}"
+                                          for r in report["recovered"]]
     lines += ["", f"Evidence: {len(report['evidence'])} tool results in the run log."]
     return "\n".join(lines) + "\n"
 

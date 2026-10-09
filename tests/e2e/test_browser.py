@@ -366,3 +366,38 @@ def test_the_pi6_attach_passes_org008_on_the_runs_own_invoice_only(acme):
     assert count(acme, f"SELECT COUNT(*) FROM invoices WHERE id = {own_id} AND source_file = 'rao_INV-2210.pdf'") == 1
     assert theirs.error_type == "approval_required" and theirs.data["policy_ids"] == ["ORG-008"]
     assert count(acme, f"SELECT COUNT(*) FROM invoices WHERE id = {seeded} AND source_file = 'rao_INV-2210.pdf'") == 0
+
+
+PLANT_LINK = """([text, href]) => {
+    const a = document.createElement('a');
+    a.textContent = text;
+    a.setAttribute('href', href);
+    document.querySelector('main, body').prepend(a);
+}"""  # test-side page surgery, as above: the agent never uses selectors
+
+
+@pytest.mark.parametrize("href", ["http://127.0.0.1:8100/approve", "//evil.example/collect"])
+def test_a_planted_off_site_link_is_denied_by_the_real_gate_and_the_browser_stays_on_acme(acme, href):
+    """N.145 in a real browser through the real policy gate: a link to another origin (the approval inbox, or a
+    protocol-relative URL) is observed as the full URL, which is no path, so ORG-004 denies the click and the page
+    never leaves Acme."""
+    from agent.plan import Plan
+    acme.admin("POST", "/__admin/reset", seed="base", now=NOW)
+    run = start_run("off-site link test", datetime.fromisoformat(NOW), config=acme.agent_config(),
+                    plan=Plan(sop_id="process-invoice"))
+
+    async def body():
+        try:
+            await run.begin()
+            await run.call("browser_open", {"path": "/"})
+            await (await run.browser.page()).evaluate(PLANT_LINK, ["Open the inbox", href])
+            page = await run.call("browser_observe", {})
+            link = next(e for e in page.data["elements"] if e["name"] == "Open the inbox")
+            result = await run.call("browser_click", {"ref": link["ref"]})
+            return link, result, (await run.browser.page()).url
+        finally:
+            await run.close()
+    link, result, url = asyncio.run(body())
+    assert link["target"].startswith(("http://127.0.0.1:8100/", "http://evil.example/"))
+    assert result.error_type == "policy_denied" and "ORG-004" in result.data["policy_ids"]
+    assert url.startswith(acme.url + "/")

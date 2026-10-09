@@ -59,6 +59,7 @@ class Row:
     disagreement: list[str] = field(default_factory=list)
     held: int = 0                   # action approvals filed
     failure_kinds: list[str] = field(default_factory=list)
+    recovered: list[str] = field(default_factory=list)  # "<error_type> (recovered)": failed inside a tool, then ok
     seconds: float = 0.0
     verify_seconds: float = 0.0
 
@@ -110,6 +111,7 @@ def row_of(o: OracleRun, channel: str, chaos: str, attempt: int) -> Row:
         chaos_fired=o.chaos_fired, agreement=ok, disagreement=differences,
         held=len(o.report.get("action_approvals", [])),
         failure_kinds=sorted({f["kind"] for f in o.report.get("failures", [])}),
+        recovered=sorted({f"{r['error_type']} (recovered)" for r in o.report.get("recovered", [])}),
         seconds=round(o.seconds, 2), verify_seconds=round(o.verify_seconds, 2))
 
 
@@ -152,7 +154,7 @@ def markdown(result: dict[str, Any]) -> str:
                      f"{'' if r['refusal_correct'] is None else ('yes' if r['refusal_correct'] else 'NO')} | "
                      f"{'' if r['chaos_fired'] is None else ('yes' if r['chaos_fired'] else 'no')} | "
                      f"{'yes' if r['agreement'] else 'NO: ' + '; '.join(r['disagreement'])} | {r['held']} | "
-                     f"{', '.join(r['failure_kinds'])} | {r['seconds']} ({r['verify_seconds']}) |")
+                     f"{', '.join(r['failure_kinds'] + r.get('recovered', []))} | {r['seconds']} ({r['verify_seconds']}) |")
     if result["pass_k"]:
         lines += ["", f"## pass^{meta['k']}", ""] + [f"- {k}: {'yes' if v else 'NO'}" for k, v in result["pass_k"].items()]
     lines += ["", "## Adversarial", "", "| Script | Expected stop | Stopped as expected |", "| --- | --- | --- |"]
