@@ -50,11 +50,6 @@ def strict_yaml(text: str):
         raise PolicyError(f"invalid YAML: {type(exc).__name__}: {str(exc)[:200]}") from exc
 
 
-def load_allowlist_domains(path: Path | str) -> frozenset[str]:
-    """Domains in an allowlist file (`internal_domain` plus `partner_domains`)."""
-    return read_allowlist(path)[1]
-
-
 def read_allowlist(path: Path | str) -> tuple[str, frozenset[str]]:
     """(internal domain, every domain) of an allowlist file. Same file and same shape Acme reads in
     `acme/mail.py` (D-064), with the same domain pattern; a test checks both agree.

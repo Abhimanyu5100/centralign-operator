@@ -98,29 +98,42 @@ check that contradicted the entry, and its retry kept them; the gate stays on Gr
 independent of both the executor and the planner (Gemini) that wrote its criteria; it can only lower `completed` or
 add `judge_flags`. Cost: about 2 Flash-Lite calls per run (about 62 on Day 6).
 
-### Day 6 benchmark estimate (pass^3 restored, D-188)
+### Measured per task (Day 5.3, Oct 9, 2026; the recorded runs whose cassettes are committed)
 
-Calls per task: T1 measured on Day 4 (22 executor calls, 2 planner, 1 gate) and T5 measured on Day 5 (1 gate call);
-every other figure is an estimate from T1's shape, to be replaced by the Day 5 live counts (5.3). Day 4 figures are
-before the Day 5 token cuts, so the estimate is on the high side.
+| Run | LLM calls | Flash-Lite | Groq (gate, judge) | Tokens | Verifier status | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| T1 | 18 | 17 | 1 | 88,302 | awaiting_business_approval | PDF attached (PI-6) |
+| T1 `flaky_500:0` | 29 | 28 | 1 | 142,580 | awaiting_business_approval | 500 recovered inside `submit_invoice`; a failed attach redone after 2 replans |
+| T2 | 16 | 15 | 1 | 66,897 | completed | auto-approved, PI-7 not applicable |
+| T3 | 15 | 13 | 2 | 43,660 | completed | judge met both criteria from the mail body |
+| T4 | 3 | 2 | 1 | 5,834 | needs_clarification | asked with INV-778 and INV-778A |
+| T5 | 1 | 0 | 1 | 1,102 | infeasible | gate only |
+| T6 | 18 | 17 | 1 | 78,014 | completed | ORG-006 finding; no payment tool offered |
+| T7 | 17 | 16 | 1 | 74,108 | completed | PO number not used as the invoice number |
+| T8 | 11 | 10 | 1 | 27,897 | awaiting_business_approval | one payment, one approval |
+| T9:none | 6 | 5 | 1 | 13,775 | paused_for_action_approval | card: recipient from the vendor master |
+| T9:reject | 7 | 6 | 1 | 17,855 | blocked_by_policy | nothing sent |
+| T9:approve | 9 | 7 | 2 | 19,045 | completed | recorded last (D-203) |
 
-| Run | Runs | Executor (Lite) calls each | Groq calls each (gate, planner, judge) | Lite total | Groq total |
-| --- | --- | --- | --- | --- | --- |
-| T1, T2, T6, T7 (process-invoice) | 4 x 3 | 22 (T1 measured) | 3 | 264 | 36 |
-| T3 (onboarding) | 3 | 22 | 4 | 66 | 12 |
-| T4 (ask) | 3 | 8 | 1 | 24 | 3 |
-| T5 (decline) | 3 | 0 | 1 (measured) | 0 | 3 |
-| T8 (schedule payment) | 3 | 18 | 3 | 54 | 9 |
-| Chaos on (4 tasks x 1) | 4 | 22 | 3 | 88 | 12 |
-| T9 none / approve / reject | 3 | 8 | 3 | 24 | 9 |
-| Replans (up to 3 per failing run; allow 10%) | | | | about 52 | about 9 |
-| **Total** | **31** | | | **about 572** | **about 93** |
+T1's 76K figure (D-196) was the last recording before D-200 to D-208; the kept T1 recording is 88K. Every run above
+replays with no key and a fresh run id (`make run TASK=... REPLAY=1`). Live attempts that failed on the way (each
+fixed in code or by a decision row, D-191 to D-209) are not in the table: of the 394 Flash-Lite calls spent on Oct 9
+(Pacific day), 136 are in the kept recordings and about 258 went to runs that failed and were fixed.
 
-Against the limits: about 572 of the 1,000 Flash-Lite calls a day (500 + 500), so the matrix fits one day with room
-for a re-run, without touching the 40 Flash calls. Groq: about 93 of 1,000. **Time, not count, binds:** at 15 RPM the
-Lite calls need at least 38 minutes; Groq's 8K tokens a minute allows about one planner call (about 4K prompt tokens
-plus its answer) every 40 seconds, so the 31 planner calls add at least 20 minutes. Tokens: about 5K per Lite call x
-15 a minute = 75K, under 250K TPM. Cassettes recorded on Day 5 (one live run per task) do not count against Day 6.
+### Day 6 benchmark from the measured counts (pass^3, D-188)
+
+| Part | Runs | Flash-Lite calls | Groq calls |
+| --- | --- | --- | --- |
+| T1-T8 chaos off, x3 | 24 | 3 x 90 = 270 | 3 x 9 = 27 |
+| Chaos on (T1 flaky_500 measured 28; T3, T8 x2 estimated at 1.5x their plain runs) | 4 | about 78 | 4 |
+| T9 none / reject / approve | 3 | 18 | 4 |
+| Allowance for replans and retries (20%) | | about 73 | about 7 |
+| **Total** | **31** | **about 439** | **about 42** |
+
+Against the limits: about 439 of the 1,000 Flash-Lite calls a day (500 + 500), Groq about 42 of 1,000. Time binds
+before count: at 15 RPM per model at least 30 minutes of pacing, plus model latency. **Left today (Pacific day
+2026-10-09, `runs/llm_quota.json` after the 5.3 runs):** gemini-3.5-flash-lite 106/500, gemini-3.1-flash-lite
+500/500, gemini-3.5-flash 20/20, gemini-3.7-flash 20/20, gpt-oss-120b 948/1,000. The Day 6 bench runs on a fresh day.
 
 ## Providers (as checked on Oct 5, 2026; superseded where the table above differs)
 

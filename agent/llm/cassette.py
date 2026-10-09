@@ -9,8 +9,11 @@ from pathlib import Path
 from typing import Any
 
 
-def cassette_key(role: str, body: dict[str, Any], now: str) -> str:
-    text = json.dumps({"role": role, "now": now, "body": body}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+def cassette_key(role: str, body: dict[str, Any], now: str, scope: str = "") -> str:
+    """`scope`: a scenario name the harness sets for a run that must not share replies with the plain task (a chaos
+    run, D-209); empty keeps the plain key."""
+    key = {"role": role, "now": now, "body": body, **({"scope": scope} if scope else {})}
+    text = json.dumps(key, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(text.encode()).hexdigest()
 
 

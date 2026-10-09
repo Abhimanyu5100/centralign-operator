@@ -184,7 +184,7 @@ def test_the_gate_reads_no_file():
     tree = ast.parse(Path(gate_module.__file__).read_text())
     names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)} | {
         n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
-    assert not names & {"open", "read_text", "read_bytes", "Path", "load_allowlist_domains", "load_policies"}
+    assert not names & {"open", "read_text", "read_bytes", "Path", "read_allowlist", "load_policies"}
 
 
 # --- ORG-006 (enforced by Acme): any bank path is denied as a second line ------------------------------------------

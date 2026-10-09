@@ -2,13 +2,10 @@
 
 Each one either returns the canonical value or raises ValueError with the reason: an ambiguous input is never
 guessed (the caller asks or reports it instead). Money becomes integer paise, dates ISO `YYYY-MM-DD`, GSTINs
-upper case without spaces. Name matching returns scored candidates and never picks one.
+upper case without spaces. (Name matching left on Day 5: the gate asks Acme's own vendor and employee search, D-198.)
 """
 
-import difflib
 import re
-from collections.abc import Iterable
-from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -94,37 +91,3 @@ def normalise_gstin(text: str) -> str:
     if not _GSTIN.fullmatch(s):
         raise ValueError(f"{text!r} is not a GSTIN (15 characters: 2 digits, PAN, entity number, Z, check)")
     return s
-
-
-_LEGAL_WORDS = {"pvt", "private", "ltd", "limited", "llp", "co", "company", "inc", "the", "and"}
-
-
-def name_words(name: str) -> list[str]:
-    return [w for w in re.findall(r"[a-z0-9]+", name.lower().replace("&", " and ")) if w not in _LEGAL_WORDS]
-
-
-@dataclass(frozen=True)
-class Candidate:
-    name: str
-    score: float
-
-
-def match_names(query: str, names: Iterable[str], threshold: float = 0.8) -> list[Candidate]:
-    """Candidates scoring at least `threshold`, best first: 1.0 same words (legal suffixes ignored), 0.9 every
-    query word present, else the text similarity. Never picks one: the caller decides, and asks when two are
-    close (register 1.10)."""
-    query_words = name_words(query)
-    found = []
-    for name in names:
-        words = name_words(name)
-        if not query_words or not words:
-            continue
-        if query_words == words:
-            score = 1.0
-        elif set(query_words) <= set(words):
-            score = 0.9
-        else:
-            score = round(difflib.SequenceMatcher(None, " ".join(query_words), " ".join(words)).ratio(), 3)
-        if score >= threshold:
-            found.append(Candidate(name, score))
-    return sorted(found, key=lambda c: (-c.score, c.name))

@@ -153,7 +153,8 @@ class LLMClient:
             body["response_format"] = {"type": "json_schema", "json_schema": {"name": "reply", "schema": schema}}
         if any(f in json.dumps(body, ensure_ascii=False) for f in self.forbidden):
             raise LLMError("refused: the request holds the run id (D-106)")
-        key, started, notes = cassette.cassette_key(role, body, self.now), time.perf_counter(), []
+        key = cassette.cassette_key(role, body, self.now, self.config.get("CASSETTE_SCOPE", ""))
+        started, notes = time.perf_counter(), []
         if self.replay:
             stored = cassette.load(self.cassettes, key)
             if stored is None:

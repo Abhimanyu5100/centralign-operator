@@ -8,22 +8,23 @@ import importlib
 import inspect
 import json
 
-from agent import executor, feasibility, planner, run
+from agent import executor, feasibility, goal, planner, run
 from agent.memory.knowledge import SOP_DIR
 from agent.tools.api import CATALOG_PATH
+from agent.tools.registry import ToolSpec
 from tests.agent.acme_fixtures import drive, sandbox  # noqa: F401  (sandbox is a fixture)
 
 judge = importlib.import_module("agent.verifier.judge")  # the module (agent.verifier exports the function)
-PINNED = "5e978633e60ddebbc10950de1f79bb0f774597b5328a6c4b47a027c3f6ad550e"
+PINNED = "85b75c57a5528297d5055ccada832f0535a9c619b189cb7fc42608998a88eefc"
 
 
 def prompt_inputs(registry) -> str:
     constants = [executor.SYSTEM, executor.GATHER, executor.ACT, executor.FACTS_TOOL, executor.MAX_CHARS,
                  feasibility.PROMPT, feasibility.SCHEMA, planner.PROMPT, planner.REPLAN, judge.PROMPT, judge.SCHEMA,
                  judge.MAX_CHARS]
-    builders = [executor.brief, executor.prune, executor.Executor.tools, executor.Executor.offered,
-                executor.Executor.show, executor.Executor.act, executor.Executor.execute, feasibility.probe,
-                feasibility.understand, planner.read_tools, planner.plan_errors, planner.replan_errors, planner.make_plan,
+    builders = [ToolSpec.llm_schema, goal.shown, executor.brief, executor.prune, executor.Executor.tools, executor.Executor.offered,
+                executor.Executor.show, executor.Executor.sample, executor.Executor.act, executor.Executor.execute, feasibility.probe,
+                feasibility.understand, planner.read_tools, planner.tidy, planner.plan_errors, planner.replan_errors, planner.make_plan,
                 run._work, judge.judge]  # plan_errors and replan_errors: their problems reach the planner on a retry
     knowledge = [p.read_text(encoding="utf-8") for p in sorted(SOP_DIR.glob("*.md"))]
     knowledge += [CATALOG_PATH.read_text(encoding="utf-8"),

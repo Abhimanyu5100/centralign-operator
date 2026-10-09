@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from agent.normalise import match_names, next_weekday, normalise_gstin, to_iso_date, to_paise
+from agent.normalise import next_weekday, normalise_gstin, to_iso_date, to_paise
 
 
 @pytest.mark.parametrize("text,paise", [
@@ -57,21 +57,3 @@ def test_gstin_format():
     for bad in ("27AABCS4821K1Y3", "27AABCS4821K1Z", "2AABCS4821K1Z3X", "27AABCS4821K0Z3", ""):
         with pytest.raises(ValueError):
             normalise_gstin(bad)
-
-
-VENDORS = ["Sharma Logistics Pvt Ltd", "Rao Packaging Industries", "Verma Traders", "Mehta Supplies",
-           "Patel Engineering Works", "Iyer Electricals", "Gupta Metals"]
-
-
-def test_names_match_without_legal_suffixes_and_never_pick_for_the_caller():
-    assert match_names("Sharma Logistics", VENDORS)[0].name == "Sharma Logistics Pvt Ltd"
-    assert match_names("sharma logistics private limited", VENDORS)[0].score == 1.0
-    assert [c.name for c in match_names("Patel Engineering", VENDORS)] == ["Patel Engineering Works"]
-    assert match_names("Sharma Logstics", VENDORS)[0].name == "Sharma Logistics Pvt Ltd"  # a typo still matches
-    assert match_names("Kapoor Steel", VENDORS) == []  # no near match: the caller reports infeasible
-    assert match_names("Priya Nair", ["Priya Natarajan"]) == []  # a near-name decoy is not a candidate
-
-
-def test_two_close_candidates_are_both_returned():
-    found = match_names("Verma", ["Verma Traders", "Verma Traders Pvt Ltd", "Mehta Supplies"])
-    assert [c.score for c in found] == [0.9, 0.9] and len(found) == 2

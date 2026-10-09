@@ -75,6 +75,7 @@ async def _work(run: Run, llm: Any, request: str, approver: Callable[[str], Any]
     gathered = await executor.execute(brief(goal, sop), gather=True)
     if gathered.ended != "facts":
         return gathered.ended, False
+    await executor.sample()
     run.plan = await make_plan(run, llm, goal, sop, gathered.facts, executor.fields)
     if run.plan is None:
         return "no plan", False
@@ -90,7 +91,7 @@ async def _work(run: Run, llm: Any, request: str, approver: Callable[[str], Any]
                 run.ctx.store.append(run.run_id, "escalation", run.ctx.now.isoformat(), {
                     "replans": replan - 1, "unmet": [f"{m.id}: {m.target}" for m in unmet], "reasons": verdict.reasons})
             return ended, True
-        run.plan = new
+        run.plan, executor.again = new, True
         note = "\n\nAn independent check found these milestones unmet: " + "; ".join(
             f"{m.id} ({'; '.join(c.detail for c in m.checks if not c.ok)})" for m in unmet) + \
             ". Records you already wrote stay: read before you write again."

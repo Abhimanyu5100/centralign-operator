@@ -35,7 +35,7 @@ class MilestoneCheck(BaseModel):
     awaits_business_approval: bool
     unverifiable: bool = False
     checks: list[Check] = []
-    rows: list[dict[str, Any]] = Field(default=[], exclude=True)  # what its reads picked: the judge's record
+    rows: list[tuple[str, dict[str, Any]]] = Field(default=[], exclude=True)  # (read, row) its reads picked: for the judge
 
 
 def _rows(data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -149,5 +149,5 @@ async def _milestone(run, m: Milestone, found: dict[str, int], earlier: dict[str
         if i == 0 and predicate.count == 1 and picked:
             found[m.id] = picked[0].get("id")
         checks.append(check)
-        rows += picked
+        rows += [(predicate.read, row) for row in picked]
     return MilestoneCheck(**head, ok=all(c.ok for c in checks), checks=checks, rows=rows)

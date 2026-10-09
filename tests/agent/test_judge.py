@@ -39,6 +39,8 @@ def verified(sandbox, the_plan, *replies):
 @pytest.mark.parametrize("reply, status, met", [
     (answer(True, "Sharma  LOGISTICS pvt"), "completed", True),           # the quote is in the record
     (answer(True, "a trusted logistics partner"), "completed_with_exceptions", False),  # quote not in the record
+    (answer(True, "Sharma ... Pvt Ltd"), "completed", True),               # two places, both in the record
+    (answer(True, "Sharma ... a trusted partner"), "completed_with_exceptions", False),  # one part invented
     (answer(False, ""), "completed_with_exceptions", False),
     (say(json.dumps({"criteria": []})), "completed_with_exceptions", False),  # left out: unmet
 ])
@@ -85,3 +87,24 @@ def test_a_reworded_criterion_is_matched_by_its_position(sandbox):
                                          {"criterion": "contact?", "met": False, "quote": ""}]}))
     verdict, _ = verified(sandbox, plan(judge=(CRITERION, second)), reply)
     assert [j["met"] for j in verdict.judge] == [True, False] and verdict.status == "completed_with_exceptions"
+
+
+def test_the_judge_reads_the_whole_record_behind_a_list_row(sandbox):
+    """D-199: an outbox list row has no body; the judge re-reads the mail by id (logged) so a quote from the body
+    counts. Live T3 was lowered because its record was the list row only."""
+    mail = {"to": "meera@acme.example", "subject": "Welcome", "body": "Priya starts on 12 October 2026."}
+    the_plan = Plan.model_validate({"sop_id": "notify-vendor", "milestones": [{
+        "id": "M1", "target": "a welcome mail is sent", "sop_step": "NV-4", "judge": ["it states the start date"],
+        "predicates": [{"read": "list_mail", "args": {"folder": "outbox"}, "where": {"to_addr": "meera@acme.example"}}]}]})
+    llm = FakeLLM(answer(True, "starts on 12 October 2026", criterion="it states the start date"))
+    run = sandbox.run(plan=the_plan)
+
+    async def body(run):
+        await run.begin()
+        assert (await run.call("send_mail", mail)).ok
+        return await verify(run, llm=llm)
+    verdict = drive(run, body)
+    assert verdict.status == "completed" and verdict.judge[0]["met"] is True
+    assert "12 October 2026" in llm.requests[0]["messages"][1]["content"]
+    reads = [e["payload"]["tool"] for e in run.ctx.store.events(run.run_id) if e["type"] == "tool_call"]
+    assert reads[-1] == "read_mail"  # the judge's own read, through the registry

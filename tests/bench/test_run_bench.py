@@ -58,7 +58,7 @@ def test_chaos_that_did_not_fire_is_listed_apart_and_not_counted_as_recovered():
     s = summary(rows, [{"name": "x", "passed": True}])
     assert s["chaos_fired"] == "1/2" and s["recovered_when_fired"] == "1/1"
     assert s["chaos_not_fired"] == ["T7 rename_submit_button:0"]
-    assert s["oracle_runs_passed"] == "1/1" and s["adversarial_stopped"] == "1/1"
+    assert s["runs_passed"] == "1/1" and s["adversarial_stopped"] == "1/1"
 
 
 def test_the_markdown_has_every_column_and_flags_a_wrong_status():
@@ -94,7 +94,7 @@ def test_the_real_chaos_variants_all_can_fire_or_are_marked_gui_only():
 
 def test_skipped_gui_only_variants_are_listed_not_counted_as_runs():
     s = summary([row(chaos="flaky_500:0", fired=True)], [], ["T7 rename_submit_button:0 (GUI only, no GUI oracle)"])
-    assert s["chaos_fired"] == "1/1" and s["chaos_skipped_gui_only"] == ["T7 rename_submit_button:0 (GUI only, no GUI oracle)"]
+    assert s["chaos_fired"] == "1/1" and s["chaos_skipped"] == ["T7 rename_submit_button:0 (GUI only, no GUI oracle)"]
 
 
 def test_the_bench_fails_on_a_failed_run_an_unfired_fault_or_an_unstopped_attempt():

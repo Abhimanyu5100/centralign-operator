@@ -118,8 +118,11 @@ class ToolSpec:
     side_effect_of: Callable[[Any], SideEffect] | None = None
 
     def llm_schema(self) -> dict[str, Any]:
-        return {"name": self.name, "description": self.description,
-                "parameters": self.args_model.model_json_schema()}
+        """What the model sees of this tool: never a transport arg (D-108)."""
+        schema = self.args_model.model_json_schema()
+        props = {k: v for k, v in schema.get("properties", {}).items() if k not in self.transport_args}
+        return {"name": self.name, "description": self.description, "parameters": {
+            "type": "object", "properties": props, "required": [k for k in schema.get("required", []) if k in props]}}
 
 
 class RegistryError(ValueError):

@@ -127,7 +127,7 @@ async def _verify(run, plan: Plan | None, llm=None) -> Verdict:
     judged, flags = [], []
     if llm is not None and plan is not None and status in ("completed", "completed_with_exceptions",
                                                             "awaiting_business_approval"):
-        judged, more = await judge(llm, run.ctx.store.run(run.run_id)["request"], plan, checked)
+        judged, more = await judge(llm, run, plan, checked)
         notes += more
         flags = [f"judge ({j['model']}): {j['milestone']} not met: {j['criterion']}" for j in judged if not j["met"]]
         if status == "completed" and flags:  # the judge only lowers, and only `completed` (6.6)

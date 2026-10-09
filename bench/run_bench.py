@@ -32,12 +32,13 @@ from typing import Any
 from agent.store import RunStore
 from bench import tasks
 from bench.adversarial import run_all
-from bench.live import BENCH_STORE, HARNESS_HTTP_TIMEOUT, HARNESS_SERVER_ENV, OracleRun, run_oracle, serve
+from bench.live import BENCH_STORE, HARNESS_HTTP_TIMEOUT, HARNESS_SERVER_ENV, OracleRun, run_agent, run_oracle, serve
 from bench.oracles import oracle_for
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "bench" / "results"
 NO_DELAYED_WRITE = {"T3", "T8"}       # D-123
+RECORDED_CHAOS = {("T1", "flaky_500")}  # chaos variants with LLM cassettes (`--agent` replays only these)
 REFUSALS = {"T4": "needs_clarification", "T5": "infeasible"}
 
 
@@ -122,14 +123,14 @@ def summary(rows: list[Row], adversarial: list[dict[str, Any]], skipped: list[st
     refusals = [r for r in off if r.refusal_correct is not None]
     passes = pass_k(rows)
     return {
-        "oracle_runs_passed": f"{sum(r.passed for r in off)}/{len(off)}",
+        "runs_passed": f"{sum(r.passed for r in off)}/{len(off)}",
         "pass_k": f"{sum(passes.values())}/{len(passes)}",
         "cup": f"{sum(r.cup for r in off)}/{len(off)}",
         "unexplained_side_effects": sum(r.unexplained for r in rows),
         "correct_refusals": f"{sum(bool(r.refusal_correct) for r in refusals)}/{len(refusals)}",
         "chaos_fired": f"{len(fired)}/{len(on)}",
         "chaos_not_fired": [f"{r.run_id} {r.chaos}" for r in on if not r.chaos_fired],
-        "chaos_skipped_gui_only": skipped or [],
+        "chaos_skipped": skipped or [],
         "recovered_when_fired": f"{sum(r.passed for r in fired)}/{len(fired)}",
         "verifier_diff_agreement": f"{sum(bool(r.agreement) for r in rows)}/{len(rows)}",
         "adversarial_stopped": f"{sum(a['passed'] for a in adversarial)}/{len(adversarial)}",
@@ -140,7 +141,9 @@ def summary(rows: list[Row], adversarial: list[dict[str, Any]], skipped: list[st
 def markdown(result: dict[str, Any]) -> str:
     meta, s = result["meta"], result["summary"]
     lines = [f"# AcmeBench {meta['started']}", "",
-             f"Commit {meta['commit']}, k={meta['k']}, chaos seed 0, oracle agent (the scripted perfect agent).", "",
+             f"Commit {meta['commit']}, k={meta['k']}, chaos seed 0, "
+             + ("LLM agent replayed from cassettes, no API key (D-210)." if meta.get("agent") else
+                "oracle agent (the scripted perfect agent)."), "",
              "| Measure | Result |", "| --- | --- |"]
     lines += [f"| {key.replace('_', ' ')} | {value if not isinstance(value, list) else ', '.join(value) or 'none'} |"
               for key, value in s.items()]
@@ -166,7 +169,9 @@ def markdown(result: dict[str, Any]) -> str:
 # --- the run ---------------------------------------------------------------------------------------------------
 
 async def bench(acme, *, k: int = 1, only: set[str] | None = None, adversarial: bool = True,
-                store: RunStore | None = None, timeout: float | None = HARNESS_HTTP_TIMEOUT) -> dict[str, Any]:
+                store: RunStore | None = None, timeout: float | None = HARNESS_HTTP_TIMEOUT,
+                agent: bool = False) -> dict[str, Any]:
+    """`agent`: the LLM operator from cassettes instead of the oracles; no GUI oracle row; only recorded chaos variants."""
     store = store or RunStore(BENCH_STORE)
     rows: list[Row] = []
     skipped: list[str] = []
@@ -174,10 +179,11 @@ async def bench(acme, *, k: int = 1, only: set[str] | None = None, adversarial: 
         if only and task.id not in only:
             continue
         variants = chaos_variants(task)
-        has_gui = (ROOT / "bench" / "oracles" / f"{task.id}_gui.py").is_file()
+        has_gui = not agent and (ROOT / "bench" / "oracles" / f"{task.id}_gui.py").is_file()
         for run in tasks.runs(task):
             for attempt in range(1, k + 1):
-                o = await run_oracle(acme, task, run, oracle_for(run.run_id), store=store, timeout=timeout)
+                o = await (run_agent(acme, task, run, store=store, timeout=timeout) if agent else
+                           run_oracle(acme, task, run, oracle_for(run.run_id), store=store, timeout=timeout))
                 rows.append(row_of(o, "api", "off", attempt))
             if has_gui:
                 o = await run_oracle(acme, task, run, oracle_for(run.run_id, "gui"), store=store, timeout=timeout)
@@ -186,12 +192,18 @@ async def bench(acme, *, k: int = 1, only: set[str] | None = None, adversarial: 
                 if channel == "gui" and not has_gui:  # a UI-only profile cannot fire on an API run (D-161)
                     skipped.append(f"{run.run_id} {profile}:{seed} (GUI only, no GUI oracle)")
                     continue
-                o = await run_oracle(acme, task, run, oracle_for(run.run_id, "gui" if channel == "gui" else "api"),
-                                     chaos=profile, chaos_seed=seed, store=store, timeout=timeout)
+                if agent and (task.id, profile) not in RECORDED_CHAOS:
+                    skipped.append(f"{run.run_id} {profile}:{seed} (no LLM recording yet)")
+                    continue
+                o = await (run_agent(acme, task, run, chaos=profile, chaos_seed=seed, store=store, timeout=timeout)
+                           if agent else
+                           run_oracle(acme, task, run, oracle_for(run.run_id, "gui" if channel == "gui" else "api"),
+                                      chaos=profile, chaos_seed=seed, store=store, timeout=timeout))
                 rows.append(row_of(o, channel if channel == "gui" else "api", f"{profile}:{seed}", 1))
     stopped = [{"name": o.name, "expected": o.expected, "passed": o.passed, "problems": o.problems}
                for o in (await run_all(acme, store) if adversarial else [])]
-    return {"meta": {"started": datetime.now().astimezone().isoformat(timespec="seconds"), "commit": _commit(), "k": k},
+    return {"meta": {"started": datetime.now().astimezone().isoformat(timespec="seconds"), "commit": _commit(), "k": k,
+                     "agent": agent},
             "rows": [asdict(r) for r in rows], "pass_k": pass_k(rows), "adversarial": stopped,
             "summary": summary(rows, stopped, skipped)}
 
@@ -218,11 +230,12 @@ def main() -> None:
     parser.add_argument("--k", type=int, default=1, help="chaos-off attempts per run (pass^k)")
     parser.add_argument("--only", default="", help="comma-separated task ids, e.g. T1,T2")
     parser.add_argument("--no-adversarial", action="store_true")
+    parser.add_argument("--agent", action="store_true", help="the LLM operator from cassettes (no key) instead of oracles")
     parser.add_argument("--results", type=Path, default=RESULTS, help="folder for the results files")
     args = parser.parse_args()
     with serve(env=HARNESS_SERVER_ENV) as acme:
         result = asyncio.run(bench(acme, k=args.k, only=set(filter(None, args.only.split(","))) or None,
-                                   adversarial=not args.no_adversarial))
+                                   adversarial=not args.no_adversarial, agent=args.agent))
     path = save(result, args.results)
     print(markdown(result))
     print(f"saved {path} and {path.with_suffix('.json')}")

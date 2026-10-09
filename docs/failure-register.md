@@ -49,7 +49,7 @@ Free-tier model risks (M.1–M.7) are in `model-plan.md`. Run statuses are defin
 | 1.7 | Over-asking | Low autonomy | Ask only if required field still unknown or ≥ 2 candidates; batch questions | Ask precision and rate (T4 asks, others do not) | test |
 | 1.8 | Success criteria vague | Nothing to verify | Predicates over known entities/fields, schema-validated; rest flagged for judge | Every Goal Spec has ≥ 1 predicate | build |
 | 1.9 | Relative dates, local formats | "Monday", "12/10", ₹/Rs/lakh | Frozen `now` per task injected by the runtime; IST; ISO dates; integer paise | Normaliser unit tests; T3 | build |
-| 1.10 | Unknown entity named | Guesses closest match | Fuzzy candidates with scores; below threshold ask; never auto-pick near-duplicate | Fuzzy-match unit tests; T5 (typo'd-vendor task: future) | build |
+| 1.10 | Unknown entity named | Guesses closest match | The gate probes Acme's own vendor and employee search (full name, then first word); a decline needs a named party that matched nothing (D-171), an ask a party that matched two or more (D-194); the agent never picks a near match itself (D-198) | `tests/agent/test_operate.py::test_an_unknown_vendor_is_declined_with_evidence_written_by_code`, `test_an_ask_stands_when_a_named_party_matches_two_or_more_records`; T5 live (typo'd-vendor task: future) | test |
 
 ## Step 2: Plan
 

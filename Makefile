@@ -40,5 +40,5 @@ run:  ## TASK=T1|T9:approve|"<request>" [REPLAY=1] [CHAOS=profile CHAOS_SEED=0] 
 smoke:  ## [MODELS=GEMINI_MODEL] LIVE LLM smoke test per configured model (plain, tool call, tool round trip, JSON schema, long input); spends quota
 	uv run python -m scripts.smoke_llm $(MODELS)
 
-bench:  ## [K=1] [ONLY=T1,T2] [NO_ADVERSARIAL=1]: AcmeBench in one command -> bench/results/<timestamp>.{json,md}
-	uv run python -m bench.run_bench $(if $(K),--k $(K)) $(if $(ONLY),--only $(ONLY)) $(if $(NO_ADVERSARIAL),--no-adversarial)
+bench:  ## [K=1] [ONLY=T1,T2] [NO_ADVERSARIAL=1] [AGENT=1]: AcmeBench in one command -> bench/results/<timestamp>.{json,md}; AGENT=1 = the LLM operator from cassettes, no key
+	uv run python -m bench.run_bench $(if $(K),--k $(K)) $(if $(ONLY),--only $(ONLY)) $(if $(NO_ADVERSARIAL),--no-adversarial) $(if $(AGENT),--agent)

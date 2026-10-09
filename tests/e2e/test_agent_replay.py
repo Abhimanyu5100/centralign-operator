@@ -12,9 +12,11 @@ from bench.run_agent import _main
 pytestmark = pytest.mark.e2e
 
 
-@pytest.mark.parametrize("task", ["T1", "T5"])
-def test_the_recorded_llm_run_replays_with_no_key_and_passes_its_checker(task, tmp_path, capsys):
-    args = argparse.Namespace(task=task, replay=True, chaos=None, chaos_seed=0, events=False, approve_wait=0.0,
+@pytest.mark.parametrize("task, chaos", [("T1", None), ("T3", None), ("T4", None), ("T5", None), ("T9:none", None),
+                                         ("T9:approve", None), ("T9:reject", None), ("T1", "flaky_500")])
+def test_the_recorded_llm_run_replays_with_no_key_and_passes_its_checker(task, chaos, tmp_path, capsys):
+    """Day 5 done-when: T3, T4 and T9 (every approver decision) pass in replay; T1 under flaky_500 recovers."""
+    args = argparse.Namespace(task=task, replay=True, chaos=chaos, chaos_seed=0, events=False, approve_wait=0.0,
                               store=str(tmp_path / "runs" / "runs.db"))
     assert asyncio.run(_main(args)) == 0
     out = capsys.readouterr().out

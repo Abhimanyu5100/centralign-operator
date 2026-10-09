@@ -11,7 +11,7 @@ import pytest
 import re
 
 from agent.executor import Executor, brief
-from agent.goal import Fact, GoalSpec
+from agent.goal import Fact, GoalSpec, shown
 from agent.memory.knowledge import load_sops
 from agent.plan import Plan
 from agent.tools.registry import ToolResult
@@ -267,3 +267,32 @@ def test_a_tool_the_sop_does_not_offer_is_refused_here_and_never_sent(sandbox):
     outcome, llm, _, sent = execute(sandbox, calls(payment), say("stop"), scoped=True)
     assert llm.tool_texts()[0] == "refused here, not sent: create_payment is not a tool of this procedure"
     assert "create_payment" not in sent
+
+
+def test_paise_facts_are_shown_with_rupees_so_a_limit_in_rupees_can_be_read():
+    """D-206: live T6's planner could not tell 2400000 paise from "above Rs 50,000"."""
+    facts = [Fact(name="total_paise", raw="Rs. 24,000.00", value=2_400_000, result=3),
+             Fact(name="invoice_no", raw="INV-0091", value="INV-0091", result=3)]
+    assert shown(facts) == {"total_paise": "2400000 (Rs 24,000.00)", "invoice_no": "INV-0091"}
+
+
+def test_after_a_replan_a_creating_write_that_already_succeeded_is_refused(sandbox):
+    """Register 2.7, live T8: each act phase after a replan requested the business approval again (4 rows)."""
+    approval = ("request_approval", {"entity_type": "invoice", "entity_id": 1, "reason": "again"})
+    outcome, llm, executor, sent = execute(sandbox, calls(("get_vendor", {"vendor_id": 1})),
+                                           calls(("submit_invoice", INVOICE)), say("done"))  # ORG-002: read first
+    executor.again = True
+    assert "submit_invoice" in executor.wrote and "request_approval" not in executor.wrote
+    text, ended = drive(executor.run, lambda run: executor.act("submit_invoice", {**INVOICE, "invoice_no": "EX-2"}))
+    assert text == ("refused here, not sent: submit_invoice already succeeded in this run; read the record back "
+                    "instead") and ended == "failed"
+    executor.again = False
+    text, _ = drive(executor.run, lambda run: executor.act(*approval))
+    assert "refused" not in text  # before a replan, and for a tool not yet used, writes run as usual
+
+
+def test_a_bare_integer_paise_fact_is_already_paise():
+    """D-208, live T8: `6240000` quoted from an Acme row became 624,000,000 paise."""
+    from agent.goal import fact_value
+    assert fact_value("amount_paise", "6240000") == 6_240_000
+    assert fact_value("total_paise", "Rs. 62,400.00") == 6_240_000 and fact_value("tax_paise", "₹1,25,000") == 12_500_000

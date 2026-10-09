@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent.policy.loader import KNOWLEDGE_DIR, PolicyError, load_allowlist_domains, load_policies, strict_yaml
+from agent.policy.loader import KNOWLEDGE_DIR, PolicyError, load_policies, read_allowlist, strict_yaml
 from agent.policy.models import CONDITION_TYPES, PolicyFile
 
 CONDITIONS = {
@@ -229,7 +229,7 @@ def test_a_rule_that_names_a_good_allowlist_file_loads(tmp_path):
     write(tmp_path, "internal_domain: a.example\npartner_domains: [b.example]\n", "mail_allowlist.yaml")
     loaded = load_policies(write(tmp_path, "schema_version: 0\nrules:\n" + ALLOWLIST_RULE % "mail_allowlist.yaml"))
     assert loaded.rules[0].id == "ORG-001"
-    assert load_allowlist_domains(tmp_path / "mail_allowlist.yaml") == {"a.example", "b.example"}
+    assert read_allowlist(tmp_path / "mail_allowlist.yaml")[1] == {"a.example", "b.example"}
 
 
 def test_an_inline_domain_list_is_not_allowed(tmp_path):
@@ -246,4 +246,4 @@ def test_strict_yaml_rejects_duplicate_keys_and_accepts_plain_documents():
 
 
 def test_the_loader_reads_the_real_allowlist():
-    assert "acme.example" in load_allowlist_domains(KNOWLEDGE_DIR / "mail_allowlist.yaml")
+    assert "acme.example" in read_allowlist(KNOWLEDGE_DIR / "mail_allowlist.yaml")[1]

@@ -257,3 +257,19 @@ def test_calls_to_a_model_are_spaced_by_its_rpm_on_a_fake_clock(tmp_path):
     chat(c, "reason", [{"role": "user", "content": "a"}])
     chat(c, "reason", [{"role": "user", "content": "b"}])
     assert sleeps == [0.0, 3.0, 3.0] and len(provider.requests) == 2  # no LLM_RPM: no spacing
+
+
+def test_a_scope_keeps_a_scenarios_replies_apart_and_no_scope_keeps_the_plain_key(tmp_path):
+    """D-209: a chaos run shares its first requests with the plain task; with its own scope neither overwrites the
+    other's replies. No scope gives exactly the key recorded before scopes existed."""
+    from agent.llm import cassette
+    body = {"messages": MESSAGES}
+    plain = cassette.cassette_key("reason", body, NOW)
+    assert cassette.cassette_key("reason", body, NOW, "") == plain
+    assert cassette.cassette_key("reason", body, NOW, "flaky_500:0") != plain
+    c, _ = client(tmp_path, {"flash": [(200, answer("plain"), {}), (200, answer("chaos"), {})]})
+    chat(c, "reason", MESSAGES)
+    c2, _ = client(tmp_path, {"flash": [(200, answer("chaos"), {})]}, CASSETTE_SCOPE="flaky_500:0")
+    chat(c2, "reason", MESSAGES)
+    replay = lambda scope: LLMClient({**config(tmp_path), "REPLAY": "1", "CASSETTE_SCOPE": scope}, now=NOW)  # noqa: E731
+    assert [asyncio.run(replay(s).chat("reason", MESSAGES)).content for s in ("", "flaky_500:0")] == ["plain", "chaos"]

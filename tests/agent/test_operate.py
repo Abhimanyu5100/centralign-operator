@@ -16,7 +16,7 @@ from agent.memory.knowledge import load_sops, match_sops
 from agent.plan import Plan
 from agent.policy.approvals import ApprovalStore
 from agent.llm.client import LLMUnavailable
-from agent.planner import plan_errors, replan_errors
+from agent.planner import plan_errors, read_tools, replan_errors, tidy
 from agent.run import _plan_failed
 from agent.verifier import Verdict
 from agent.verifier.predicates import Check, MilestoneCheck
@@ -76,6 +76,26 @@ def test_a_decline_or_an_ask_with_nothing_unknown_or_ambiguous_proceeds(sandbox)
         assert goal["decision"] == "proceed" and report["questions"][0]["text"] == "Which one?"
 
 
+def test_with_no_start_date_anywhere_the_executor_asks_after_the_gate_proceeds(sandbox):
+    """D-194 does not silence a needed question: "Onboard Priya Nair." names no date and HR's offer email has none
+    (OE-2 "Ask when: no start date"), so the gate's ask becomes proceed (nothing ambiguous) and the gather phase,
+    having read the offer email, asks. Nothing is planned or written."""
+    def ask_after_reading(messages):
+        text = messages[-1]["content"]  # mail is untrusted: a warning line comes first
+        listed = json.loads(text.split("\n", 1)[1] if text.startswith("Untrusted") else text)["data"]["items"]
+        offer = next(m for m in listed if "offer" in m["subject"].lower())
+        return calls(("read_mail", {"mail_id": offer["id"]}))
+    report, llm, events = operate_with(
+        sandbox, "Onboard Priya Nair.", gate("ask", "onboard-employee", question="When does she start?"),
+        calls(("list_mail", {"folder": "inbox"})), ask_after_reading,
+        calls(("ask_user", {"question": "The offer email gives no start date. When does Priya Nair start?"})))
+    goal = next(e["payload"] for e in events if e["type"] == "goal")
+    offer_text = llm.requests[-1]["messages"][-1]["content"]
+    assert goal["decision"] == "proceed" and "Priya" in offer_text and "start date" not in offer_text.lower()
+    assert report["status"] == "needs_clarification" and "no start date" in report["questions"][0]["text"]
+    assert [e for e in events if e["type"] == "plan"] == [] and report["side_effects"] == []
+
+
 def test_an_ask_stands_when_a_named_party_matches_two_or_more_records(sandbox):
     """D-194: "Ra" matches two vendors (Rao Packaging, Verma Traders): the gate's ask goes to the requester."""
     report, llm, _ = operate_with(sandbox, "Pay Ra for the invoice.",
@@ -132,14 +152,15 @@ def test_the_agents_done_never_sets_the_status_and_replanning_stops_after_three(
     assert report["skipped_steps"] == PLAN["not_applicable"] and len(report["replans"]) == 3
 
 
-def test_a_bad_plan_gets_one_retry_then_the_run_never_acts(sandbox):
+def test_a_bad_plan_gets_two_retries_then_the_run_never_acts(sandbox):
     invented = json.loads(json.dumps(PLAN))
     invented["milestones"][0]["predicates"][0]["expect"] = {"amount_paise": 999}
     report, llm, events = operate_with(sandbox, SHARMA, gate("proceed"), calls(("find_vendors", {"q": "Sharma"})),
-                                       calls(("facts_ready", VENDOR_FACT)), say(json.dumps(invented)), say("no JSON"))
+                                       calls(("facts_ready", VENDOR_FACT)), say(json.dumps(invented)), say("no JSON"),
+                                       say("still none"))
     problems = [e["payload"]["problems"] for e in events if e["type"] == "plan"]
     assert "M1: 999 is not from the facts, the goal, the procedure or the tools" in problems[0]
-    assert "Fix these problems" in llm.requests[-1]["messages"][-1]["content"] and len(problems) == 2
+    assert "Fix these problems" in llm.requests[-1]["messages"][-1]["content"] and len(problems) == 3
     assert report["status"] == "unverified" and not llm.replies
 
 
@@ -153,6 +174,8 @@ def plan_with(**milestone):
     (plan_with(predicates=[{"read": "list_invoices", "args": {"status": "any"}}]), "list_invoices args: status: Input"),
     (plan_with(predicates=[{"read": "list_invoices", "expect": {"colour": "red"}}]), "rows have no field 'colour'"),
     (plan_with(predicates=[{"read": "submit_invoice"}]), "'submit_invoice' is not an API read tool"),
+    (plan_with(predicates=[{"read": "list_invoices", "where": {"vendor_name": "Sharma Logistics Pvt Ltd"},
+                            "expect": {"status": "pending"}}]), "M1: status='pending' is not one of ['draft', "),
     (plan_with(predicates=[{"read": "list_invoices", "where": {"invoice_no": "INV-4040"}}]), "'INV-4040' is not from"),
     (Plan(sop_id="process-invoice"), "give 1 to 7 milestones"),
     (plan_with(sop_step="PI-1"), "M1: PI-1 writes nothing; only a count 0 check may cite it"),
@@ -174,6 +197,69 @@ def test_each_planner_rule_has_a_failing_plan(sandbox, plan, problem):
     assert plan_errors(plan_with(), run, goal, sop, []) == []
     problems = plan_errors(plan, run, goal, sop, [], {"list_invoices": ["invoice_no", "status", "vendor_name"]})
     assert any(problem in p for p in problems), problems
+    drive(run, lambda run: asyncio.sleep(0))
+
+
+def test_tidy_fixes_what_the_model_gets_wrong_every_time_and_says_so():
+    """D-200, from the live T1, T3 and T9 plans: status "any", `contains` as a string, read-step milestones."""
+    data = {"milestones": [
+        {"id": "M1", "sop_step": "NV-1", "predicates": [{"read": "get_vendor", "args": {"vendor_id": 1}}]},
+        {"id": "M2", "sop_step": "NV-4", "after": ["M1"], "target": "x" * 300, "predicates": [
+            {"read": "list_mail", "args": {"folder": "outbox", "status": "any", "q": None},
+             "contains": {"subject": "INV-1043"}, "expect": {"id": {"ref": "M1"}, "folder": "outbox"}}]},
+        {"id": "M3", "sop_step": "NV-2", "predicates": [{"read": "list_mail", "count": 0}]}]}
+    data["milestones"].append({"id": "M4", "sop_id": "NV-4", "predicates": [{"read": "list_mail"}]})
+    data["milestones"].append({"id": "M5", "predicates": [{"read": "list_mail"}]})  # no step: validation says so
+    assert tidy(data, load_sops()["notify-vendor"]) == ["dropped M1: NV-1 writes nothing",
+                                                        "M4: sop_id NV-4 read as its sop_step"]
+    assert [m["id"] for m in data["milestones"]] == ["M2", "M3", "M4", "M5"]  # a count 0 check may cite any step
+    assert data["milestones"][2]["sop_step"] == "NV-4" and "sop_id" not in data["milestones"][2]
+    assert len(data["milestones"][0]["target"]) == 200
+    paise = {"milestones": [{"id": "M1", "sop_step": "PI-5", "predicates": [
+        {"read": "list_invoices", "where": {"status": "any"}, "expect": {"amount_paise": "4130000", "po_number": "42"}}]}]}
+    tidy(paise, load_sops()["process-invoice"])
+    assert paise["milestones"][0]["predicates"][0]["where"] == {}
+    assert paise["milestones"][0]["predicates"][0]["expect"] == {"amount_paise": 4_130_000, "po_number": "42"}
+    assert data["milestones"][0]["after"] == [] and data["milestones"][0]["predicates"][0] == {  # where: "any" dropped
+        "read": "list_mail", "args": {"folder": "outbox"}, "contains": {"subject": ["INV-1043"]},
+        "where": {"id": {"ref": "M1"}}, "expect": {"folder": "outbox"}}
+
+
+def test_a_messy_plan_is_tidied_and_accepted_on_the_first_attempt(sandbox):
+    messy = json.loads(json.dumps(PLAN))
+    messy["milestones"][0]["predicates"][0]["args"]["status"] = "any"
+    messy["milestones"].insert(0, {"id": "M9", "target": "the email is found", "sop_step": "PI-1",
+                                   "predicates": [{"read": "list_mail", "args": {"folder": "inbox"}}]})
+    _, _, events = operate_with(sandbox, SHARMA, gate("proceed"), calls(("find_vendors", {"q": "Sharma"})),
+                                calls(("facts_ready", VENDOR_FACT)), say(json.dumps(messy)), say("Stop."),
+                                *[say(json.dumps(PLAN)), say("Stop.")] * 3)
+    first = next(e["payload"] for e in events if e["type"] == "plan")
+    assert first["problems"] == [] and first["tidied"] == ["dropped M9: PI-1 writes nothing"]
+    assert [m["id"] for m in first["plan"]["milestones"]] == ["M1", "M2"]
+    assert "status" not in first["plan"]["milestones"][0]["predicates"][0]["args"]
+
+
+def test_list_reads_the_gather_phase_skipped_are_sampled_so_their_fields_are_checked(sandbox):
+    """D-201, live T9:approve: the gather phase never listed mail, so a plan expecting a mail row's `status` (mail
+    rows have none) went unchecked and failed a correct run. Now the outbox read's real fields are known."""
+    request = "Email Sharma Logistics that invoice INV-1043 is under review."
+    mail = lambda expect: {"sop_id": "notify-vendor", "milestones": [{  # noqa: E731
+        "id": "M1", "target": "one email to Sharma", "sop_step": "NV-4", "predicates": [{
+            "read": "list_mail", "args": {"folder": "outbox"}, "where": {"to_addr": "accounts@sharmalogistics.example"},
+            "expect": expect}]}]}
+    fact = {"facts": [{"name": "to", "raw": "accounts@sharmalogistics.example", "result": 1}]}
+    _, _, events = operate_with(sandbox, request, gate("proceed", "notify-vendor"), calls(("get_vendor", {"vendor_id": 1})),
+                                calls(("facts_ready", fact)), say(json.dumps(mail({"status": "sent"}))),
+                                say(json.dumps(mail({}))), say("Stop."), *[say(json.dumps(mail({}))), say("Stop.")] * 3)
+    problems = [e["payload"]["problems"] for e in events if e["type"] == "plan"]
+    assert any("list_mail rows have no field 'status'" in p for p in problems[0]) and problems[1] == []
+
+
+def test_unseen_reads_advertise_the_row_fields_their_rows_have(sandbox):
+    """A mail row has `to_addr`, not the send tool's `to` (live T9's planner wrote where {"to": ...})."""
+    run = sandbox.run(plan=Plan(sop_id="notify-vendor"))
+    fields = {t["read"]: t["row_fields"] for t in read_tools(run, {})}
+    assert "to_addr" in fields["list_mail"] and "to" not in fields["list_mail"]
     drive(run, lambda run: asyncio.sleep(0))
 
 
@@ -239,6 +325,19 @@ def test_a_replan_that_corrects_a_lookup_lets_the_run_pass(sandbox):
                                   say("Done."), say(json.dumps(one("Sharma Logistics Pvt Ltd"))), say("Done."))
     assert report["status"] == "completed" and not llm.replies
     assert [(r["replan"], r["changed"]) for r in report["replans"]] == [(1, ["M1", "M2"])] and report["escalation"] is None
+
+
+def test_an_act_phase_after_a_replan_does_not_write_the_same_record_again(sandbox):
+    """Register 2.7, live T8 (four approval requests): the entry made before the replan is not made again."""
+    entry = {"vendor_id": 1, "invoice_no": "EX-1", "invoice_date": "2026-10-01", "due_date": "2026-10-31",
+             "amount_paise": 100_000, "tax_paise": 0}
+    report, llm, _ = operate_with(sandbox, SHARMA, gate("proceed"), calls(("find_vendors", {"q": "Sharma"})),
+                                  calls(("facts_ready", VENDOR_FACT)), say(json.dumps(PLAN)),
+                                  calls(("get_vendor", {"vendor_id": 1})), calls(("submit_invoice", entry)), say("Done."),
+                                  say(json.dumps(PLAN)), calls(("submit_invoice", {**entry, "invoice_no": "EX-2"})),
+                                  say("Stop."), *[say(json.dumps(PLAN)), say("Stop.")] * 2)
+    assert "submit_invoice already succeeded in this run" in json.dumps(llm.requests)
+    assert sandbox.rows("SELECT COUNT(*) FROM invoices WHERE invoice_no LIKE 'EX-%'")[0][0] == 1
 
 
 def test_no_replan_after_a_failed_postcondition_an_unexplained_change_or_a_stopped_executor(sandbox):

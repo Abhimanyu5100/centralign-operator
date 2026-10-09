@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from agent.failures import classify
-from agent.goal import Fact, GoalSpec, fact_value
+from agent.goal import Fact, GoalSpec, fact_value, shown
 from agent.llm.client import LLMError
 from agent.memory.knowledge import Sop
 from agent.plan import Plan
@@ -79,7 +79,7 @@ def brief(goal: GoalSpec, sop: Sop | None, facts: list[Fact] = (), plan: Plan | 
                              "success": goal.success}
     text, parts["lookups"] = sop.text if sop else "", goal.lookups
     if plan is not None:
-        parts["facts"] = {f.name: f.value for f in facts}
+        parts["facts"] = shown(facts)
         parts["milestones"] = [{"id": m.id, "target": m.target, "sop_step": m.sop_step, "checked_by": [  # the
             p.model_dump(exclude_defaults=True) for p in m.predicates]} for m in plan.milestones]  # verifier's reads
         steps = sop.sections() if sop else {}  # act: only the steps the milestones cite (N.179)
@@ -106,18 +106,15 @@ class Executor:
         self.facts: dict[str, Fact] = {}          # accepted so far, by name
         self.fields: dict[str, list[str]] = {}    # read tool -> the row fields seen, for the planner
         self.strikes: Counter = Counter()
-        self.read_back, self.gather = False, True
+        self.read_back, self.gather, self.again = False, True, False  # again: an act phase after a replan
+        self.wrote: set[str] = set()              # creating API writes that succeeded (2.7)
 
     def tools(self) -> list[dict[str, Any]]:
         out = []
         for spec in self.run.registry.specs():
             if self.gather and spec.side_effect != "read" or not self.offered(spec):
                 continue
-            schema = spec.args_model.model_json_schema()
-            props = {k: v for k, v in schema.get("properties", {}).items() if k not in spec.transport_args}
-            out.append({"type": "function", "function": {"name": spec.name, "description": spec.description,
-                        "parameters": {"type": "object", "properties": props,
-                                       "required": [k for k in schema.get("required", []) if k in props]}}})
+            out.append({"type": "function", "function": spec.llm_schema()})
         return out + ([FACTS_TOOL] if self.gather else [])
 
     def offered(self, spec) -> bool:
@@ -175,6 +172,9 @@ class Executor:
         if writes and (self.gather or self.read_back):
             why = "the gather phase only reads" if self.gather else "an earlier write's outcome is unknown: read back first"
             return f"refused here, not sent: {why}", "failed"
+        ep = self.run.client.catalog.get(name)
+        if self.again and name in self.wrote:  # a replan fixes how a check reads, not what was written (2.7)
+            return f"refused here, not sent: {name} already succeeded in this run; read the record back instead", "failed"
         seen = " ".join(self.shown.values())
         if name == "ask_user" and (bad := [c for c in args.get("candidates") or [] if squash(str(c)) not in seen]):
             return f"refused here, not sent: candidates {bad} are in no result; give them exactly as shown", "failed"
@@ -187,6 +187,7 @@ class Executor:
         text = self.show(name, result)
         if result.ok:
             self.read_back = self.read_back and writes  # a read that worked clears it; no write runs while it is set
+            self.wrote |= {name} if writes and ep is not None and not ep.path_params else set()
             if name == "browser_click" and self.last_call_wrote():
                 text += await self.created()
             return text, ENDING_TOOLS.get(name)
@@ -228,6 +229,17 @@ class Executor:
             except ValueError as exc:
                 problems.append(f"{name}: {exc}")
         return facts, problems or ([] if facts else ["no facts given"])
+
+    async def sample(self) -> None:
+        """Row fields of the offered API list reads the gather phase did not make (D-201): the planner's checks
+        then know them (a mail row has no `status`). Plain reads through the registry, never shown to the model."""
+        for spec in self.run.registry.specs():
+            if spec.side_effect == "read" and spec.channel == "api" and spec.name not in self.fields \
+                    and self.offered(spec) and not spec.args_model.model_json_schema().get("required"):
+                result = await self.run.call(spec.name, {})
+                rows = result.data.get("items") or [] if result.ok else []
+                if rows and isinstance(rows[0], dict):
+                    self.fields[spec.name] = sorted(k for k in rows[0] if k != "provenance")
 
     def run_date(self):
         return self.run.ctx.now.date() if self.run is not None else None  # "joins Monday": the run's frozen now

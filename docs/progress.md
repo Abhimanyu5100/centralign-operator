@@ -5,49 +5,45 @@ If this file disagrees with git, git wins for what is committed.
 
 ## Now
 
-- **Last updated:** 2026-10-09 22:14 IST
-- **Day / phase / part:** Day 5 (Phase B), parts 5.1 and 5.2 built, awaiting the author's review and commit
-  ("Day 5.1-5.2: ..."). Day 4 committed (50fdaa6).
-- **Currently doing:** stop for the commit. Plan: `docs/day5-plan.md` (judge B and replan C approved with the author's
-  changes; quota update D-187, D-188); decisions D-173 to D-195.
-- **Built:** quota book and `LLM_RPM` pacing, Lite-first executor chain, gate on Groq (planner back on Gemini, D-193);
-  SOP-scoped tools; facts fixes; SOP write-step coverage with conditional steps only (D-185, D-195); ask-candidate
-  check; gate ask only on ambiguity (D-194); resume after an action approval with reject rollback and predictions
-  (D-182 to D-184); judge (D-189); replan with frozen assertions and escalation (D-190); planner rule 1 in code
-  (D-192); prompt freeze test (`tests/agent/test_prompt_freeze.py`, five edits after the freeze, D-191 to D-195).
-- **Live:** T1 `awaiting_business_approval`, every check PASS, PDF attached (PI-6), 17 calls, **76,283 tokens** (138,069
-  before; 60K target not met, levers in the model plan), run 288ca95898e4f4cb; T5 `infeasible` PASS (1 Groq call).
-  Both replay with no key and a fresh run id. 84 stale cassettes deleted (25 were committed on Day 4); 18 kept.
-- **Running agent/ total (D-115, D-154):** **3,793** non-blank lines (+260 on Day 5), **7 left** under 3,800. 5.3's
-  fixes need the pre-agreed cut list: the predicted card's `sources` (about -8), then the ask-candidate check (about
-  -6); replan, resume and the quota counter are never cut.
-- **Latest bench (`make bench`, exit 0):** oracle table unchanged: 12/12, pass^1 11/11, CuP 12/12, chaos fired 4/4 and
-  recovered 4/4, agreement 16/16, adversarial 8/8.
-- **Quota today (Pacific day 2026-10-09):** about 440 of 500 Flash-Lite 3.5 calls left (see `make run` output).
-- **Next step:** Day 5.3: tasks live one by one with cassettes (T4, T3, T9:none/approve/reject, T6, T7, T8, T2), each
-  replayed with no key; T1 under `flaky_500` once; any prompt edit is a decision row plus a re-record. Then 5.4: `make
-  bench AGENT=1` from cassettes, checkpoint, commit "Day 5: ...".
+- **Last updated:** 2026-10-09 23:20 IST
+- **Day / phase / part:** Day 5 (Phase B) complete: 5.3 (every task live with cassettes) and 5.4 (`make bench AGENT=1`)
+  built, awaiting the author's review and commit ("Day 5: ..."). Day 5.1-5.2 committed (fb2b86b).
+- **Day 5 done-when: MET.** T3, T4 and T9 (none, approve, reject) pass live and in replay with no key and a fresh run
+  id; T1 under `flaky_500` recovers (500 recovered inside `submit_invoice`, listed under "recovered"; a failed attach
+  redone after two replans); `make bench AGENT=1` runs every LLM task from cassettes with the same table (11/11 plus
+  the chaos run, adversarial 8/8). Every core task T1-T8 passed live once (pass^1) and replays.
+- **Measured per task (model plan):** T1 18 calls / 88K tokens; T1 flaky 29 / 143K; T2 16 / 67K; T3 15 / 44K; T4 3 /
+  6K; T5 1 / 1K; T6 18 / 78K; T7 17 / 74K; T8 11 / 28K; T9 6-9 / 14-19K. Day 6 pass^3 needs about 439 Flash-Lite and
+  42 Groq calls (of 1,000 each a day).
+- **What 5.3 found and fixed (D-196 to D-210):** dead code removed (-33 lines, D-198); judge re-reads rows by id
+  (D-199) and accepts "A ... B" quotes (D-203); planner `tidy` for recurring model slips (D-200, D-202, D-205, D-207),
+  sampled row fields (D-201), rule 7 for "when" steps (D-204), rupees beside paise (D-206), two planner retries
+  (D-207); bare-integer paise facts and no repeated creating writes after a replan (D-208); cassette scope for chaos
+  runs (D-209); the agent bench (D-210). Eleven post-freeze edits in all, each a decision row with its re-record.
+- **Running agent/ total (D-197: ceiling 3,950, raised once):** **3,832** non-blank lines (118 left). The cut list
+  was kept: the predicted card's `sources` proves T9's N.13, the ask-candidate check proves T4's candidates.
+- **Quota left today (Pacific day 2026-10-09):** Flash-Lite 3.5 106/500, Flash-Lite 3.1 500/500, Flash 3.5 and 3.7
+  20/20 each, gpt-oss-120b 948/1,000.
+- **Latest bench:** `make bench` (oracles) 12/12, pass^1 11/11, chaos 4/4 fired and recovered, agreement 16/16,
+  adversarial 8/8; `make bench AGENT=1` 11/11, chaos 1/1, agreement 12/12, adversarial 8/8.
+- **Next step:** Day 6: AcmeBench with the LLM live, pass^3 (8 core tasks x 3, plus chaos-on runs, recording the
+  missing chaos variants T3 `commit_then_timeout`, T8 `session_expiry_at_step_5` and `commit_then_timeout`); run viewer
+  polish; README (setup incl. Docker, demo, results, tools used, limitations incl. the Day 5 plan's predicates
+  sentence); demo video; fresh-clone test; submit.
 - **Carried over:**
-  - **Day 6 polish (seen in the Docker run, not fixed: Dockerfile edits need the author's OK):** container timestamps
-    are UTC and the commit shows as "unknown". Options: `ENV TZ=Asia/Kolkata` (needs `tzdata`) and a `GIT_COMMIT` build
-    arg the bench prints.
-  - **Day 6 README:** the limitation sentence in `docs/day5-plan.md` section 3.5 (plan predicates and misread PDFs);
-    the bench is pass^3 (D-188), no pass^1 deviation.
-  - **Bench timing (N.167):** T6's verification waits the full read lag; a 500 under `flaky_500` waits the read lag
-    before the keyless retry.
+  - **Day 6 polish (Docker, author's OK needed):** container timestamps in UTC and the commit "unknown".
+  - **N.192:** a planner slip (request-form vendor name) failed one T1 run; pass^3 will measure the rate.
+  - **Bench timing (N.167):** read-lag waits on absence checks and after a 500.
   - A GUI oracle for T7 would let its `rename_submit_button` variant run (D-161).
-  - `iyer_INV-3301.pdf` stays unreferenced by T1-T9; the scanner corpus test reads it.
 - **RESUME PROMPT:**
   ```
-  Read CLAUDE.md and docs/progress.md, then docs/day5-plan.md (sections E and F), docs/model-plan.md and the
-  decisions D-187 to D-195. Day 5.1-5.2 is committed: quota book and RPM pacing, SOP-scoped tools, resume after an
-  action approval, judge, replan, prompt freeze; T1 and T5 pass live and in replay. Continue with Day 5.3: run T4,
-  T3, T9:none, T9:approve, T9:reject, T6, T7, T8 and T2 live one at a time with `make run TASK=...` (cassettes
-  recorded), replay each with REPLAY=1, then T1 under CHAOS=flaky_500 once; fix in code where possible, and treat
-  every prompt edit as a decision row plus a re-record (the freeze test pins the hash). agent/ has 7 lines left:
-  use the pre-agreed cut list (predicted-card sources, then the ask-candidate check) before adding code. Then 5.4:
-  `make bench AGENT=1` from cassettes with the same table shape, /checkpoint, and stop for the commit. Show the risk
-  table first. Do not commit or push.
+  Read CLAUDE.md and docs/progress.md, then docs/model-plan.md (measured per task, Day 6 estimate) and the decisions
+  D-196 to D-210. Day 5 is committed: every task passes live once and replays with no key; `make bench AGENT=1`
+  replays them in the bench table. Start Day 6 per CLAUDE.md: AcmeBench with the LLM live at pass^3 (8 core tasks x
+  3) plus the chaos-on runs (record T3 commit_then_timeout and the two T8 variants with CASSETTE_SCOPE), watching the
+  quota line; then the README (setup incl. Docker, demo, results, tools used, limitations), run viewer polish, the
+  demo, the fresh-clone test. No more token-cutting prompt edits (D-196); agent/ ceiling 3,950 (D-197), 118 left.
+  Show the risk table first. Do not commit or push.
   ```
 
 ## Done log
@@ -79,14 +75,11 @@ If this file disagrees with git, git wins for what is committed.
 | 2026-10-06 | 3.4 | Author fixes before 3.4: D-161 (the T2 chaos slot moves to `commit_then_timeout` on T8; Acme declares its UI-only profiles; a UI-only variant must be marked `channel: gui` and runs only with a GUI oracle, T7's is skipped; every chaos run the bench runs must fire) and D-162 (the harness's Acme holds a timeout 5 s, its agent times out after 3 s, the graceful shutdown outlasts the hold; `chaos.after_write` ends a cancelled hold with one log line); part 4, packaging and skills: `Dockerfile` (one image from the Playwright 1.63.0 noble image, uv 0.12.23, `uv sync --frozen`, `make`), `docker-compose.yml` (`acme` on :8000 with the admin token only in its env and a health check; `runner` in a `tools` profile running `make bench` with its own child Acme, results mounted), `.dockerignore`, `make acme HOST=`, the `/add-policy` and `/chaos-test` skills, CLAUDE.md commands, a static packaging test; decisions D-161 to D-163; risk N.170 | `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `Makefile`, `CLAUDE.md`, `.claude/skills/{add-policy,chaos-test}/SKILL.md`, `acme/chaos.py`, `bench/{live,run_bench,run_oracle,tasks}.py`, `bench/tasks/{T2,T7,T8}.yaml`, `tests/test_packaging.py`, `tests/acme/test_chaos.py`, `tests/bench/test_run_bench.py`, `tests/checkers/test_engine.py`, `tests/e2e/test_oracles.py`, `docs/{decisions,risk-log,progress}.md` | `make test`: 1743 passed, 0 failed (1730 before); `make test-e2e`: 52 passed, 0 failed (51 before; new: the bench prints no traceback and T3's held run takes 3 s); `make bench`: exit 0 in 23 s, chaos fired 4/4, adversarial 8/8, no traceback; mutation (no cancellation handler) killed; Docker check (2026-10-07, Colima): build 5 min 12 s, image 4 GB, `/healthz` ok after 2 s, token only in `acme`, `docker compose run --rm runner make bench` exit 0 in 24 s with the same table | ab94660 (Docker results added after) |
 | 2026-10-09 | 3.R | Day 3 review fixes and the combined Day 3.R + Day 4 plan (`docs/day4-plan.md`): the report's `recovered` list (a call that succeeded after a failed attempt inside the tool: error, class, count, what settled it; never changes the status, copies no args) in `report.json` and `report.md`, evidence args without transport args, `<error_type> (recovered)` in the bench Failures column (D-164); register P.3 points at `test_an_unknown_browser_form_is_held`; N.145 e2e (planted off-site link denied by the real gate in a real browser); curl check recorded | `agent/report.py`, `bench/run_bench.py`, `tests/agent/test_report.py`, `tests/bench/test_run_bench.py`, `tests/e2e/test_browser.py`, `docs/{day4-plan,failure-register,decisions,risk-log,progress}.md` | `make test`: 1745 passed, 0 failed (1743 before; 2 new); `make test-e2e`: 54 passed, 0 failed (52 before; 2 new); `make bench`: exit 0, 12/12, chaos fired 4/4, adversarial 8/8, recovered errors shown; 4 mutations (list dropped, transport args kept in evidence, bench column without recovered, off-site target reduced to a path) all killed | 3ebc271 |
 | 2026-10-09 | 4 | Day 4 (Phase B): LLM client (`agent/llm/`: OpenAI-compatible Gemini and Groq from config only, providers without a key skipped, retries with Retry-After / retryDelay and full-jitter backoff, a long wait or a 4xx goes to the next model, per-run token budget, `llm_call` events, record/replay cassettes keyed on role + request + frozen now, run id refused, empty tool-call ids filled, provider tool-call objects echoed back); live smoke test (`make smoke`) with measured limits in the model plan; SOP loader; Goal Spec and feasibility gate (code: trigger SOPs, names, master probes; one LLM judgement; code checks); executor (gather / act, two strikes, read back first, turn skipping, holds, facts quoted and normalised in code, audit read after a GUI write, untrusted warning); planner (one call, Plan checks: args by the tool model, seen fields, sourced literals, SOP steps; one retry); `agent/run.py` `operate`; `make run` harness; report narrative and stops; T1 and T5 live and replayed; decisions D-165 to D-172; risks N.171 to N.179 | `agent/llm/{__init__,client,cassette}.py`, `agent/memory/{__init__,knowledge}.py`, `agent/{goal,feasibility,executor,planner,run}.py`, `agent/{config,report,store}.py`, `agent/policy/facts.py`, `bench/run_agent.py`, `scripts/smoke_llm.py`, `cassettes/*`, `Makefile`, `.env.example`, `.gitignore`, `CLAUDE.md`, `tests/agent/{llm_fakes,test_llm_client,test_executor,test_operate}.py`, `tests/e2e/test_agent_replay.py`, `tests/test_no_key_leak.py`, `docs/{day4-plan,model-plan,decisions,risk-log,progress}.md` | `make test`: 1788 passed, 0 failed (1745 before; 43 new); `make test-e2e`: 56 passed, 0 failed (54 before; 2 new: T1 and T5 replay with no key); `make bench`: exit 0, unchanged; `make run TASK=T1` live: `awaiting_business_approval`, checker PASS; `TASK=T5` live: `infeasible`, PASS; both pass with REPLAY=1 and no key; key-leak grep over `cassettes/` and `runs/` clean; 16 mutations, 15 killed (the survivor renames the executor's own "done" label, which nothing reads: the status comes only from the verifier) | 50fdaa6 |
-| 2026-10-09 | 5.1-5.2 | Day 5 plan (`docs/day5-plan.md`; judge and replan approved with the author's changes; quota update): quota book (`runs/llm_quota.json`, Pacific day from the harness) and `LLM_RPM` pacing in the client; executor chain Lite 3.5 → Lite 3.1 → Flash 3.5 → Flash 3.7, gate on Groq, planner on Gemini; smoke of the two new models; SOP-scoped tools (browser only for a UI-only step in act), lookups in the briefs, cited steps only in act, pruned results, facts kept across calls and read after labels, request as result 0, weekday dates; SOP write-step coverage (`Plan.not_applicable`, only for "when" steps); gate asks only on ambiguity; ask candidates from results; resume after an action approval (approver; hold never shown), reject rollback, `prediction` events and recipient sources; judge (`agent/verifier/judge.py`, `Milestone.judge`, `judge_flags`); replan (assertions frozen, 3 at most, `escalation`); planner rule 1 in code; report sections (skipped steps, replans, escalation, rollback, predictions, judge); `make run TASK=T9:approve|reject|none`, `APPROVE_WAIT`, quota line; prompt freeze test; T1 and T5 re-recorded, stale cassettes deleted; decisions D-173 to D-195; risks N.175 to N.178 updated, N.180 to N.191 | `agent/{executor,planner,run,feasibility,goal,plan,report,store,config}.py`, `agent/llm/client.py`, `agent/memory/knowledge.py`, `agent/tools/registry.py`, `agent/verifier/{__init__,predicates,judge}.py`, `acme/knowledge/sops/{notify-vendor,README}.md`, `bench/{run_agent,approver}.py`, `scripts/smoke_llm.py`, `Makefile`, `.env.example`, `cassettes/*`, `tests/agent/{test_llm_client,test_executor,test_operate,test_judge,test_prompt_freeze}.py`, `tests/e2e/test_agent_replay.py`, `README.md`, `CLAUDE.md`, `docs/{day5-plan,model-plan,decisions,risk-log,progress}.md` | `make test`: 1831 passed, 0 failed (1788 before); `make test-e2e`: 56 passed, 0 failed; `make bench`: exit 0, 12/12, chaos 4/4, adversarial 8/8; T1 live `awaiting_business_approval` PASS (76,283 tokens) and T5 `infeasible` PASS, both in replay with no key; 34 mutations, 33 killed (two survived first and got tests: the judge's answer by position, the act note's read-before-write line; the last survivor widens the replan loop's range, which the `replan <= MAX_REPLANS` guard makes equivalent) | pending |
+| 2026-10-09 | 5.1-5.2 | Day 5 plan (`docs/day5-plan.md`; judge and replan approved with the author's changes; quota update): quota book (`runs/llm_quota.json`, Pacific day from the harness) and `LLM_RPM` pacing in the client; executor chain Lite 3.5 → Lite 3.1 → Flash 3.5 → Flash 3.7, gate on Groq, planner on Gemini; smoke of the two new models; SOP-scoped tools (browser only for a UI-only step in act), lookups in the briefs, cited steps only in act, pruned results, facts kept across calls and read after labels, request as result 0, weekday dates; SOP write-step coverage (`Plan.not_applicable`, only for "when" steps); gate asks only on ambiguity; ask candidates from results; resume after an action approval (approver; hold never shown), reject rollback, `prediction` events and recipient sources; judge (`agent/verifier/judge.py`, `Milestone.judge`, `judge_flags`); replan (assertions frozen, 3 at most, `escalation`); planner rule 1 in code; report sections (skipped steps, replans, escalation, rollback, predictions, judge); `make run TASK=T9:approve|reject|none`, `APPROVE_WAIT`, quota line; prompt freeze test; T1 and T5 re-recorded, stale cassettes deleted; decisions D-173 to D-195; risks N.175 to N.178 updated, N.180 to N.191 | `agent/{executor,planner,run,feasibility,goal,plan,report,store,config}.py`, `agent/llm/client.py`, `agent/memory/knowledge.py`, `agent/tools/registry.py`, `agent/verifier/{__init__,predicates,judge}.py`, `acme/knowledge/sops/{notify-vendor,README}.md`, `bench/{run_agent,approver}.py`, `scripts/smoke_llm.py`, `Makefile`, `.env.example`, `cassettes/*`, `tests/agent/{test_llm_client,test_executor,test_operate,test_judge,test_prompt_freeze}.py`, `tests/e2e/test_agent_replay.py`, `README.md`, `CLAUDE.md`, `docs/{day5-plan,model-plan,decisions,risk-log,progress}.md` | `make test`: 1831 passed, 0 failed (1788 before); `make test-e2e`: 56 passed, 0 failed; `make bench`: exit 0, 12/12, chaos 4/4, adversarial 8/8; T1 live `awaiting_business_approval` PASS (76,283 tokens) and T5 `infeasible` PASS, both in replay with no key; 34 mutations, 33 killed (two survived first and got tests: the judge's answer by position, the act note's read-before-write line; the last survivor widens the replan loop's range, which the `replan <= MAX_REPLANS` guard makes equivalent) | fb2b86b |
+| 2026-10-09 | 5.3-5.4 | Ceiling 3,950 once (D-197) and dead-code pass (-33); D-194 executor-ask test; tasks live one at a time with cassettes and replays (T4, T3, T9 none/reject/approve, T6, T7, T8, T2, T1, T1 `flaky_500`), each failure fixed in code or by a post-freeze decision (D-199 to D-209: judge reads rows by id and "A ... B" quotes; planner `tidy`, sampled row fields, enum check, rupees beside paise, two retries, rule 7 for "when" steps; bare-integer paise; no repeated creating writes after a replan; cassette scope for chaos runs; T9:approve recorded last); stale cassettes pruned (137 kept); `make bench AGENT=1` (D-210); measured calls and tokens per task in the model plan | `agent/{executor,planner,run,goal}.py`, `agent/llm/{client,cassette}.py`, `agent/verifier/{__init__,judge,predicates}.py`, `agent/{normalise,config}.py`, `agent/policy/loader.py`, `agent/tools/registry.py`, `bench/{live,run_bench,run_agent}.py`, `Makefile`, `.env.example`, `cassettes/*`, `tests/agent/{test_executor,test_operate,test_judge,test_llm_client,test_normalise,test_registry,test_prompt_freeze}.py`, `tests/policy/{test_loader,test_schema,test_policies_file,test_gate}.py`, `tests/bench/test_run_bench.py`, `tests/e2e/test_agent_replay.py`, `docs/{model-plan,decisions,risk-log,failure-register,progress}.md` | `make test`: 1843 passed, 0 failed; `make test-e2e`: 62 passed, 0 failed (8 replay cases); `make bench`: 12/12, chaos 4/4, adversarial 8/8; `make bench AGENT=1`: 11/11, chaos 1/1, adversarial 8/8; every task live once (checker PASS) and replayed with no key; 14 mutations, 14 killed (judge full read, quote parts, tidy x5, read_tools row fields, enum check, retries, sampling, replan write guard in the executor and in run.py, paise); two survived first and got tests (the tidy call site, the run.py flag) | pending |
 
 ## Blockers and open questions
 
-- **Line ceiling (author):** 7 agent lines left; 5.3 starts with the pre-agreed cut list. If 5.3 needs more than the
-  cut list frees, the author decides what goes next.
-- **T1 tokens (author):** 76,283 against the 60K target; the remaining levers (model plan) each cost a prompt edit and
-  a re-record. Take them in 5.3 or accept 76K.
 
 - The `TestClient` import prints a Starlette deprecation warning about `httpx` (it wants `httpx2`).
   Harmless for now; revisit if it becomes an error on a Starlette upgrade.
@@ -102,6 +95,16 @@ If this file disagrees with git, git wins for what is committed.
   admin route is 403.
 
 ## Deviations from spec
+
+Day 5.3-5.4 (2026-10-09; decisions D-196 to D-210):
+
+- **Token target dropped** (D-196); **ceiling 3,950** (D-197).
+- **Planner:** two retries, not one (D-207); code corrects recurring model slips before validation (`tidy`, logged);
+  list reads the gather phase skipped are sampled for their row fields (D-201).
+- **Judge reads each row by id** (D-199), as design B said; D-189's no-second-read shortcut is withdrawn.
+- **Cassettes:** an optional scope for chaos runs (D-209); T9:approve is recorded after T9:none and T9:reject (D-203).
+- **Only T1 has an LLM chaos recording**; T3's and T8's chaos variants are skipped by `make bench AGENT=1` until Day 6.
+- **Eleven prompt-input edits after the freeze** (D-199 to D-209), each with its re-record.
 
 Day 5.1-5.2 (2026-10-09; decisions D-173 to D-195):
 

@@ -7,7 +7,7 @@ import pytest
 
 from acme import mail
 from agent.policy import loader
-from agent.policy.loader import KNOWLEDGE_DIR, PolicyError, load_allowlist_domains, load_policies, strict_yaml
+from agent.policy.loader import KNOWLEDGE_DIR, PolicyError, load_policies, read_allowlist, strict_yaml
 from tests.policy.test_schema import ALLOWLIST_RULE, GOOD_RULE_YAML, policy, rejects, write
 
 HEADER = "schema_version: 0\nrules:\n"
@@ -42,7 +42,7 @@ def test_an_allowlist_that_is_a_symlink_to_a_file_outside_is_rejected(tmp_path):
     with pytest.raises(PolicyError, match="symlink"):
         load_rule_naming(know, "link.yaml")
     with pytest.raises(PolicyError, match="symlink"):
-        load_allowlist_domains(know / "link.yaml")
+        read_allowlist(know / "link.yaml")[1]
 
 
 def test_an_allowlist_that_is_a_symlink_to_a_file_inside_is_also_rejected(tmp_path):
@@ -97,7 +97,7 @@ def test_a_malformed_allowlist_is_rejected_by_the_loader_and_by_acme_alike(tmp_p
     path = tmp_path / "mail_allowlist.yaml"
     path.write_text(body)
     with pytest.raises(PolicyError):
-        load_allowlist_domains(path)
+        read_allowlist(path)[1]
     with pytest.raises(ValueError):  # Acme's own reader: the two files must not disagree about what is valid
         mail.load_allowlist(path)
 
@@ -157,7 +157,7 @@ def test_asking_for_an_allowlist_no_rule_names_raises(tmp_path):
 
 def test_the_real_policy_holds_the_same_domains_acme_uses_for_the_external_flag():
     assert load_policies().allowlist("mail_allowlist.yaml") == mail.load_allowlist().allowed
-    assert "acme.example" in load_allowlist_domains(KNOWLEDGE_DIR / "mail_allowlist.yaml")
+    assert "acme.example" in read_allowlist(KNOWLEDGE_DIR / "mail_allowlist.yaml")[1]
 
 
 # --- 3/5 pins: duplicate keys at every depth, merge keys, schema_version ------------------------------------

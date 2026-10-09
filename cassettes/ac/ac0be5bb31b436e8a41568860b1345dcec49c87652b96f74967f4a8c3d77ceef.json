@@ -347,7 +347,15 @@
   "content": null,
   "tool_calls": [
    {
-    "id": "call_1986381",
+    "id": "call_2356298",
+    "name": "list_invoices",
+    "arguments": {
+     "status": null,
+     "vendor": 1
+    }
+   },
+   {
+    "id": "call_2356299",
     "name": "list_mail",
     "arguments": {
      "folder": "inbox"
@@ -361,14 +369,22 @@
     {
      "extra_content": {
       "google": {
-       "thought_signature": "EmAKXgFpFH0TCWFn/K8wC2sB3jB6kRE6HZE2BYU7xeTK8kxgRKzpViweJcZb5/XFEWBPtQskigKCIU2SgkPNqSLIPWr3LVSR8Bz+2iaKIuR4DF7218OhRoVAxiYqH0QwfVs="
+       "thought_signature": "EmAKXgFpFH0T23DEVGiAiGji8JXxPuUP5PPxoe20oYFXamyAycu9x7E3ir1xwGKKpIxn9Lpvrvtl5OVd5sIpK+Im0cl3f1cdCoNZFlaNXJDTZEpRSDmT2NwZjdKNxY9lMFI="
       }
      },
+     "function": {
+      "arguments": "{\"status\":null,\"vendor\":1}",
+      "name": "list_invoices"
+     },
+     "id": "call_2356298",
+     "type": "function"
+    },
+    {
      "function": {
       "arguments": "{\"folder\":\"inbox\"}",
       "name": "list_mail"
      },
-     "id": "call_1986381",
+     "id": "call_2356299",
      "type": "function"
     }
    ]
@@ -377,8 +393,8 @@
   "model": "gemini-3.5-flash-lite",
   "usage": {
    "prompt_tokens": 2500,
-   "completion_tokens": 17,
-   "total_tokens": 2517
+   "completion_tokens": 36,
+   "total_tokens": 2536
   }
  }
 }

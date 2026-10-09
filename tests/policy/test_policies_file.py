@@ -5,7 +5,7 @@ import pytest
 
 from acme.app import create_app
 from acme.mail import load_allowlist
-from agent.policy.loader import KNOWLEDGE_DIR, POLICIES_PATH, load_allowlist_domains, load_policies
+from agent.policy.loader import KNOWLEDGE_DIR, POLICIES_PATH, load_policies, read_allowlist
 from agent.policy.models import (ActionCheck, ConstantCheck, FunctionCheck, ModelCheck, NoRouteCheck,
                                  RecipientDomainNotIn, RequestMatches)
 from tests.policy import acme_checks
@@ -54,7 +54,7 @@ def test_org_005_reads_the_shared_allowlist_file_and_keeps_no_domain_list():
     cond = next(c for c in RULES["ORG-005"].when if isinstance(c, RecipientDomainNotIn))
     assert (cond.arg, cond.allowlist) == ("to", "mail_allowlist.yaml")
     # one file, two readers: the gate's loader and Acme's mail module agree on the domains (D-064)
-    assert load_allowlist_domains(KNOWLEDGE_DIR / cond.allowlist) == load_allowlist().allowed
+    assert read_allowlist(KNOWLEDGE_DIR / cond.allowlist)[1] == load_allowlist().allowed
     text = POLICIES_PATH.read_text()
     assert "partner.example" not in text and "acme.example" not in text
 

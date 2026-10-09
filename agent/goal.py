@@ -34,12 +34,18 @@ class Fact(BaseModel):
     result: int            # the number of the tool result it was quoted from
 
 
+def shown(facts: list[Fact]) -> dict[str, str | int]:
+    """Facts as the model sees them: a paise amount also in rupees, so "above Rs 50,000" can be read (D-206)."""
+    return {f.name: f"{f.value} (Rs {f.value / 100:,.2f})" if f.name.endswith("_paise") and isinstance(f.value, int)
+            else f.value for f in facts}
+
+
 def fact_value(name: str, raw: str, today: date | None = None) -> str | int:
     name, text = name.lower(), raw.strip()
     if name.endswith(("_paise", "_date", "_id")) or "gstin" in name:
         text = text.rsplit(": ", 1)[-1].strip().strip('"')  # "Due Date: 02 Nov 2026" -> the value after its label
-    if name.endswith("_paise"):
-        return to_paise(text)
+    if name.endswith("_paise"):  # a bare integer is an Acme amount, already paise; documents print rupees (D-208)
+        return int(text) if text.isdigit() else to_paise(text)
     if name.endswith("_date"):
         return next_weekday(text, today) if today and text.isalpha() else to_iso_date(text)
     if "gstin" in name:

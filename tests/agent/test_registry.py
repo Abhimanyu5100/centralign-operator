@@ -87,7 +87,7 @@ def test_the_llm_schema_has_name_description_and_described_parameters():
     schema = invoice_spec().llm_schema()
     assert schema["name"] == "create_invoice" and schema["description"] == "Create an invoice in Acme."
     props = schema["parameters"]["properties"]
-    assert set(props) == {"vendor_id", "amount_paise", "invoice_date", "idempotency_key"}
+    assert set(props) == {"vendor_id", "amount_paise", "invoice_date"}  # the transport arg is never shown (D-108)
     assert all(p["description"] for p in props.values())
     json.dumps(schema)  # JSON-serialisable as is
 
