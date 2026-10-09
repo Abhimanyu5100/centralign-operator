@@ -82,6 +82,19 @@ def test_a_wrong_value_fails_the_milestone(sandbox):
     assert "amount_paise=1850000, expected 1" in verdict.milestones[0].checks[0].detail
 
 
+def test_a_ref_to_a_milestone_that_found_no_row_fails_that_check_and_the_verifier_finishes(sandbox):
+    """Live T6: M1 found two rows (a voided entry and its re-entry), so M2's ref had no row; the verifier crashed
+    on None rows and the run was `unverified`. Now M2 fails with the reason and the status is `failed`."""
+    plan = oracle_for("T2").plan
+    first = Milestone(id="M1", target="no such invoice", predicates=[
+        Predicate(read="list_invoices", where={"invoice_no": "INV-NONE"})])
+    second = Milestone(id="M2", target="its source file", predicates=[
+        Predicate(read="list_invoices", where={"id": {"ref": "M1"}}, expect={"source_file": "x.pdf"})])
+    _, verdict = _oracle(sandbox, "T2", plan=Plan(sop_id=plan.sop_id, milestones=[first, second]))
+    assert verdict.status == "failed", verdict.reasons
+    assert "'M1' found no row to refer to" in verdict.milestones[1].checks[0].detail
+
+
 def test_a_non_critical_miss_is_completed_with_exceptions(sandbox):
     plan = oracle_for("T2").plan
     extra = Milestone(id="M2", target="a note that never exists", critical=False, predicates=[

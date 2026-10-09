@@ -60,8 +60,9 @@ async def _main(args: argparse.Namespace) -> int:
             acme.admin("POST", "/__admin/chaos", profile=args.chaos, seed=args.chaos_seed)
         snapshot = acme.admin("POST", "/__admin/snapshot")["snapshot"]
         config = acme.agent_config(HARNESS_HTTP_TIMEOUT)
-        if args.chaos:  # a chaos run records its own replies, apart from the plain task's (D-209)
-            config["CASSETTE_SCOPE"] = f"{args.chaos}:{args.chaos_seed}"
+        # a chaos run or a T9 decision records its own replies, apart from the plain task's (D-209, D-211)
+        config["CASSETTE_SCOPE"] = (tasks.cassette_scope(found, args.chaos, args.chaos_seed) if found else
+                                    f"{args.chaos}:{args.chaos_seed}" if args.chaos else "")
         if args.replay:
             config = {k: v for k, v in config.items() if k not in KEYS} | {"REPLAY": "1"}
         store = RunStore(args.store) if args.store else RunStore()

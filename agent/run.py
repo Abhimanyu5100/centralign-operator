@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 
 from agent.config import load_config
-from agent.executor import Executor, brief, pending
+from agent.executor import Executor, brief, pending, squash
 from agent.feasibility import understand
 from agent.lifecycle import Run, rollback, start_run
 from agent.llm.client import LLMClient, LLMError, QuotaBook
@@ -72,6 +72,7 @@ async def _work(run: Run, llm: Any, request: str, approver: Callable[[str], Any]
     run.ctx = replace(run.ctx, sop_id=goal.sop_id)  # the gate's ORG-009 sees the chosen SOP from now on
     sop = sops.get(goal.sop_id or "")
     executor = Executor(run, llm, sop, approver)
+    executor.shown[0] = squash(" ".join([request, *goal.lookups]))  # result 0: the request and its lookups (D-214)
     gathered = await executor.execute(brief(goal, sop), gather=True)
     if gathered.ended != "facts":
         return gathered.ended, False

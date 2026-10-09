@@ -51,3 +51,10 @@ def test_secrets_and_local_state_never_enter_the_image():
 def test_make_acme_stays_on_localhost_unless_told_otherwise():
     makefile = (ROOT / "Makefile").read_text()
     assert "HOST ?= 127.0.0.1" in makefile and "--host $(HOST)" in makefile
+
+
+def test_the_image_keeps_ist_and_names_its_commit():
+    """Day 6: container timestamps in IST (tzdata + TZ) and the bench's commit from a build arg (no .git inside)."""
+    assert "tzdata" in DOCKERFILE and "TZ=Asia/Kolkata" in DOCKERFILE
+    assert "ARG GIT_COMMIT" in DOCKERFILE and "GIT_COMMIT=${GIT_COMMIT}" in DOCKERFILE
+    assert all(svc["build"]["args"]["GIT_COMMIT"] == "${GIT_COMMIT:-}" for svc in COMPOSE["services"].values())

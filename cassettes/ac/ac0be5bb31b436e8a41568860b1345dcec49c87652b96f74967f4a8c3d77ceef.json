@@ -347,15 +347,7 @@
   "content": null,
   "tool_calls": [
    {
-    "id": "call_2356298",
-    "name": "list_invoices",
-    "arguments": {
-     "status": null,
-     "vendor": 1
-    }
-   },
-   {
-    "id": "call_2356299",
+    "id": "call_580436",
     "name": "list_mail",
     "arguments": {
      "folder": "inbox"
@@ -369,32 +361,24 @@
     {
      "extra_content": {
       "google": {
-       "thought_signature": "EmAKXgFpFH0T23DEVGiAiGji8JXxPuUP5PPxoe20oYFXamyAycu9x7E3ir1xwGKKpIxn9Lpvrvtl5OVd5sIpK+Im0cl3f1cdCoNZFlaNXJDTZEpRSDmT2NwZjdKNxY9lMFI="
+       "thought_signature": "EnMKcQFpFH0T/DsrnltDenhHRAgbxnAiEEcjnhrSW4scAuw/YpFcKVIsIV1lgs+g3VpIN3iVCg21fS+Db1q1h07y8d7qx2gnqWi1uWfo/WBzfUFW30r0vjO3G5PgnKwrDiAenWTnd5xlvFPRGJAJGC02BcCo"
       }
      },
-     "function": {
-      "arguments": "{\"status\":null,\"vendor\":1}",
-      "name": "list_invoices"
-     },
-     "id": "call_2356298",
-     "type": "function"
-    },
-    {
      "function": {
       "arguments": "{\"folder\":\"inbox\"}",
       "name": "list_mail"
      },
-     "id": "call_2356299",
+     "id": "call_580436",
      "type": "function"
     }
    ]
   },
   "provider": "gemini",
-  "model": "gemini-3.5-flash-lite",
+  "model": "gemini-3.1-flash-lite",
   "usage": {
    "prompt_tokens": 2500,
-   "completion_tokens": 36,
-   "total_tokens": 2536
+   "completion_tokens": 17,
+   "total_tokens": 2517
   }
  }
 }

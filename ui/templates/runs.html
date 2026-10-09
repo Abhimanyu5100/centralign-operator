@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Runs</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 70rem; padding: 0 1rem; color: #1b1b1b; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; vertical-align: top; padding: .3rem .5rem; border-top: 1px solid #eee; }
+    .meta { color: #555; font-size: .9rem; }
+    code { font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <nav><a href="/">Approval inbox</a> · <strong>Runs</strong></nav>
+  <h1>Runs</h1>
+  <p class="meta">Newest first, from {{ store }}. The status is the verifier's, from each run's report.</p>
+  <table>
+    <thead><tr><th scope="col">Run</th><th scope="col">Request</th><th scope="col">Status</th><th scope="col">Frozen now</th></tr></thead>
+    <tbody>
+    {% for r in runs %}
+      <tr><td><a href="/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a></td><td>{{ r.request }}</td>
+          <td>{{ r.status }}</td><td>{{ r.now }}</td></tr>
+    {% else %}
+      <tr><td colspan="4">No runs yet. Try <code>make run TASK=T1 REPLAY=1</code>.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

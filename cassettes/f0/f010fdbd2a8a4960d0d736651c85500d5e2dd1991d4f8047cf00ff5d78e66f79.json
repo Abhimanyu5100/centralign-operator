@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"probe\",\"value\":\"Rao Packaging Industries\"},{\"name\":\"vendor_id\",\"source\":\"probe\",\"value\":\"2\"}],\"question\":\"\",\"reason\":\"Vendor uniquely identified via lookup and matches the request; the candidate procedure fits the task.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice will be processed for Rao Packaging Industries.\"]}",
+  "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_requested\",\"source\":\"request\",\"value\":\"Rao Packaging\"},{\"name\":\"vendor_found\",\"source\":\"probe\",\"value\":\"Rao Packaging Industries\"}],\"question\":\"\",\"reason\":\"Vendor uniquely identified and approved.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice will be processed for vendor Rao Packaging Industries.\"]}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"probe\",\"value\":\"Rao Packaging Industries\"},{\"name\":\"vendor_id\",\"source\":\"probe\",\"value\":\"2\"}],\"question\":\"\",\"reason\":\"Vendor uniquely identified via lookup and matches the request; the candidate procedure fits the task.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice will be processed for Rao Packaging Industries.\"]}"
+   "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_requested\",\"source\":\"request\",\"value\":\"Rao Packaging\"},{\"name\":\"vendor_found\",\"source\":\"probe\",\"value\":\"Rao Packaging Industries\"}],\"question\":\"\",\"reason\":\"Vendor uniquely identified and approved.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice will be processed for vendor Rao Packaging Industries.\"]}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 552,
-   "completion_tokens": 469,
-   "total_tokens": 1021
+   "completion_tokens": 523,
+   "total_tokens": 1075
   }
  }
 }

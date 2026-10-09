@@ -210,3 +210,11 @@ def load_all() -> list[Task]:
 
 def all_runs() -> list[Run]:
     return [run for task in load_all() for run in runs(task)]
+
+
+def cassette_scope(run: Run, chaos: str | None = None, chaos_seed: int = 0) -> str:
+    """The recording scenario of a live run (D-209, D-211). A chaos run and a rejection share their first requests
+    with the plain run but continue differently, so each records its own replies. `none` stops at the held call and
+    `approve` continues the plain recording (recorded after `none`, D-203), so a person approving T9 in `make ui`
+    during a replay follows it. A fixed name, never the agent's run id or a time."""
+    return "|".join([*(["reject"] if run.approver == "reject" else []), *([f"{chaos}:{chaos_seed}"] if chaos else [])])

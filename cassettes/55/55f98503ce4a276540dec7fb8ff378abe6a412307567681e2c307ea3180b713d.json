@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"ask\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"request\",\"value\":\"Verma Traders\"},{\"name\":\"vendor_id\",\"source\":\"probe\",\"value\":\"3\"},{\"name\":\"vendor_status\",\"source\":\"probe\",\"value\":\"approved\"}],\"question\":\"Could you provide the invoice number and amount for the pending invoice from Verma Traders?\",\"reason\":\"The request refers to a pending invoice but no invoice identifier or amount is provided, which is required to schedule a payment.\",\"sop_id\":\"schedule-payment\",\"success\":[\"Invoice details received and verified\",\"Payment scheduled for the specified invoice\",\"Vendor ledger updated with the payment record\"]}",
+  "content": "{\"decision\":\"proceed\",\"sop_id\":\"schedule-payment\",\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Verma Traders\",\"source\":\"request\"},{\"name\":\"vendor_id\",\"value\":\"3\",\"source\":\"lookup\"}],\"success\":[\"Invoice from Verma Traders scheduled for payment\"],\"question\":\"Pay the pending invoice from Verma Traders.\",\"reason\":\"Vendor Verma Traders found uniquely and approved; request matches schedule-payment procedure.\"}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"ask\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"request\",\"value\":\"Verma Traders\"},{\"name\":\"vendor_id\",\"source\":\"probe\",\"value\":\"3\"},{\"name\":\"vendor_status\",\"source\":\"probe\",\"value\":\"approved\"}],\"question\":\"Could you provide the invoice number and amount for the pending invoice from Verma Traders?\",\"reason\":\"The request refers to a pending invoice but no invoice identifier or amount is provided, which is required to schedule a payment.\",\"sop_id\":\"schedule-payment\",\"success\":[\"Invoice details received and verified\",\"Payment scheduled for the specified invoice\",\"Vendor ledger updated with the payment record\"]}"
+   "content": "{\"decision\":\"proceed\",\"sop_id\":\"schedule-payment\",\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Verma Traders\",\"source\":\"request\"},{\"name\":\"vendor_id\",\"value\":\"3\",\"source\":\"lookup\"}],\"success\":[\"Invoice from Verma Traders scheduled for payment\"],\"question\":\"Pay the pending invoice from Verma Traders.\",\"reason\":\"Vendor Verma Traders found uniquely and approved; request matches schedule-payment procedure.\"}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 573,
-   "completion_tokens": 756,
-   "total_tokens": 1329
+   "completion_tokens": 607,
+   "total_tokens": 1180
   }
  }
 }

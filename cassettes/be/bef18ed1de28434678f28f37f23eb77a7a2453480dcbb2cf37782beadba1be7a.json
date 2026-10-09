@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"decline\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Kapoor Steel\",\"source\":\"request\"}],\"success\":[],\"question\":\"The vendor 'Kapoor Steel' was not found in our records. Please provide a valid vendor.\",\"reason\":\"Vendor not found in lookup results.\",\"sop_id\":\"\"}",
+  "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"decline\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Kapoor Steel\",\"source\":\"request\"}],\"success\":[],\"question\":\"Pay the invoice from Kapoor Steel.\",\"reason\":\"Vendor 'Kapoor Steel' not found in company records.\",\"sop_id\":\"\"}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"decline\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Kapoor Steel\",\"source\":\"request\"}],\"success\":[],\"question\":\"The vendor 'Kapoor Steel' was not found in our records. Please provide a valid vendor.\",\"reason\":\"Vendor not found in lookup results.\",\"sop_id\":\"\"}"
+   "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"decline\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Kapoor Steel\",\"source\":\"request\"}],\"success\":[],\"question\":\"Pay the invoice from Kapoor Steel.\",\"reason\":\"Vendor 'Kapoor Steel' not found in company records.\",\"sop_id\":\"\"}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 575,
-   "completion_tokens": 527,
-   "total_tokens": 1102
+   "completion_tokens": 432,
+   "total_tokens": 1007
   }
  }
 }

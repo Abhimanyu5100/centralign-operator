@@ -27,6 +27,7 @@ from agent.failures import classify
 from agent.goal import Fact, GoalSpec, fact_value, shown
 from agent.llm.client import LLMError
 from agent.memory.knowledge import Sop
+from agent.normalise import rupees_in
 from agent.plan import Plan
 from agent.policy.facts import created_in_audit
 from agent.tools.ask import ENDING_TOOLS
@@ -151,6 +152,9 @@ class Executor:
                     self.facts.update({f.name: f for f in facts})
                     if not problems:
                         return Outcome("facts", facts=list(self.facts.values()))
+                    self.strikes[key := fingerprint(call.name, call.arguments)] += 1
+                    if self.strikes[key] >= 2:  # the same refused facts twice: the model is not adapting (5.1)
+                        return self.stop("facts_ready refused twice with the same facts: " + "; ".join(problems))
                     kept = f". Kept: {', '.join(self.facts)}; send only the refused ones again" if self.facts else ""
                     text, ended = "facts refused: " + "; ".join(problems) + kept, "failed"
                 else:
@@ -221,7 +225,8 @@ class Executor:
             name, raw, number = str(item.get("name", "")), str(item.get("raw", "")), item.get("result")
             value_only = raw.rsplit(": ", 1)[-1].strip().strip('"')  # a quote with its label ('"id": 1')
             text = self.shown.get(number, "")
-            if not raw.strip() or not any(q and q in text for q in (squash(raw), squash(value_only))):
+            converted = name.endswith("_paise") and raw.isdigit() and rupees_in(int(raw), text)  # D-212
+            if not raw.strip() or not converted and not any(q and q in text for q in (squash(raw), squash(value_only))):
                 problems.append(f"{name}: {raw!r} is not in result {number}; quote it exactly")
                 continue
             try:

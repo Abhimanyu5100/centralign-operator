@@ -296,3 +296,25 @@ def test_a_bare_integer_paise_fact_is_already_paise():
     from agent.goal import fact_value
     assert fact_value("amount_paise", "6240000") == 6_240_000
     assert fact_value("total_paise", "Rs. 62,400.00") == 6_240_000 and fact_value("tax_paise", "₹1,25,000") == 12_500_000
+
+
+def test_a_paise_amount_the_model_converted_itself_counts_only_if_the_document_prints_it_in_rupees(sandbox):
+    """Live T1 (3.1 Flash-Lite) quoted the PDF's 'Rs. 62,400.00' as raw 6240000 and was refused 24 times (D-212)."""
+    executor = Executor(None, None)
+    executor.shown = {1: "Total: Rs. 62,400.00 GST Rs. 9,518.64", 2: "Total INR 18,500 Advance Rs. 1,00,000.00"}
+    facts, problems = executor.check_facts([{"name": "total_paise", "raw": 6240000, "result": 1},
+                                            {"name": "tax_paise", "raw": "951864", "result": 1},
+                                            {"name": "amount_paise", "raw": "1850000", "result": 2},
+                                            {"name": "advance_paise", "raw": "10000000", "result": 2}])
+    assert problems == [] and [f.value for f in facts] == [6_240_000, 951_864, 1_850_000, 10_000_000]
+    for wrong in ("624000", "62400", "6240001", "185000"):  # off by 10x, rupees as paise, one paisa, a prefix
+        assert executor.check_facts([{"name": "total_paise", "raw": wrong, "result": 1 if wrong[0] == "6" else 2}])[1]
+
+
+def test_the_same_refused_facts_twice_stop_the_gather_phase(sandbox):
+    """Two strikes for facts_ready too (5.1): live T1 sent the same refused facts 24 times until the turn cap."""
+    bad = ("facts_ready", {"facts": [{"name": "invoice_no", "raw": "INV-404", "result": 1}]})
+    outcome, llm, executor, _ = execute(sandbox, calls(bad), calls(bad), calls(bad), gather=True)
+    assert outcome.ended == "stopped" and len(llm.tool_texts()) == 1  # the second refusal stops before replying
+    stop = next(e for e in executor.run.ctx.store.events(executor.run.run_id) if e["type"] == "executor_stop")
+    assert stop["payload"]["reason"].startswith("facts_ready refused twice with the same facts: invoice_no")

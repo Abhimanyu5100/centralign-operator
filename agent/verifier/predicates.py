@@ -103,7 +103,7 @@ async def _predicate(run, predicate: Predicate, found: dict[str, int], absence_a
     try:
         args, where = _resolve(predicate.args, found), _resolve(predicate.where, found)
     except KeyError as missing:
-        return Check(name=name, ok=False, detail=f"{missing} found no row to refer to"), None
+        return Check(name=name, ok=False, detail=f"{missing} found no row to refer to"), []
     picked_rows: list[dict[str, Any]] = []
 
     async def check() -> Check:

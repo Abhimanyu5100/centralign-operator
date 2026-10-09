@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"lookup\",\"value\":\"Sharma Logistics Pvt Ltd\"},{\"name\":\"invoice_status\",\"source\":\"lookup\",\"value\":\"approved\"}],\"success\":[\"Payment scheduled for Sharma Logistics Pvt Ltd approved invoice.\"],\"question\":\"\",\"reason\":\"Vendor Sharma Logistics Pvt Ltd was found uniquely and is approved, so the payment can be scheduled as requested.\",\"sop_id\":\"schedule-payment\"}",
+  "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"lookup\"},{\"name\":\"invoice_status\",\"value\":\"approved\",\"source\":\"lookup\"}],\"success\":[\"Payment scheduled for Sharma Logistics Pvt Ltd invoice.\"],\"question\":\"\",\"reason\":\"Vendor uniquely identified and invoice is approved; matches schedule-payment SOP.\",\"sop_id\":\"schedule-payment\"}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"lookup\",\"value\":\"Sharma Logistics Pvt Ltd\"},{\"name\":\"invoice_status\",\"source\":\"lookup\",\"value\":\"approved\"}],\"success\":[\"Payment scheduled for Sharma Logistics Pvt Ltd approved invoice.\"],\"question\":\"\",\"reason\":\"Vendor Sharma Logistics Pvt Ltd was found uniquely and is approved, so the payment can be scheduled as requested.\",\"sop_id\":\"schedule-payment\"}"
+   "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"lookup\"},{\"name\":\"invoice_status\",\"value\":\"approved\",\"source\":\"lookup\"}],\"success\":[\"Payment scheduled for Sharma Logistics Pvt Ltd invoice.\"],\"question\":\"\",\"reason\":\"Vendor uniquely identified and invoice is approved; matches schedule-payment SOP.\",\"sop_id\":\"schedule-payment\"}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 557,
-   "completion_tokens": 509,
-   "total_tokens": 1066
+   "completion_tokens": 595,
+   "total_tokens": 1152
   }
  }
 }

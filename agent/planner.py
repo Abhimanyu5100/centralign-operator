@@ -84,9 +84,7 @@ def plan_errors(plan: Plan, run, goal: GoalSpec, sop: Sop | None, facts: list[Fa
                 problems.append(f"{m.id}: {p.read} args: {_explain(exc)}")
             problems += [f"{m.id}: {p.read} rows have no field {k!r}; they have {', '.join(known)}"
                          for k in [*p.where, *p.expect, *p.contains] if known and k not in known]
-            enums = {k: e for k, v in (spec.args_model.model_json_schema()["properties"] if spec else {}).items()
-                     for e in [v.get("enum") or next((a["enum"] for a in v.get("anyOf", []) if "enum" in a), None)]
-                     if e}  # a row field that is also an enum arg of the read: only those values
+            enums = enum_args(spec)  # a row field that is also an enum arg of the read: only those values
             problems += [f"{m.id}: {k}={v!r} is not one of {enums[k]}" for k, v in [*p.where.items(), *p.expect.items()]
                          if k in enums and v not in enums[k]]
             problems += [f"{m.id}: {v!r} is not from the facts, the goal, the procedure or the tools"
@@ -96,11 +94,17 @@ def plan_errors(plan: Plan, run, goal: GoalSpec, sop: Sop | None, facts: list[Fa
     return problems
 
 
-def tidy(data: dict[str, Any], sop: Sop | None) -> list[str]:
+def enum_args(spec) -> dict[str, list]:
+    return {k: e for k, v in (spec.args_model.model_json_schema()["properties"] if spec else {}).items()
+            for e in [v.get("enum") or next((a["enum"] for a in v.get("anyOf", []) if "enum" in a), None)] if e}
+
+
+def tidy(data: dict[str, Any], sop: Sop | None, registry=None) -> list[str]:
     """What the model gets wrong every time, fixed in code and logged (D-200): an arg of "any" or null is no filter,
     `contains` takes a list, a ref in `expect` is a lookup (moved to `where`), a step id given as a milestone's `sop_id` is
 its `sop_step`, and a milestone that expects rows
-for a step that writes nothing (rule 1) is dropped."""
+for a step that writes nothing (rule 1) is dropped. A `where` value for an enum arg of the read (a mail `folder`) is
+also passed as that arg, or the read returns the default set and never sees the row (D-215)."""
     notes, keep = [], []
     for m in [m for m in data.get("milestones") or [] if isinstance(m, dict)]:
         preds = [p for p in m.get("predicates") or [] if isinstance(p, dict)]
@@ -121,6 +125,11 @@ for a step that writes nothing (rule 1) is dropped."""
             refs = {k: v for k, v in (p.get("expect") or {}).items() if isinstance(v, dict) and "ref" in v}
             p["where"] = {**(p.get("where") or {}), **refs}
             p["expect"] = {k: v for k, v in (p.get("expect") or {}).items() if k not in refs}
+            spec = registry.get(p.get("read")) if registry else None
+            for k, allowed in enum_args(spec).items():
+                if k in p["where"] and k not in p["args"] and p["where"][k] in allowed:
+                    p["args"][k] = p["where"][k]
+                    notes.append(f"{m.get('id')}: {p.get('read')} where {k}={p['where'][k]!r} also passed as its arg")
     data["milestones"] = [{**m, "after": [a for a in m.get("after") or [] if a in {k.get("id") for k in keep}]}
                           for m in keep]
     return notes
@@ -155,8 +164,12 @@ async def make_plan(run, llm, goal: GoalSpec, sop: Sop | None, facts: list[Fact]
         content, tidied = reply.content or "", []
         try:
             data = json.loads(content[content.index("{"):content.rindex("}") + 1])
-            tidied = tidy(data, sop) if isinstance(data, dict) else []
+            tidied = tidy(data, sop, run.registry) if isinstance(data, dict) else []
             plan = Plan.model_validate({**data, "sop_id": goal.sop_id})  # the gate's SOP, whatever the reply says
+            if current:  # met milestones are frozen (2.6): kept as they were, whatever the reply says (D-215)
+                old, unmet_ids = {m.id: m for m in current.milestones}, {c.id for c in unmet}
+                plan = plan.model_copy(update={"milestones": [
+                    old[m.id] if m.id in old and m.id not in unmet_ids else m for m in plan.milestones]})
             problems = plan_errors(plan, run, goal, sop, facts, seen)
             problems += replan_errors(current, plan, {c.id for c in unmet}) if current else []
         except ValueError as exc:  # no JSON object, bad JSON, or the Plan model's own checks (a ValidationError)

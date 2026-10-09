@@ -39,6 +39,13 @@ def to_paise(text: str) -> int:
     return int(paise)
 
 
+def rupees_in(paise: int, text: str) -> bool:
+    """Does `text` print this paise amount in rupees ('Rs. 1,234.50', 'INR 7,500', '2,50,000.00')? For a fact the
+    model already converted to paise (D-212): the document must still show the same amount."""
+    rupees = f"{paise // 100}" + (rf"\.{paise % 100:02d}" if paise % 100 else r"(?:\.00)?")
+    return re.search(rf"(?<![\d.]){rupees}(?!\d|\.\d)", text.replace(",", "")) is not None
+
+
 # --- dates ----------------------------------------------------------------------------------------------------
 
 _MONTHS = {m: i for i, names in enumerate(

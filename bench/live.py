@@ -41,7 +41,7 @@ from agent.store import RunStore
 from bench.approver import decide, for_agent
 from bench.checkers import engine
 from bench.oracles import Oracle
-from bench.tasks import Run, Task
+from bench.tasks import Run, Task, cassette_scope
 
 ADMIN_HEADER = "X-Admin-Token"
 ROOT = Path(__file__).resolve().parents[1]
@@ -147,6 +147,10 @@ class OracleRun:
     diff: dict[str, Any] = field(default_factory=dict)              # /__admin/diff tables since the run's snapshot
     seconds: float = 0.0                                            # wall time of the whole run, verification included
     verify_seconds: float = 0.0                                     # of which the verifier (N.167)
+    llm_calls: int = 0                                              # an LLM run's calls, tokens, models and the
+    tokens: int = 0                                                 # cassette key prefixes it used (Day 6)
+    models: list[str] = field(default_factory=list)
+    cassettes: list[str] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
@@ -187,24 +191,32 @@ KEYS = ("GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY")
 
 
 async def run_agent(acme: Acme, task: Task, run: Run, *, chaos: str | None = None, chaos_seed: int = 0,
-                    store: RunStore | None = None, timeout: float | None = None, replay: bool = True) -> OracleRun:
+                    store: RunStore | None = None, timeout: float | None = None, replay: bool = True,
+                    cassettes: Path | None = None, quota: Any = None) -> OracleRun:
     """The LLM operator on one task run, the counterpart of `run_oracle` (same reset, chaos, diff and checker): with
-    `replay`, every LLM call comes from cassettes and the agent's config holds no API key. A chaos run uses its own
-    cassette scope (D-209); a held call is decided by the run's scripted approver through the inbox."""
+    `replay`, every LLM call comes from cassettes and the agent's config holds no API key; live, it records into
+    `cassettes` (default: the config's CASSETTE_DIR) and counts calls in `quota`. A chaos run and a T9 decision use
+    their own cassette scope (D-209, D-211); a held call is decided by the run's scripted approver through the inbox."""
     acme.admin("POST", "/__admin/reset", seed=task.seed, now=task.now)
     if chaos:
         acme.admin("POST", "/__admin/chaos", profile=chaos, seed=chaos_seed)
     snapshot = acme.admin("POST", "/__admin/snapshot")["snapshot"]
-    config = acme.agent_config(timeout) | ({"CASSETTE_SCOPE": f"{chaos}:{chaos_seed}"} if chaos else {})
+    config = acme.agent_config(timeout) | {"CASSETTE_SCOPE": cassette_scope(run, chaos, chaos_seed)}
+    if cassettes is not None:
+        config["CASSETTE_DIR"] = str(cassettes)
     if replay:
         config = {k: v for k, v in config.items() if k not in KEYS} | {"REPLAY": "1"}
     store = store or RunStore(BENCH_STORE)
     started = time.perf_counter()
     report = await operate(task.request, datetime.fromisoformat(task.now), store=store, config=config,
-                           approver=for_agent(store.path, run.approver))
+                           approver=for_agent(store.path, run.approver), quota=None if replay else quota)
     diff = acme.admin("GET", "/__admin/diff", since=snapshot)["tables"]
     result = engine.check(run, acme.db_path, diff, report)
     fired = acme.admin("GET", "/__admin/chaos/events")["fired"] if chaos else None
     ended = "stopped" if report.get("stops") else "done"  # an LLM error or a cassette miss stops the agent early
+    calls = [e["payload"] for e in store.events(report["run_id"]) if e["type"] == "llm_call"]
     return OracleRun(run, report["run_id"], ScriptResult(ended, {}), result, fired, [], Verdict(status=report["status"]),
-                     report, diff, time.perf_counter() - started, 0.0)
+                     report, diff, time.perf_counter() - started, 0.0, llm_calls=len(calls),
+                     tokens=sum(c.get("total_tokens", 0) for c in calls),
+                     models=sorted({c["model"] for c in calls if c.get("model")}),
+                     cassettes=[c["cassette"] for c in calls if c.get("cassette")])

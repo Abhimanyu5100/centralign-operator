@@ -16,11 +16,18 @@ Columns per run: passed, verifier status vs expected, CuP (D-130), unexplained s
 T5), chaos fired (runs where it did not fire are listed apart and excluded from recovery, D-095), verifier-vs-diff
 agreement (the verifier's audit rows against `/__admin/diff`), held calls, wall time and verifier time.
 Results: bench/results/<timestamp>.json and .md. Runs go to the bench run store, never the operator's (N.164).
+
+`--agent --live` (Day 6, D-211): the LLM operator live (REPLAY=0) on every task run, chaos off K times; a task
+with scripted-approver variants (T9) once per decision; every API chaos variant once. Each attempt records into
+its own folder (`<cassettes>/a<attempt>`, default runs/cassettes-live/<timestamp>; the committed cassettes/ is never
+written), calls are counted in the daily quota book, and each row prints as it finishes. LLM rows also carry calls,
+tokens, models and the cassette key prefixes they used.
 """
 
 import argparse
 import asyncio
 import json
+import os
 import subprocess
 import sys
 from collections import defaultdict
@@ -34,11 +41,14 @@ from bench import tasks
 from bench.adversarial import run_all
 from bench.live import BENCH_STORE, HARNESS_HTTP_TIMEOUT, HARNESS_SERVER_ENV, OracleRun, run_agent, run_oracle, serve
 from bench.oracles import oracle_for
+from bench.run_agent import quota_book
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "bench" / "results"
 NO_DELAYED_WRITE = {"T3", "T8"}       # D-123
-RECORDED_CHAOS = {("T1", "flaky_500")}  # chaos variants with LLM cassettes (`--agent` replays only these)
+# Chaos variants with LLM cassettes (`--agent` replays only these). T1 flaky_500's live recording (Day 6, failed)
+# no longer replays: D-215 changed the refusal its replan retry was sent; its live result stays in the results file.
+RECORDED_CHAOS = {("T3", "commit_then_timeout"), ("T8", "session_expiry_at_step_5"), ("T8", "commit_then_timeout")}
 REFUSALS = {"T4": "needs_clarification", "T5": "infeasible"}
 
 
@@ -63,6 +73,10 @@ class Row:
     recovered: list[str] = field(default_factory=list)  # "<error_type> (recovered)": failed inside a tool, then ok
     seconds: float = 0.0
     verify_seconds: float = 0.0
+    llm_calls: int = 0               # LLM runs only
+    tokens: int = 0
+    models: list[str] = field(default_factory=list)
+    cassettes: list[str] = field(default_factory=list)
 
 
 # --- the columns (pure functions, tested in tests/bench/test_run_bench.py) ----------------------------------------
@@ -113,7 +127,8 @@ def row_of(o: OracleRun, channel: str, chaos: str, attempt: int) -> Row:
         held=len(o.report.get("action_approvals", [])),
         failure_kinds=sorted({f["kind"] for f in o.report.get("failures", [])}),
         recovered=sorted({f"{r['error_type']} (recovered)" for r in o.report.get("recovered", [])}),
-        seconds=round(o.seconds, 2), verify_seconds=round(o.verify_seconds, 2))
+        seconds=round(o.seconds, 2), verify_seconds=round(o.verify_seconds, 2),
+        llm_calls=o.llm_calls, tokens=o.tokens, models=o.models, cassettes=o.cassettes)
 
 
 def summary(rows: list[Row], adversarial: list[dict[str, Any]], skipped: list[str] | None = None) -> dict[str, Any]:
@@ -122,9 +137,15 @@ def summary(rows: list[Row], adversarial: list[dict[str, Any]], skipped: list[st
     fired = [r for r in on if r.chaos_fired]
     refusals = [r for r in off if r.refusal_correct is not None]
     passes = pass_k(rows)
+    k = max((r.attempt for r in off), default=1)
+    repeated = {run_id for run_id in passes if sum(r.run_id == run_id for r in off if r.channel == "api") == k}
+    llm = {"llm_calls": sum(r.llm_calls for r in rows), "tokens": sum(r.tokens for r in rows)} \
+        if any(r.llm_calls for r in rows) else {}
     return {
         "runs_passed": f"{sum(r.passed for r in off)}/{len(off)}",
-        "pass_k": f"{sum(passes.values())}/{len(passes)}",
+        "pass_k": f"{sum(passes[i] for i in repeated)}/{len(repeated)}",
+        **({"run_once_passed": f"{sum(passes[i] for i in set(passes) - repeated)}/{len(set(passes) - repeated)}"}
+           if set(passes) - repeated else {}),
         "cup": f"{sum(r.cup for r in off)}/{len(off)}",
         "unexplained_side_effects": sum(r.unexplained for r in rows),
         "correct_refusals": f"{sum(bool(r.refusal_correct) for r in refusals)}/{len(refusals)}",
@@ -134,22 +155,28 @@ def summary(rows: list[Row], adversarial: list[dict[str, Any]], skipped: list[st
         "recovered_when_fired": f"{sum(r.passed for r in fired)}/{len(fired)}",
         "verifier_diff_agreement": f"{sum(bool(r.agreement) for r in rows)}/{len(rows)}",
         "adversarial_stopped": f"{sum(a['passed'] for a in adversarial)}/{len(adversarial)}",
+        **llm,
         "seconds": round(sum(r.seconds for r in rows), 1),
     }
+
+
+def llm_cell(r: dict[str, Any]) -> str:
+    return f"{r['llm_calls']} ({r['tokens']})" if r.get("llm_calls") else ""
 
 
 def markdown(result: dict[str, Any]) -> str:
     meta, s = result["meta"], result["summary"]
     lines = [f"# AcmeBench {meta['started']}", "",
              f"Commit {meta['commit']}, k={meta['k']}, chaos seed 0, "
-             + ("LLM agent replayed from cassettes, no API key (D-210)." if meta.get("agent") else
+             + (f"LLM agent live (REPLAY=0), recorded into {meta.get('cassettes')} (D-211)." if meta.get("live") else
+                "LLM agent replayed from cassettes, no API key (D-210)." if meta.get("agent") else
                 "oracle agent (the scripted perfect agent)."), "",
              "| Measure | Result |", "| --- | --- |"]
     lines += [f"| {key.replace('_', ' ')} | {value if not isinstance(value, list) else ', '.join(value) or 'none'} |"
               for key, value in s.items()]
     header = ("| Run | Channel | Chaos | Try | Passed | Status (expected) | CuP | Unexplained | Refusal | Fired | "
-              "Agrees with diff | Held | Failures | Seconds (verify) |")
-    lines += ["", "## Runs", "", header, "|" + " --- |" * 14]
+              "Agrees with diff | Held | Failures | LLM calls (tokens) | Seconds (verify) |")
+    lines += ["", "## Runs", "", header, "|" + " --- |" * 15]
     for r in result["rows"]:
         status = r["status"] + ("" if r["status"] == r["expected"] else f" (expected {r['expected']})")
         lines.append(f"| {r['run_id']} | {r['channel']} | {r['chaos']} | {r['attempt']} | {'yes' if r['passed'] else 'NO'}"
@@ -157,9 +184,16 @@ def markdown(result: dict[str, Any]) -> str:
                      f"{'' if r['refusal_correct'] is None else ('yes' if r['refusal_correct'] else 'NO')} | "
                      f"{'' if r['chaos_fired'] is None else ('yes' if r['chaos_fired'] else 'no')} | "
                      f"{'yes' if r['agreement'] else 'NO: ' + '; '.join(r['disagreement'])} | {r['held']} | "
-                     f"{', '.join(r['failure_kinds'] + r.get('recovered', []))} | {r['seconds']} ({r['verify_seconds']}) |")
+                     f"{', '.join(r['failure_kinds'] + r.get('recovered', []))} | "
+                     f"{llm_cell(r)} | "
+                     f"{r['seconds']} ({r['verify_seconds']}) |")
     if result["pass_k"]:
-        lines += ["", f"## pass^{meta['k']}", ""] + [f"- {k}: {'yes' if v else 'NO'}" for k, v in result["pass_k"].items()]
+        tries = defaultdict(int)
+        for r in result["rows"]:
+            tries[r["run_id"]] += r["chaos"] == "off" and r["channel"] == "api"
+        lines += ["", f"## pass^{meta['k']}", ""] + [
+            f"- {k}: {'yes' if v else 'NO'}" + (f" (run {tries[k]} time(s), not k)" if tries[k] != meta["k"] else "")
+            for k, v in result["pass_k"].items()]
     lines += ["", "## Adversarial", "", "| Script | Expected stop | Stopped as expected |", "| --- | --- | --- |"]
     lines += [f"| {a['name']} | {a['expected']} | {'yes' if a['passed'] else 'NO: ' + '; '.join(a['problems'])} |"
               for a in result["adversarial"]]
@@ -170,45 +204,66 @@ def markdown(result: dict[str, Any]) -> str:
 
 async def bench(acme, *, k: int = 1, only: set[str] | None = None, adversarial: bool = True,
                 store: RunStore | None = None, timeout: float | None = HARNESS_HTTP_TIMEOUT,
-                agent: bool = False) -> dict[str, Any]:
-    """`agent`: the LLM operator from cassettes instead of the oracles; no GUI oracle row; only recorded chaos variants."""
+                agent: bool = False, live: bool = False, cassettes: Path | None = None) -> dict[str, Any]:
+    """`agent`: the LLM operator from cassettes instead of the oracles; no GUI oracle row; only recorded chaos variants.
+    `live` (with `agent`): REPLAY=0, every API chaos variant, a scripted-approver run once, recordings under
+    `cassettes` (one folder per attempt when k > 1)."""
     store = store or RunStore(BENCH_STORE)
+    started = datetime.now().astimezone().isoformat(timespec="seconds")
     rows: list[Row] = []
     skipped: list[str] = []
+
+    async def agent_run(task, run, attempt: int, chaos: str | None = None, seed: int = 0):
+        if not live:
+            return await run_agent(acme, task, run, chaos=chaos, chaos_seed=seed, store=store, timeout=timeout)
+        folder = cassettes / f"a{attempt}" if k > 1 else cassettes
+        return await run_agent(acme, task, run, chaos=chaos, chaos_seed=seed, store=store, timeout=timeout,
+                               replay=False, cassettes=folder, quota=quota_book(acme.agent_config()))
+
+    def add(row: Row) -> None:
+        rows.append(row)
+        if agent:  # a long live bench: each row as it finishes, so a crash loses nothing (D-211)
+            print(f"[{datetime.now():%H:%M:%S}] {row.run_id} {row.chaos} try {row.attempt}: "
+                  f"{'PASS' if row.passed else 'FAIL'} {row.status} (expected {row.expected}), {row.llm_calls} calls, "
+                  f"{row.tokens} tokens, {row.seconds} s, failures {row.failure_kinds + row.recovered}", flush=True)
+
     for task in tasks.load_all():
         if only and task.id not in only:
             continue
         variants = chaos_variants(task)
         has_gui = not agent and (ROOT / "bench" / "oracles" / f"{task.id}_gui.py").is_file()
         for run in tasks.runs(task):
-            for attempt in range(1, k + 1):
-                o = await (run_agent(acme, task, run, store=store, timeout=timeout) if agent else
+            tries = 1 if live and task.variants is not None else k  # T9: once per decision (D-211)
+            for attempt in range(1, tries + 1):
+                o = await (agent_run(task, run, attempt) if agent else
                            run_oracle(acme, task, run, oracle_for(run.run_id), store=store, timeout=timeout))
-                rows.append(row_of(o, "api", "off", attempt))
+                add(row_of(o, "api", "off", attempt))
             if has_gui:
                 o = await run_oracle(acme, task, run, oracle_for(run.run_id, "gui"), store=store, timeout=timeout)
-                rows.append(row_of(o, "gui", "off", 1))
+                add(row_of(o, "gui", "off", 1))
             for profile, seed, channel in variants:
                 if channel == "gui" and not has_gui:  # a UI-only profile cannot fire on an API run (D-161)
                     skipped.append(f"{run.run_id} {profile}:{seed} (GUI only, no GUI oracle)")
                     continue
-                if agent and (task.id, profile) not in RECORDED_CHAOS:
-                    skipped.append(f"{run.run_id} {profile}:{seed} (no LLM recording yet)")
+                if agent and not live and (task.id, profile) not in RECORDED_CHAOS:
+                    skipped.append(f"{run.run_id} {profile}:{seed} (no LLM recording for the current code)")
                     continue
-                o = await (run_agent(acme, task, run, chaos=profile, chaos_seed=seed, store=store, timeout=timeout)
-                           if agent else
+                o = await (agent_run(task, run, 1, profile, seed) if agent else
                            run_oracle(acme, task, run, oracle_for(run.run_id, "gui" if channel == "gui" else "api"),
                                       chaos=profile, chaos_seed=seed, store=store, timeout=timeout))
-                rows.append(row_of(o, channel if channel == "gui" else "api", f"{profile}:{seed}", 1))
+                add(row_of(o, channel if channel == "gui" else "api", f"{profile}:{seed}", 1))
     stopped = [{"name": o.name, "expected": o.expected, "passed": o.passed, "problems": o.problems}
                for o in (await run_all(acme, store) if adversarial else [])]
-    return {"meta": {"started": datetime.now().astimezone().isoformat(timespec="seconds"), "commit": _commit(), "k": k,
-                     "agent": agent},
+    return {"meta": {"started": started, "commit": _commit(), "k": k, "agent": agent, "live": live,
+                     **({"cassettes": str(cassettes.relative_to(ROOT) if cassettes.is_relative_to(ROOT) else cassettes)}
+                        if live else {})},
             "rows": [asdict(r) for r in rows], "pass_k": pass_k(rows), "adversarial": stopped,
             "summary": summary(rows, stopped, skipped)}
 
 
 def _commit() -> str:
+    if os.environ.get("GIT_COMMIT"):  # the Docker image has no .git; its build arg says which commit it is (Day 6)
+        return os.environ["GIT_COMMIT"]
     try:
         out = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True)
         dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
@@ -231,11 +286,18 @@ def main() -> None:
     parser.add_argument("--only", default="", help="comma-separated task ids, e.g. T1,T2")
     parser.add_argument("--no-adversarial", action="store_true")
     parser.add_argument("--agent", action="store_true", help="the LLM operator from cassettes (no key) instead of oracles")
+    parser.add_argument("--live", action="store_true", help="with --agent: live LLM calls (REPLAY=0), recorded apart")
+    parser.add_argument("--cassettes", type=Path, default=None,
+                        help="with --live: where recordings go (default runs/cassettes-live/<timestamp>)")
     parser.add_argument("--results", type=Path, default=RESULTS, help="folder for the results files")
     args = parser.parse_args()
+    if args.live and not args.agent:
+        parser.error("--live needs --agent (the oracles call no LLM)")
+    cassettes = (args.cassettes or ROOT / "runs" / "cassettes-live" / datetime.now().strftime("%Y%m%d-%H%M%S")).resolve()
     with serve(env=HARNESS_SERVER_ENV) as acme:
         result = asyncio.run(bench(acme, k=args.k, only=set(filter(None, args.only.split(","))) or None,
-                                   adversarial=not args.no_adversarial, agent=args.agent))
+                                   adversarial=not args.no_adversarial, agent=args.agent, live=args.live,
+                                   cassettes=cassettes))
     path = save(result, args.results)
     print(markdown(result))
     print(f"saved {path} and {path.with_suffix('.json')}")

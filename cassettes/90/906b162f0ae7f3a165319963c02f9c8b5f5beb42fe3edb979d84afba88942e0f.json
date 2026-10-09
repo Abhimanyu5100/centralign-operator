@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"decision\":\"proceed\",\"sop_id\":\"process-invoice\",\"candidates\":[\"process-invoice\"],\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Patel Engineering Works\",\"source\":\"probe\"}],\"success\":[\"Invoice for Patel Engineering Works processed\"],\"question\":\"\",\"reason\":\"Vendor Patel Engineering Works found uniquely and matches the process-invoice procedure.\"}",
+  "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Patel Engineering Works\",\"source\":\"probe\"}],\"success\":[\"Invoice for Patel Engineering Works is queued for processing.\"],\"question\":\"\",\"reason\":\"Vendor found uniquely; procedure applicable.\",\"sop_id\":\"process-invoice\"}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"decision\":\"proceed\",\"sop_id\":\"process-invoice\",\"candidates\":[\"process-invoice\"],\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Patel Engineering Works\",\"source\":\"probe\"}],\"success\":[\"Invoice for Patel Engineering Works processed\"],\"question\":\"\",\"reason\":\"Vendor Patel Engineering Works found uniquely and matches the process-invoice procedure.\"}"
+   "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Patel Engineering Works\",\"source\":\"probe\"}],\"success\":[\"Invoice for Patel Engineering Works is queued for processing.\"],\"question\":\"\",\"reason\":\"Vendor found uniquely; procedure applicable.\",\"sop_id\":\"process-invoice\"}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 551,
-   "completion_tokens": 378,
-   "total_tokens": 929
+   "completion_tokens": 434,
+   "total_tokens": 985
   }
  }
 }

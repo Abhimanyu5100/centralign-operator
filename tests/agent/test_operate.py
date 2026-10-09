@@ -152,6 +152,17 @@ def test_the_agents_done_never_sets_the_status_and_replanning_stops_after_three(
     assert report["skipped_steps"] == PLAN["not_applicable"] and len(report["replans"]) == 3
 
 
+def test_a_fact_from_the_gates_lookups_is_quoted_from_result_0(sandbox):
+    """D-214: the brief shows the gate's lookups and says not to repeat them, so result 0 holds them as well as the
+    request; live T1 (3.1 Flash-Lite) quoted vendor_id 1 from there and was refused until its two strikes."""
+    lookup = {"facts": [{"name": "vendor_id", "raw": "1", "result": 0}]}
+    report, llm, events = operate_with(sandbox, SHARMA, gate("proceed"), calls(("facts_ready", lookup)),
+                                       say(json.dumps(PLAN)), say("All done."),
+                                       *[say(json.dumps(PLAN)), say("All done.")] * 3)
+    assert not [e for e in events if e["type"] == "executor_stop"] and any(e["type"] == "plan" for e in events)
+    assert "facts refused" not in json.dumps(llm.requests)
+
+
 def test_a_bad_plan_gets_two_retries_then_the_run_never_acts(sandbox):
     invented = json.loads(json.dumps(PLAN))
     invented["milestones"][0]["predicates"][0]["expect"] = {"amount_paise": 999}
@@ -325,6 +336,42 @@ def test_a_replan_that_corrects_a_lookup_lets_the_run_pass(sandbox):
                                   say("Done."), say(json.dumps(one("Sharma Logistics Pvt Ltd"))), say("Done."))
     assert report["status"] == "completed" and not llm.replies
     assert [(r["replan"], r["changed"]) for r in report["replans"]] == [(1, ["M1", "M2"])] and report["escalation"] is None
+
+
+def test_a_replan_that_also_rewrites_a_met_milestone_keeps_the_met_one_frozen(sandbox):
+    """D-215, live T3: the replan corrected the unmet milestone but also rewrote a met one, was refused twice and the
+    run escalated. Met milestones are now kept as they were (2.6) and the correction is used."""
+    facts = {"facts": [{"name": "invoice_no", "raw": "INV-1012", "result": 1},
+                       {"name": "vendor_name", "raw": "Sharma Logistics Pvt Ltd", "result": 1},
+                       {"name": "other_vendor", "raw": "Rao Packaging Industries", "result": 1}]}
+    step = lambda m, s, vendor, target="INV-1012 is paid": {"id": m, "target": target, "sop_step": s,  # noqa: E731
+        "predicates": [{"read": "list_invoices", "where": {"invoice_no": "INV-1012", "vendor_name": vendor},
+                        "expect": {"status": "paid"}}]}
+    first = {**PLAN, "milestones": [step("M1", "PI-5", "Sharma Logistics Pvt Ltd"),
+                                    step("M2", "PI-6", "Rao Packaging Industries")]}
+    second = {**PLAN, "milestones": [step("M1", "PI-5", "Rao Packaging Industries", "rewritten"),
+                                     step("M2", "PI-6", "Sharma Logistics Pvt Ltd")]}
+    report, llm, _ = operate_with(sandbox, SHARMA, gate("proceed"), calls(("list_invoices", {})),
+                                  calls(("facts_ready", facts)), say(json.dumps(first)), say("Done."),
+                                  say(json.dumps(second)), say("Done."))
+    assert report["status"] == "completed" and not llm.replies
+    assert [(r["replan"], r["changed"]) for r in report["replans"]] == [(1, ["M2"])]
+
+
+def test_tidy_passes_a_where_value_for_an_enum_arg_as_that_arg_too(sandbox):
+    """D-215, live T3: `folder: outbox` in `where` only, so list_mail read the inbox and never saw the sent mail."""
+    registry = sandbox.run().registry
+    data = {"milestones": [{"id": "M3", "target": "welcome mail sent", "sop_step": "OE-5", "predicates": [
+        {"read": "list_mail", "where": {"folder": "outbox", "to_addr": "x@acme.example"}},
+        {"read": "list_mail", "args": {"folder": "inbox"}, "where": {"folder": "outbox"}},
+        {"read": "list_mail", "where": {"folder": "trash"}}]}]}
+    notes = tidy(data, None, registry)
+    preds = data["milestones"][0]["predicates"]
+    assert preds[0]["args"] == {"folder": "outbox"} and preds[0]["where"]["folder"] == "outbox"
+    assert preds[1]["args"] == {"folder": "inbox"} and preds[2]["args"] == {}  # an explicit arg wins; no bad value
+    assert notes == ["M3: list_mail where folder='outbox' also passed as its arg"]
+    assert tidy({"milestones": [{"id": "M1", "predicates": [{"read": "list_mail", "where": {"folder": "outbox"}}]}]},
+                None) == []  # no registry: unchanged behaviour
 
 
 def test_an_act_phase_after_a_replan_does_not_write_the_same_record_again(sandbox):

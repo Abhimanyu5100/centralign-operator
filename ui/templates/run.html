@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Run {{ run_id }}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 75rem; padding: 0 1rem; color: #1b1b1b; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; vertical-align: top; padding: .25rem .5rem; border-top: 1px solid #eee; }
+    td.type { white-space: nowrap; color: #555; }
+    pre { white-space: pre-wrap; word-break: break-word; background: #f6f6f6; padding: .5rem; border-radius: 4px; }
+    .status { font-size: 1.2rem; font-weight: 600; }
+    tr.policy_decision td, tr.approval td { background: #fff8e1; }
+    tr.verifier_result td { background: #e8f5e9; }
+    tr.security_finding td { background: #fdecea; }
+    .meta { color: #555; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <nav><a href="/">Approval inbox</a> · <a href="/runs">Runs</a></nav>
+  <h1>Run <code>{{ run_id }}</code></h1>
+  <p>{{ asked }}</p>
+  <p class="meta">Frozen now {{ now }}</p>
+  <p class="status">Status: {{ report.status or "no report yet" }}</p>
+  {% if report.status_reasons %}<ul>{% for reason in report.status_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
+
+  <h2>Timeline ({{ timeline | length }} events)</h2>
+  <p class="meta">Tool calls, policy decisions, approvals, LLM calls and verifier checks in the order they were logged.
+    Event types here: {{ types | join(", ") }}.</p>
+  <table>
+    <thead><tr><th scope="col">#</th><th scope="col">Event</th><th scope="col">What happened</th></tr></thead>
+    <tbody>
+    {% for e in timeline %}
+      <tr class="{{ e.type }}"><td>{{ e.seq }}</td><td class="type">{{ e.type }}</td>
+        <td><details><summary>{{ e.summary }}</summary><pre>{{ e.payload }}</pre></details></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Report</h2>
+  {% if report_md %}<pre>{{ report_md }}</pre>{% else %}<p>No report was written for this run.</p>{% endif %}
+</body>
+</html>

@@ -107,3 +107,19 @@ def test_the_bench_fails_on_a_failed_run_an_unfired_fault_or_an_unstopped_attemp
     assert problems({**good, "rows": [asdict(row(passed=False))]}) == ["T2 (api) failed"]
     assert problems({**good, "adversarial": [{"name": "x", "passed": False}]}) == [
         "adversarial x not stopped as expected"]
+
+
+def test_pass_k_counts_only_runs_repeated_k_times_and_reports_single_runs_apart():
+    rows = [row("T2", attempt=1), row("T2", attempt=2), row("T9:approve"), row("T9:reject", passed=False)]
+    s = summary(rows, [])
+    assert s["pass_k"] == "1/1" and s["run_once_passed"] == "1/2"
+
+
+def test_a_live_run_records_its_scenario_apart_and_a_plain_run_keeps_the_plain_key():
+    t1, t9 = tasks.load("T1"), tasks.load("T9")
+    plain = tasks.runs(t1)[0]
+    none, approve, reject = (next(r for r in tasks.runs(t9) if r.approver == a) for a in ("none", "approve", "reject"))
+    assert tasks.cassette_scope(plain) == "" and tasks.cassette_scope(none) == ""
+    assert tasks.cassette_scope(approve) == ""  # a person approving in make ui during a replay follows it
+    assert tasks.cassette_scope(plain, "flaky_500", 0) == "flaky_500:0"  # D-209's chaos scope, unchanged
+    assert tasks.cassette_scope(reject) == "reject"                       # D-211

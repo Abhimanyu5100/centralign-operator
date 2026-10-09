@@ -1,0 +1,101 @@
+{
+ "role": "plan",
+ "request": {
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are the intake step of a company's back-office operator. Decide whether the request can be done,\nmust be clarified, or is impossible, using only the request, the candidate procedures and the lookups below.\n- proceed: the procedure fits and every named party was found exactly once (or is new, e.g. a new hire).\n- ask: a named party matches two or more records. A value the documents or records will show (an invoice\n  number, an amount, which message is the latest) is not missing: proceed.\n- decline: a named party the request depends on does not exist in the company's records.\nChoose sop_id only from the candidates (\"\" if none fits). fields: the values you rely on (vendor name as found,\ndates, numbers), each with source \"request\" or \"probe\". success: short checkable statements of the end state."
+   },
+   {
+    "role": "user",
+    "content": "{\"request\": \"Email Sharma Logistics that invoice INV-1043 is under review.\", \"lookups\": [\"find_vendors q='Sharma Logistics': 1 match(es): Sharma Logistics Pvt Ltd (id 1, approved)\", \"find_employees q='Sharma Logistics': 0 match(es)\", \"find_employees q='Sharma': 0 match(es)\"], \"candidate_procedures\": [{\"id\": \"notify-vendor\", \"title\": \"Send a message to a vendor\"}, {\"id\": \"process-invoice\", \"title\": \"Process a vendor invoice\"}]}"
+   }
+  ],
+  "response_format": {
+   "type": "json_schema",
+   "json_schema": {
+    "name": "reply",
+    "schema": {
+     "type": "object",
+     "required": [
+      "decision",
+      "sop_id",
+      "fields",
+      "success",
+      "question",
+      "candidates",
+      "reason"
+     ],
+     "properties": {
+      "decision": {
+       "type": "string",
+       "enum": [
+        "proceed",
+        "ask",
+        "decline"
+       ]
+      },
+      "sop_id": {
+       "type": "string"
+      },
+      "question": {
+       "type": "string"
+      },
+      "reason": {
+       "type": "string"
+      },
+      "candidates": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "success": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "fields": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "required": [
+         "name",
+         "value",
+         "source"
+        ],
+        "properties": {
+         "name": {
+          "type": "string"
+         },
+         "value": {
+          "type": "string"
+         },
+         "source": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "reply": {
+  "content": "{\"candidates\":[\"notify-vendor\",\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"request\"},{\"name\":\"invoice_number\",\"value\":\"INV-1043\",\"source\":\"request\"}],\"success\":[\"Vendor Sharma Logistics Pvt Ltd notified about invoice INV-1043 status.\"],\"question\":\"Email Sharma Logistics that invoice INV-1043 is under review.\",\"reason\":\"Vendor uniquely identified and appropriate notify-vendor procedure selected.\",\"sop_id\":\"notify-vendor\"}",
+  "tool_calls": [],
+  "message": {
+   "role": "assistant",
+   "content": "{\"candidates\":[\"notify-vendor\",\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"request\"},{\"name\":\"invoice_number\",\"value\":\"INV-1043\",\"source\":\"request\"}],\"success\":[\"Vendor Sharma Logistics Pvt Ltd notified about invoice INV-1043 status.\"],\"question\":\"Email Sharma Logistics that invoice INV-1043 is under review.\",\"reason\":\"Vendor uniquely identified and appropriate notify-vendor procedure selected.\",\"sop_id\":\"notify-vendor\"}"
+  },
+  "provider": "groq",
+  "model": "openai/gpt-oss-120b",
+  "usage": {
+   "prompt_tokens": 578,
+   "completion_tokens": 488,
+   "total_tokens": 1066
+  }
+ }
+}

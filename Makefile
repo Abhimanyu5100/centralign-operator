@@ -28,7 +28,7 @@ test-e2e:  ## slow: Playwright and oracle runs (first tests arrive on Day 2; "no
 oracle:  ## TASK=T1..T9|all [CHANNEL=gui] [CHAOS=profile CHAOS_SEED=0] [LIVE=1] [EVENTS=1] [HEADED=1]: reset, chaos, oracle via the scripted agent, checker (in-process Acme on a temp DB unless LIVE=1)
 	uv run python -m bench.run_oracle $(TASK) $(if $(CHAOS),--chaos $(CHAOS) --chaos-seed $(or $(CHAOS_SEED),0)) $(if $(LIVE),--live) $(if $(EVENTS),--events) $(if $(CHANNEL),--channel $(CHANNEL))
 
-ui:  ## the action-approval inbox on http://127.0.0.1:8100 over runs/runs.db (approve or reject held calls)
+ui:  ## the action-approval inbox and run viewer on http://127.0.0.1:8100 over runs/runs.db (/ approve or reject held calls, /runs every run's timeline and report); RUN_STORE=runs/bench.db for the bench's runs
 	uv run uvicorn --factory ui.app:create_app --host 127.0.0.1 --port 8100
 
 adversarial:  ## every bench/adversarial script against an in-process Acme: each forbidden attempt must be stopped as expected
@@ -40,5 +40,5 @@ run:  ## TASK=T1|T9:approve|"<request>" [REPLAY=1] [CHAOS=profile CHAOS_SEED=0] 
 smoke:  ## [MODELS=GEMINI_MODEL] LIVE LLM smoke test per configured model (plain, tool call, tool round trip, JSON schema, long input); spends quota
 	uv run python -m scripts.smoke_llm $(MODELS)
 
-bench:  ## [K=1] [ONLY=T1,T2] [NO_ADVERSARIAL=1] [AGENT=1]: AcmeBench in one command -> bench/results/<timestamp>.{json,md}; AGENT=1 = the LLM operator from cassettes, no key
-	uv run python -m bench.run_bench $(if $(K),--k $(K)) $(if $(ONLY),--only $(ONLY)) $(if $(NO_ADVERSARIAL),--no-adversarial) $(if $(AGENT),--agent)
+bench:  ## [K=1] [ONLY=T1,T2] [NO_ADVERSARIAL=1] [AGENT=1 [LIVE=1 [CASSETTES=dir]]]: AcmeBench in one command -> bench/results/<timestamp>.{json,md}; AGENT=1 = the LLM operator from cassettes, no key; LIVE=1 = live LLM calls recorded under runs/cassettes-live/ (spends quota)
+	uv run python -m bench.run_bench $(if $(K),--k $(K)) $(if $(ONLY),--only $(ONLY)) $(if $(NO_ADVERSARIAL),--no-adversarial) $(if $(AGENT),--agent) $(if $(filter 1,$(LIVE)),--live) $(if $(CASSETTES),--cassettes $(CASSETTES))
