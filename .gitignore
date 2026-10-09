@@ -17,3 +17,4 @@ acme/data/*.db*
 # AcmeBench results: one file pair per `make bench`; keep a chosen one with `git add -f`
 bench/results/*.json
 bench/results/*.md
+cassettes/smoke/

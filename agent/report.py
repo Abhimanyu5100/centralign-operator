@@ -14,6 +14,7 @@ event log and the approval store:
 - `failures`: every failed result with its class and next step (agent/failures.py);
 - `recovered`: every call that succeeded only after a failed attempt inside the tool (its `data.attempts`): the
   error, its class, how many attempts failed and what settled it. It never changes the status (register 7.2);
+- `narrative` and `stops`: the agent's own final words and why its work stopped early, if it did (never the status);
 - `verifier`: what each check found.
 
 The event log is already redacted (D-104), so the report never holds a secret; transport args (the idempotency
@@ -126,6 +127,8 @@ def build_report(run) -> dict[str, Any]:
               for w in effects.get("claimed_not_audited", []))],
         "failures": [_failure(c, r, seq) for c, r, seq in pairs if not r.get("ok")],
         "recovered": [r for r in (_recovered(c, res, seq) for c, res, seq in pairs) if r],
+        "narrative": [e["payload"]["text"] for e in events if e["type"] == "agent_message"],  # the agent's words
+        "stops": [e["payload"]["reason"] for e in events if e["type"] == "executor_stop"],
         "verifier": {"postconditions": verdict.get("postconditions", []), "milestones": verdict.get("milestones", [])},
     }
 
@@ -133,7 +136,7 @@ def build_report(run) -> dict[str, Any]:
 def render_markdown(report: dict[str, Any]) -> str:
     """One screen: outcome first, then what a person must look at (register 7.4)."""
     lines = [f"# Run {report['run_id']}: {report['status']}", "", f"Request: {report['request']}", ""]
-    lines += [f"- {reason}" for reason in report["status_reasons"]]
+    lines += [f"- {r}" for r in report["status_reasons"] + [f"stopped early: {x}" for x in report.get("stops", [])]]
     lines += [f"- note: {note}" for note in report["notes"]]
     for q in report["questions"]:
         lines += ["", f"**Question:** {q['text']}", f"Candidates: {', '.join(q['candidates']) or 'none'}"]
@@ -155,6 +158,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     if report["recovered"]:
         lines += ["", "**Recovered**"] + [f"- {r['tool']}: {r['error_type']} x{r['count']} ({r['kind']}): {r['read_back']}"
                                           for r in report["recovered"]]
+    lines += [f"\n**The agent's own summary** (not the status): {t[:400]}" for t in report.get("narrative", [])]
     lines += ["", f"Evidence: {len(report['evidence'])} tool results in the run log."]
     return "\n".join(lines) + "\n"
 

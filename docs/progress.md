@@ -5,46 +5,38 @@ If this file disagrees with git, git wins for what is committed.
 
 ## Now
 
-- **Last updated:** 2026-10-09 19:50 IST
-- **Day / phase / part:** Day 3.R (review fixes) built, awaiting the author's review and commit → Day 4 (Phase B) next
-- **Currently doing:** Day 3.R awaits author review and commit ("Day 3.R: review fixes"). Day 3.4 (ab94660) and the
-  Docker check (6bca35b) are committed. The combined plan for 3.R and Day 4 is `docs/day4-plan.md`: the planner (C)
-  and executor (D) designs wait for the author's approval; everything else may be built without waiting.
-- **Author's curl check (2026-10-09, outside the repo, keys only in `.env`):** Gemini's OpenAI-compatible endpoint
-  works with `gemini-3.5-flash` (`GEMINI_MODEL`) and `gemini-3.5-flash-lite` (`GEMINI_LITE_MODEL`); the 2.5 models
-  return 404 to new keys (no 2.5 model reference exists in the repo or docs). Groq works with `openai/gpt-oss-120b`
-  (`GROQ_JUDGE_MODEL`) and `qwen/qwen3.8-27b` (compaction; the author's `.env` names it `GROQ_FALLBACK_MODEL`, the
-  allowlist and `.env.example` say `GROQ_COMPACTION_MODEL`: plan decision 1). OpenRouter has no key and will not get
-  one (plan decision 2). Not yet proven: tool calling and free-tier limits (Day 4 smoke test). `GEMINI_BASE_URL`
-  ends with "/" (strip before appending `/chat/completions`); 503 and 429 are retryable.
-- **Running agent/ total (D-115, D-154):** 2,933 non-blank lines (3,587 raw); 3.R added 26 (the report's
-  `recovered` list). About 870 left under the 3,800 ceiling for Days 4-6.
-- **Latest bench (`make bench`, exit 0, no traceback):** chaos-off runs 12/12, pass^1 11/11, CuP 12/12, chaos fired
-  4/4 and recovered 4/4, adversarial 8/8; the Failures column now shows `server_error (recovered)` (T1 flaky_500),
-  `timeout (recovered)` (T3, T8 commit_then_timeout) and `session_expired (recovered)` (T8 session expiry).
-- **Next step:** Day 4 per `docs/day4-plan.md`: 4.1 the LLM client with cassettes, config, model plan and the live
-  smoke test; 4.2 the knowledge parser, Goal Spec, feasibility gate and `make run` (T5 live); 4.3 the planner and
-  executor once their designs are approved (T1 live, cassettes, replay with no key). Hard gate: T1 by the LLM by
-  the end of Day 4, else cut governed learning and the GUI-trace stretch.
+- **Last updated:** 2026-10-09 20:30 IST
+- **Day / phase / part:** Day 4 (Phase B) built (4.1 LLM client, 4.2 feasibility gate, 4.3 planner and executor),
+  awaiting the author's review and commit ("Day 4: ..."). Day 3.R committed (3ebc271).
+- **Currently doing:** Day 4 awaits author review and commit. Plan: `docs/day4-plan.md` (approved with the author's
+  six changes; D-165 to D-172 recorded while building).
+- **Day 4 done-when: MET.** T1 by the LLM: verifier `awaiting_business_approval`, checker PASS on every check (24
+  calls, 138,069 tokens, Gemini 3.5 Flash-Lite, run 7cff1606745d8a62); T5: `infeasible`, checker PASS (1 call).
+  Cassettes for both recorded in `cassettes/` (24 + 1 files); `make run TASK=T1 REPLAY=1` and `TASK=T5 REPLAY=1` pass
+  with every API key removed from the agent's config and a fresh run id (also `tests/e2e/test_agent_replay.py`).
+- **Free-tier finding (N.175, model plan):** Gemini 3.5 Flash allows 5 RPM and **20 requests a day per model**; the
+  smoke runs spent today's Flash quota, so the live T1/T5 runs used Flash-Lite (the client skips a multi-hour wait,
+  D-166). One T1 run does not fit Flash's daily quota. Plan B (enable billing on the AI Studio project, pre-approved
+  in the model plan) is the author's step before the Day 5 benchmark. Groq: 1,000 requests a day, 8,000 tokens a
+  minute (headers). Every model passed plain, forced tool call, tool round trip, JSON schema and long input; no empty
+  tool-call ids seen.
+- **Running agent/ total (D-115, D-154):** 3,533 non-blank lines; Day 4 added exactly 600 (the author's hard cap).
+  About 267 left under the 3,800 ceiling for Day 5 (judge at most 120) and Day 6.
+- **Latest bench (`make bench`, exit 0, no traceback):** unchanged oracle table: 12/12, pass^1 11/11, CuP 12/12,
+  chaos fired 4/4 and recovered 4/4, agreement 16/16, adversarial 8/8.
+- **Next step:** Day 5 per CLAUDE.md: LLM judge (at most 120 lines), replanning (max 3), ask flow and resume after an
+  action approval (T9 predict-then-approve), remaining tasks with the LLM, start the benchmark (cassettes). First:
+  the author's billing decision (N.175), and the Day 5 carry-overs below.
 - **Carried over:**
   - **Day 6 polish (seen in the Docker run, not fixed: Dockerfile edits need the author's OK):** inside the
     container the bench's timestamps are UTC (`20261006-183847`, `+00:00`; no `TZ` in the image) and the commit shows
     as "unknown" (`.git` is not in the image). Options: `ENV TZ=Asia/Kolkata` (needs `tzdata`) and a `GIT_COMMIT`
     build arg the bench prints.
-  - **Day 4 (N.168):** a record the run created through the GUI is not "created by the run" until the run reads the
-    audit log, so a GUI attach right after a GUI invoice entry is held by ORG-008 (an API entry then a GUI attach
-    passes). Fix if the executor needs it: read the new record's id from the redirect after a create form, or read
-    the audit log after a GUI create.
-  - **Day 4:** the GUI channel's failures are typed like the API's (`timeout` with `outcome_unknown`,
-    `session_expired` with `session_renewed`, `server_error` from a 500 page); the GUI oracle does not retry a 500,
-    the executor's classifier does (two strikes, read back first).
-  - **Day 4:** the executor uses `agent/failures.classify` for every failed result: two strikes count the API tool's
-    own `attempts` (D-108), and after `read_back_first` it reads back before any new write.
-  - **Day 4:** `run_id` never enters LLM prompts or cassette hash keys (D-106); the derived idempotency key is a
-    transport arg, never shown to the LLM (D-108).
-  - **Day 4:** the executor calls `Run.begin()` before its first step, `verify(run)` at the end and
-    `build_report` / `write_report` after, as `bench/live.run_oracle` does; the planner emits `agent/plan.Plan`
-    (business keys and `{ref: Mn}`, N.156) with a milestone for every entity it may write through the browser (D-156).
+  - **Day 5 (from Day 4):** N.176 random approval ids reach the model (T9 replay would miss): make them deterministic
+    per run or keep them out of prompts; N.177 the live T1 skipped PI-6 (attach) and the plan did not check it:
+    coverage rule for SOP write steps; N.178 T9's request triggers no SOP (notify-vendor triggers are phrases);
+    N.179 a T1 costs about 138K tokens: fewer tool schemas per phase, compaction; executor resume after an approval;
+    prediction text before irreversible writes (T9).
   - **Bench timing (N.167):** T6's verification waits the full read lag (about 6 s, one absence check); a 500 under
     `flaky_500` waits the read lag before the keyless retry (T1 about 6 s).
   - **Day 5:** `rolled_back` as a verifier status arrives with "rollback if rejected"; a GUI oracle for T7 would let
@@ -55,12 +47,13 @@ If this file disagrees with git, git wins for what is committed.
 - **RESUME PROMPT:**
   ```
   Read CLAUDE.md and docs/progress.md, then docs/day4-plan.md, docs/model-plan.md and docs/failure-register.md.
-  Day 3.R is committed. Build Day 4 per docs/day4-plan.md: 4.1 the LLM client (agent/llm/: OpenAI-compatible
-  Gemini and Groq, config from .env only, retries, token budget, llm_call events, record/replay cassettes) and the
-  live smoke test; 4.2 the Goal Spec and feasibility gate and make run (T5 declined); 4.3 the planner and executor
-  as approved (T1 completed by the LLM, cassettes recorded, make run REPLAY=1 with no key). The planner and executor
-  are author-owned: build them only as approved. Show the risk table first and run /checkpoint at the end of 4.3.
-  Do not commit or push.
+  Day 4 is committed: the LLM client with cassettes, the feasibility gate, the planner and the executor; T1 and T5
+  pass live and replay with no key. Start Day 5 per CLAUDE.md: first the Day 5 carry-overs in progress.md (N.176
+  deterministic approval ids, N.177 SOP write-step coverage, N.178 T9 trigger, N.179 token cost), then the LLM judge
+  (at most 120 lines), replanning (max 3), resume after an action approval with T9 predict-then-approve, the
+  remaining tasks with the LLM, and the benchmark runs. Ask me about billing first (N.175). The planner, executor,
+  verifier and policy are author-owned: propose changes in prose first. Show the risk table first and run
+  /checkpoint at the end of each part. Do not commit or push.
   ```
 
 ## Done log
@@ -90,9 +83,13 @@ If this file disagrees with git, git wins for what is committed.
 | 2026-10-06 | 3.2 | D-144 (ORG-007 exempts only the internal domain; `exempt_recipient_domains: internal`) and part 2, verifier and recovery: `agent/plan.py` (Predicate / Milestone / Plan with business keys and `{ref: Mn}`, a backward-only DAG, `plan_problems`); the verifier (`agent/verifier/`): layer 1 postconditions from the catalog's `verify` read per write, layer 2 milestone predicates through API reads polled through `READ_LAG_SECONDS`, absence believed only after the window, layer 3 audit rows since the start mark grouped by `ts` and matched to the run's writes (any row of a group), `decide_status` as a pure table, `unverified` on crash or timeout, a `verifier_result` event; the failure classifier `agent/failures.py`; read-lag polling in the keyless read-back after an unknown outcome (D-123); GUI rollback from audit inserts (D-128); milestone plans for every oracle; the harness verifies every run; acme-spec policy and adversarial tables; audit-insert bug fixed (N.165); decisions D-144 to D-153; risks N.165 to N.167 | `agent/verifier/{__init__,predicates,side_effects}.py`, `agent/{plan,failures,lifecycle,config}.py`, `agent/policy/{facts,gate,loader,models}.py`, `agent/tools/api.py`, `acme/knowledge/{api,policies}.yaml`, `.env.example`, `bench/{live,run_oracle}.py`, `bench/oracles/*`, `tests/agent/{test_verifier,test_plan,test_failures,test_api_tools,acme_fixtures}.py`, `tests/policy/{test_facts,test_gate,test_loader,test_schema}.py`, `tests/e2e/{test_browser,test_oracles}.py`, `docs/{acme-spec,decisions,risk-log,progress}.md` | `make test`: 1677 passed, 0 failed (1577 before); `make test-e2e`: 49 passed, 0 failed (46 before; new: T3 under `delayed_write`, GUI rollback, silent drop without redo is `failed`; verifier status asserted on every oracle and chaos run); `make oracle TASK=all` and `CHANNEL=gui`: every run's verifier status equals its `expected_outcome`; `make adversarial`: 8/8; 21 mutations (status table x2, verifier x4, predicates x4, layer 3 x3, API polling x2, audit insert, classifier x2, plan refs, ORG-007 partners exempt) plus the GUI rollback on e2e, all killed | 5adf948 |
 | 2026-10-06 | 3.3 | Author decisions D-154 (ceiling about 3,800), D-155 (`ui_forms` declare `entity` and `target_param`; the browser tool gives the gate the record a GUI form changes, so the PI-6 attach passes ORG-008 on the run's own invoice and is held on a pre-existing one; layer 3 matches GUI writes by entity and id), D-156 (claimed-but-not-audited writes listed under report side effects; a verifier note when a GUI write's entity has no milestone); part 3, report and bench: `agent/report.py` (D-098 contract, status only from `verifier_result`, questions, refusal, masked security findings, evidence, action approvals with the flattened predicted call and decision, side effects with Acme table names from the catalog, classified failures, verifier checks; `report.json` and a one-screen `report.md` per run); the harness verifies, reports and checks every run (report checks are real, no PEND); bench and adversarial runs use `runs/bench.db` (N.164); `bench/run_bench.py` and `make bench` (every run chaos off K times, the GUI oracle, the YAML chaos variants once with the T3/T8 `delayed_write` guard, the adversarial scripts; pass, status, CuP, unexplained, refusals, chaos fired, verifier-vs-diff agreement, held calls, wall and verifier time; `bench/results/<timestamp>.{json,md}`, ignored by git); decisions D-154 to D-160; risks N.168, N.169 | `agent/report.py`, `agent/{plan,lifecycle}.py`, `agent/verifier/{__init__,side_effects}.py`, `agent/tools/{api,browser}.py`, `acme/knowledge/api.yaml`, `bench/{live,run_oracle,run_bench}.py`, `bench/adversarial/__init__.py`, `bench/oracles/{__init__,T4,T5,T6,T9}.py`, `bench/results/.gitkeep`, `.gitignore`, `Makefile`, `CLAUDE.md`, `tests/checkers/test_report_contract.py`, `tests/bench/test_run_bench.py`, `tests/agent/{test_report,test_verifier,test_plan,test_catalog,test_browser_unit}.py`, `tests/policy/test_gate.py`, `tests/e2e/{test_browser,test_oracles}.py`, `docs/{decisions,risk-log,progress}.md` | `make test`: 1730 passed, 0 failed (1677 before); `make test-e2e`: 51 passed, 0 failed (49 before; new: PI-6 attach through the browser and the real gate, a bench slice end to end); `make bench`: 17/17 runs, agreement 17/17, adversarial 8/8 in 37 s; 14 mutations (report x4, bench columns x5, bench store, GUI target x2, layer 3 GUI id, coverage warnings) all killed (the layer 3 GUI id mutant survived first; a `writes_of` test was added) | 781c099 |
 | 2026-10-06 | 3.4 | Author fixes before 3.4: D-161 (the T2 chaos slot moves to `commit_then_timeout` on T8; Acme declares its UI-only profiles; a UI-only variant must be marked `channel: gui` and runs only with a GUI oracle, T7's is skipped; every chaos run the bench runs must fire) and D-162 (the harness's Acme holds a timeout 5 s, its agent times out after 3 s, the graceful shutdown outlasts the hold; `chaos.after_write` ends a cancelled hold with one log line); part 4, packaging and skills: `Dockerfile` (one image from the Playwright 1.63.0 noble image, uv 0.12.23, `uv sync --frozen`, `make`), `docker-compose.yml` (`acme` on :8000 with the admin token only in its env and a health check; `runner` in a `tools` profile running `make bench` with its own child Acme, results mounted), `.dockerignore`, `make acme HOST=`, the `/add-policy` and `/chaos-test` skills, CLAUDE.md commands, a static packaging test; decisions D-161 to D-163; risk N.170 | `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `Makefile`, `CLAUDE.md`, `.claude/skills/{add-policy,chaos-test}/SKILL.md`, `acme/chaos.py`, `bench/{live,run_bench,run_oracle,tasks}.py`, `bench/tasks/{T2,T7,T8}.yaml`, `tests/test_packaging.py`, `tests/acme/test_chaos.py`, `tests/bench/test_run_bench.py`, `tests/checkers/test_engine.py`, `tests/e2e/test_oracles.py`, `docs/{decisions,risk-log,progress}.md` | `make test`: 1743 passed, 0 failed (1730 before); `make test-e2e`: 52 passed, 0 failed (51 before; new: the bench prints no traceback and T3's held run takes 3 s); `make bench`: exit 0 in 23 s, chaos fired 4/4, adversarial 8/8, no traceback; mutation (no cancellation handler) killed; Docker check (2026-10-07, Colima): build 5 min 12 s, image 4 GB, `/healthz` ok after 2 s, token only in `acme`, `docker compose run --rm runner make bench` exit 0 in 24 s with the same table | ab94660 (Docker results added after) |
-| 2026-10-09 | 3.R | Day 3 review fixes and the combined Day 3.R + Day 4 plan (`docs/day4-plan.md`): the report's `recovered` list (a call that succeeded after a failed attempt inside the tool: error, class, count, what settled it; never changes the status, copies no args) in `report.json` and `report.md`, evidence args without transport args, `<error_type> (recovered)` in the bench Failures column (D-164); register P.3 points at `test_an_unknown_browser_form_is_held`; N.145 e2e (planted off-site link denied by the real gate in a real browser); curl check recorded | `agent/report.py`, `bench/run_bench.py`, `tests/agent/test_report.py`, `tests/bench/test_run_bench.py`, `tests/e2e/test_browser.py`, `docs/{day4-plan,failure-register,decisions,risk-log,progress}.md` | `make test`: 1745 passed, 0 failed (1743 before; 2 new); `make test-e2e`: 54 passed, 0 failed (52 before; 2 new); `make bench`: exit 0, 12/12, chaos fired 4/4, adversarial 8/8, recovered errors shown; 4 mutations (list dropped, transport args kept in evidence, bench column without recovered, off-site target reduced to a path) all killed | pending |
+| 2026-10-09 | 3.R | Day 3 review fixes and the combined Day 3.R + Day 4 plan (`docs/day4-plan.md`): the report's `recovered` list (a call that succeeded after a failed attempt inside the tool: error, class, count, what settled it; never changes the status, copies no args) in `report.json` and `report.md`, evidence args without transport args, `<error_type> (recovered)` in the bench Failures column (D-164); register P.3 points at `test_an_unknown_browser_form_is_held`; N.145 e2e (planted off-site link denied by the real gate in a real browser); curl check recorded | `agent/report.py`, `bench/run_bench.py`, `tests/agent/test_report.py`, `tests/bench/test_run_bench.py`, `tests/e2e/test_browser.py`, `docs/{day4-plan,failure-register,decisions,risk-log,progress}.md` | `make test`: 1745 passed, 0 failed (1743 before; 2 new); `make test-e2e`: 54 passed, 0 failed (52 before; 2 new); `make bench`: exit 0, 12/12, chaos fired 4/4, adversarial 8/8, recovered errors shown; 4 mutations (list dropped, transport args kept in evidence, bench column without recovered, off-site target reduced to a path) all killed | 3ebc271 |
+| 2026-10-09 | 4 | Day 4 (Phase B): LLM client (`agent/llm/`: OpenAI-compatible Gemini and Groq from config only, providers without a key skipped, retries with Retry-After / retryDelay and full-jitter backoff, a long wait or a 4xx goes to the next model, per-run token budget, `llm_call` events, record/replay cassettes keyed on role + request + frozen now, run id refused, empty tool-call ids filled, provider tool-call objects echoed back); live smoke test (`make smoke`) with measured limits in the model plan; SOP loader; Goal Spec and feasibility gate (code: trigger SOPs, names, master probes; one LLM judgement; code checks); executor (gather / act, two strikes, read back first, turn skipping, holds, facts quoted and normalised in code, audit read after a GUI write, untrusted warning); planner (one call, Plan checks: args by the tool model, seen fields, sourced literals, SOP steps; one retry); `agent/run.py` `operate`; `make run` harness; report narrative and stops; T1 and T5 live and replayed; decisions D-165 to D-172; risks N.171 to N.179 | `agent/llm/{__init__,client,cassette}.py`, `agent/memory/{__init__,knowledge}.py`, `agent/{goal,feasibility,executor,planner,run}.py`, `agent/{config,report,store}.py`, `agent/policy/facts.py`, `bench/run_agent.py`, `scripts/smoke_llm.py`, `cassettes/*`, `Makefile`, `.env.example`, `.gitignore`, `CLAUDE.md`, `tests/agent/{llm_fakes,test_llm_client,test_executor,test_operate}.py`, `tests/e2e/test_agent_replay.py`, `tests/test_no_key_leak.py`, `docs/{day4-plan,model-plan,decisions,risk-log,progress}.md` | `make test`: 1788 passed, 0 failed (1745 before; 43 new); `make test-e2e`: 56 passed, 0 failed (54 before; 2 new: T1 and T5 replay with no key); `make bench`: exit 0, unchanged; `make run TASK=T1` live: `awaiting_business_approval`, checker PASS; `TASK=T5` live: `infeasible`, PASS; both pass with REPLAY=1 and no key; key-leak grep over `cassettes/` and `runs/` clean; 16 mutations, 15 killed (the survivor renames the executor's own "done" label, which nothing reads: the status comes only from the verifier) | pending |
 
 ## Blockers and open questions
+
+- **Billing (N.175, author):** Gemini 3.5 Flash's free tier is 20 requests a day per model. Enable billing on the
+  AI Studio project (model plan Plan B) before the Day 5 benchmark, or run it on Flash-Lite over several days.
 
 - The `TestClient` import prints a Starlette deprecation warning about `httpx` (it wants `httpx2`).
   Harmless for now; revisit if it becomes an error on a Starlette upgrade.
@@ -129,6 +126,18 @@ Day 2.2 (2026-10-06; decisions D-107 to D-112):
   the author's brief puts the oracles in `bench/` importing `agent/` (D-109). CLAUDE.md decision 11 (`agent/`
   never reads `bench/`) is unchanged.
 - **`api.yaml` in `acme/knowledge/`** is a new knowledge file (the agent's view of Acme's API); acme-spec lists it.
+
+Day 4 (2026-10-09; decisions D-165 to D-172):
+
+- **OpenRouter is not used** (no key; CLAUDE.md "Models" and the model plan updated): the reasoning chain is Gemini
+  Flash then Flash-Lite. **Compaction** is Groq `qwen/qwen3.8-27b` (D-100's `openai/gpt-oss-20b` superseded).
+- **Cassette key** excludes the provider and model (the model plan said hash(provider, model, messages, tools)).
+- **Gather, then plan:** the planner runs after a read-only executor phase, not before execution (CLAUDE.md's
+  architecture shows Planner before Executor); the plan is final before the first write.
+- **The SOP parser was not moved** into agent/ (plan B said it would be): a small loader in `agent/memory/knowledge.py`
+  is kept in step with the strict test parser by a test (line cap).
+- **No token-bucket limiter** (model plan "Client design"): retries and the fallback chain only; Day 5 if the bench
+  needs one.
 
 Day 2.3 (2026-10-06; decisions D-116 to D-119):
 

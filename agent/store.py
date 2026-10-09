@@ -17,7 +17,8 @@ from pydantic import AwareDatetime, TypeAdapter
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PATH = ROOT / "runs" / "runs.db"
 EVENT_TYPES = ("tool_call", "precondition", "policy_decision", "tool_result",
-               "approval", "security_finding", "run_start", "verifier_result")  # Day 3 (D-131)
+               "approval", "security_finding", "run_start", "verifier_result",  # Day 3 (D-131)
+               "llm_call", "goal", "plan", "agent_message", "executor_stop")      # Day 4
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (

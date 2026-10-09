@@ -50,6 +50,12 @@ def inserted(audit_row: dict[str, Any]) -> bool:
     return "before" in audit_row and audit_row["before"] is None
 
 
+def created_in_audit(rows: list[dict[str, Any]], user: str, mark: int) -> list[dict[str, Any]]:
+    """Audit rows that show the run created a record: inserted by the run's own account after its start mark
+    (N.168). Another actor's insert, an update, or a row before the mark never counts."""
+    return [r for r in rows if r.get("actor") == user and inserted(r) and r.get("id", 0) > mark]
+
+
 def _rows(data: dict[str, Any]) -> list[dict[str, Any]]:
     items = data.get("items")
     return [r for r in items if isinstance(r, dict)] if isinstance(items, list) else [data]
@@ -92,8 +98,7 @@ class RunFacts:
             if self._creates(call["tool"]) and isinstance(data.get("id"), int):
                 created.add((entity, data["id"]))
             if entity == "audit" and mark is not None:
-                created |= {(r["entity_type"], r["entity_id"]) for r in _rows(data)
-                            if r.get("actor") == user and inserted(r) and r.get("id", 0) > mark}
+                created |= {(r["entity_type"], r["entity_id"]) for r in created_in_audit(_rows(data), user, mark)}
 
         untrusted: set[str] = set()
         trusted = set(values(self.store.run(run_id)["request"]))

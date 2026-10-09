@@ -125,8 +125,8 @@ check of each provider on Day 3 evening, outside the repo. Full plan, limits and
 
 | Role | Default | Fallback | Why |
 | --- | --- | --- | --- |
-| Feasibility gate, planner, executor | Gemini Flash (Google AI Studio free tier) | Gemini Flash-Lite, then an OpenRouter `:free` model | Function calling, vision, long context |
-| Compaction, extraction clean-up | Gemini Flash-Lite | Groq `openai/gpt-oss-20b` | Higher free RPM; small inputs |
+| Feasibility gate, planner, executor | Gemini Flash (`gemini-3.5-flash`, Google AI Studio) | Gemini Flash-Lite (`gemini-3.5-flash-lite`); OpenRouter only if a key is ever added (D-165) | Function calling, vision, long context |
+| Compaction, extraction clean-up | Gemini Flash-Lite | Groq `qwen/qwen3.8-27b` (`GROQ_COMPACTION_MODEL`) | Higher free RPM; small inputs |
 | Verifier judge | Groq `openai/gpt-oss-120b` | Gemini Flash-Lite (logged: same family as executor) | Different model family from the executor = more independent judge; small inputs fit Groq's 8K TPM |
 
 Groq is used only for the judge and compaction: its 8K tokens-per-minute cap cannot carry the executor's
@@ -250,7 +250,9 @@ make reset       # restore seeded DB snapshot
 make pdfs        # regenerate every PDF and MANIFEST.sha256 (only after an intended generator/seed change)
 make oracle TASK=T1|all [CHANNEL=gui] [CHAOS=profile CHAOS_SEED=0] [LIVE=1] [EVENTS=1] [HEADED=1]
                  # Phase A: scripted agent runs the oracle, then the checker (in-process Acme unless LIVE=1)
-make run TASK="..." [CHAOS=profile] [REPLAY=1]   # Phase B: LLM agent (Day 4+)
+make run TASK=T1|"<request>" [REPLAY=1] [CHAOS=profile CHAOS_SEED=0] [EVENTS=1]
+                 # Phase B: the LLM operator on one request, then the task's checker; REPLAY=1 = cassettes only, no key
+make smoke [MODELS=GEMINI_MODEL]   # LIVE LLM smoke test per configured model (spends quota)
 make bench [K=1] [ONLY=T1,T2] [NO_ADVERSARIAL=1]   # AcmeBench: every oracle, chaos variants, adversarial -> bench/results/
 make ui          # action-approval inbox on 127.0.0.1:8100 (approve or reject held calls)
 make adversarial # every bench/adversarial script against an in-process Acme (each must be stopped as expected)

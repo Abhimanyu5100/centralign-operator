@@ -1,7 +1,8 @@
 # Day 3.R + Day 4 plan: review fixes, then the LLM client, the feasibility gate, the planner and the executor
 
-Status: **planner (C) and executor (D) designs await the author's approval.** Everything else is built without
-waiting (author's instruction, 2026-10-09). Order: 3.R → stop for the commit "Day 3.R: review fixes" → Day 4 A, B
+Status: **approved 2026-10-09**: decisions 1-9 as recommended; C and D approved with six changes (see "Author's
+changes" at the end). Day 3.R committed (3ebc271). **Built 2026-10-09** (4.1-4.3): decisions D-165 to D-172; T1 and
+T5 pass live and in replay with no key; agent/ +600 lines (3,533). Order: 3.R → stop for the commit "Day 3.R: review fixes" → Day 4 A, B
 → C and D once approved → E. No commit or push by Claude Code.
 
 Read for this plan: `CLAUDE.md`, `docs/progress.md` (Now and carry-overs), `docs/model-plan.md`,
@@ -277,3 +278,23 @@ New risk IDs N.171 to N.174 go into `docs/risk-log.md` at the checkpoint.
 Estimate: about 665 agent lines in all (about 3,570), over the "about 500" Day 4 budget; trimming targets are the
 gate's validation and the executor's message formatting. If the count passes 3,500 at the checkpoint, Day 5 gets
 the remaining 300 and the judge stays small.
+
+## Author's changes on approval (2026-10-09)
+
+1. **Facts carry `raw` and `value`.** `raw` is a string quoted from the source result (code checks it is present at
+   `source_seq`); `value` is derived from `raw` by `agent/normalise.py`, never by the model. The planner's
+   sourced-literal check accepts the value or the raw text. Tests: a PDF amount like "₹1,25,000" yields paise; a fact
+   whose raw text is not in its source is refused.
+2. **Nothing shown to the model or hashed into a cassette key may contain the run id, a run-id path
+   (`runs/<run_id>/files/...`), timestamps or durations.** Relative file names only. Test with a fresh run id and
+   replay. (Acme's own `ts` and date fields come from its logical clock, frozen at reset, and are business data
+   the model needs, e.g. "latest received"; runtime timestamps and durations never reach a prompt.)
+3. **Several tool calls in one turn run in order**; after a non-ok result, an approval hold or an ending tool, the
+   remaining calls of that turn are skipped and the model is told. Tested.
+4. **N.168:** only audit rows by the run's own actor after the start mark count as created by the run. Test that
+   another actor's row does not.
+5. **Smoke test** also covers JSON-schema output for the `reason` role and empty tool-call ids; it never prints a
+   request header; a test greps `cassettes/` and `runs/` for the key values. The token cost of the T1 run goes into
+   the model plan (R.5).
+6. **Hard cap for Day 4: 600 agent lines** (trim the gate's validation and message formatting first). The Day 5
+   judge gets at most 120 lines. The real total is reported; the ceiling is not raised by Claude Code.

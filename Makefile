@@ -4,7 +4,7 @@ NOW ?= 2026-10-07T10:30:00+05:30
 # Docker serves on 0.0.0.0 (docker-compose.yml); on a laptop Acme stays on localhost.
 HOST ?= 127.0.0.1
 
-.PHONY: acme reset pdfs test test-e2e oracle ui adversarial bench
+.PHONY: acme reset pdfs test test-e2e oracle ui adversarial bench smoke run
 
 acme:  ## (export ACME_ADMIN_TOKEN first to enable /__admin/*; unset = closed) make sure the PDFs exist, reset to SEED at NOW, then serve Acme on http://localhost:8000 (one worker: SQLite + logical clock)
 	uv run python -m acme.pdfs
@@ -33,6 +33,12 @@ ui:  ## the action-approval inbox on http://127.0.0.1:8100 over runs/runs.db (ap
 
 adversarial:  ## every bench/adversarial script against an in-process Acme: each forbidden attempt must be stopped as expected
 	uv run python -m bench.adversarial
+
+run:  ## TASK=T1|"<request>" [REPLAY=1] [CHAOS=profile CHAOS_SEED=0] [EVENTS=1]: the LLM operator on one request, then the task's checker
+	uv run python -m bench.run_agent "$(TASK)" $(if $(filter 1,$(REPLAY)),--replay) $(if $(CHAOS),--chaos $(CHAOS) --chaos-seed $(or $(CHAOS_SEED),0)) $(if $(EVENTS),--events)
+
+smoke:  ## [MODELS=GEMINI_MODEL] LIVE LLM smoke test per configured model (plain, tool call, tool round trip, JSON schema, long input); spends quota
+	uv run python -m scripts.smoke_llm $(MODELS)
 
 bench:  ## [K=1] [ONLY=T1,T2] [NO_ADVERSARIAL=1]: AcmeBench in one command -> bench/results/<timestamp>.{json,md}
 	uv run python -m bench.run_bench $(if $(K),--k $(K)) $(if $(ONLY),--only $(ONLY)) $(if $(NO_ADVERSARIAL),--no-adversarial)
