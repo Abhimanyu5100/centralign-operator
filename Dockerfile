@@ -5,9 +5,14 @@
 FROM mcr.microsoft.com/playwright/python:v1.63.0-noble
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.23 /uv /uvx /bin/
-RUN apt-get update && apt-get install -y --no-install-recommends make && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends make tzdata \
+    && rm -rf /var/lib/apt/lists/*
 
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 UV_LINK_MODE=copy UV_FROZEN=1 \
+# Timestamps in IST like the frozen task clocks (the base image is UTC); the bench prints GIT_COMMIT, as the image
+# has no .git (`GIT_COMMIT=$(git rev-parse --short HEAD) docker compose build`; empty prints "unknown").
+ARG GIT_COMMIT=
+ENV TZ=Asia/Kolkata GIT_COMMIT=${GIT_COMMIT} \
+    PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 UV_LINK_MODE=copy UV_FROZEN=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv PATH=/opt/venv/bin:$PATH
 WORKDIR /app
 

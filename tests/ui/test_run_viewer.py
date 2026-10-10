@@ -53,3 +53,5 @@ def test_every_event_type_has_a_one_line_summary():
     assert summarize("llm_call", {"role": "reason", "model": "m", "total_tokens": 5, "source": "live"}) == \
         "reason m 5 tokens (live)"
     assert summarize("rollback", {"undone": [1]}).startswith("{")
+    assert summarize("tool_result", {"ok": True, "detail": "", "data": {"items": [1, 2]}}) == "ok: 2 row(s)"
+    assert summarize("tool_result", {"ok": True, "detail": "", "data": {"id": 9, "status": "x"}}) == "ok: fields id, status"

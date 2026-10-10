@@ -7,7 +7,10 @@
 # token (N.92).
 services:
   acme:
-    build: .
+    build:
+      context: .
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-}   # GIT_COMMIT=$(git rev-parse --short HEAD) docker compose build
     image: centralign-operator
     command: ["make", "acme", "HOST=0.0.0.0"]
     ports:
@@ -22,7 +25,10 @@ services:
 
   runner:
     image: centralign-operator
-    build: .
+    build:
+      context: .
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-}
     profiles: ["tools"]          # not started by `docker compose up`; run it on demand
     command: ["make", "bench"]
     volumes:

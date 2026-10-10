@@ -9,11 +9,13 @@ Replan (docs/day5-plan.md C, approved): the same call and checks plus the plan a
 come back unchanged, unmet ones change only how rows are found (args, where), never what they assert (N.182)."""
 
 import json
+from pathlib import Path
 from typing import Any
 
 from agent.goal import Fact, GoalSpec, shown
 from agent.memory.knowledge import Sop
 from agent.plan import Plan, Ref, plan_problems
+from agent.policy.loader import POLICIES_PATH, load_policies
 from agent.tools.api import CATALOG_PATH
 from agent.tools.registry import _explain
 
@@ -24,6 +26,8 @@ schema given. Rules:
    every record the run will write is read by some milestone. Use only the args and row_fields of the tool list.
 2. Each milestone is checked by predicates: one API read tool call (read, args) whose rows are picked by `where`
    and must show `expect` (exact values) or `contains`; `count` is how many rows match (0 = must not exist).
+   `contains` checks text inside ONE row's field, every listed text in every picked row: several rows with
+   different values (a laptop ticket and an accounts ticket) need one predicate each.
 3. Find rows by business keys (numbers, names, statuses), never a database id: {"ref": "M1"} is the id of the row
    that milestone M1's first predicate found (that predicate must find exactly one row).
 4. Every value comes from the facts, the goal, the procedure or the tool list. Never invent one.
@@ -31,16 +35,25 @@ schema given. Rules:
 6. awaits_business_approval: true on a milestone whose record will wait for a business approval.
 7. Every procedure step that writes (its Source names a POST) is the sop_step of a milestone. Only a step whose
    title says "when ..." may instead be a key of not_applicable, with the reason it does not apply here: decide
-   from its Target and the facts (amounts are in paise: Rs 50,000 is 5,000,000 paise) whether its condition
-   holds; when it does not, list it in not_applicable or check its "otherwise" state.
-8. judge: at most 3 short criteria that no exact predicate can check (tone; whether a text says something in
-   words), on a milestone whose predicates find the record. Exact checks stay predicates."""
+   from its Target, the facts and company_rules (Acme's own rules; a limit is in paise, compared with the total)
+   whether its condition holds; when it does not, list it in not_applicable or check its "otherwise" state.
+8. judge: at most 3 short criteria about meaning and tone only (whether the text says something, in any words),
+   on a milestone whose predicates find the record; never which field must say it. Exact field contents stay
+   predicates (`contains`)."""
 REPLAN = """
 
 Revise the plan: an independent check found the milestones in `unmet` not met (what each read found is given).
 Keep every met milestone exactly as it is. For an unmet milestone keep its target, step and what each predicate
 asserts (read, expect, contains, count); correct only how the row is found (args, where), with sourced values. If
 the plan was right and the work is missing, send it back unchanged."""
+
+
+def company_rules(path: Path = POLICIES_PATH) -> list[dict[str, Any]]:
+    """The rules Acme enforces itself, each with the constants its code checks (the approval limit), read from the
+    policy file at run time (D-217): the planner predicts Acme's statuses from them. No rule id lives in code."""
+    return [{"rule": r.message, **({"limits": limits} if (limits := {
+        c.ref.rsplit(".", 1)[-1]: c.equals for c in r.acme_check if c.kind == "constant"}) else {})}
+        for r in load_policies(path).rules if r.enforced_by == "acme"]
 
 
 def read_tools(run, seen: dict[str, list[str]]) -> list[dict[str, Any]]:
@@ -91,6 +104,10 @@ def plan_errors(plan: Plan, run, goal: GoalSpec, sop: Sop | None, facts: list[Fa
                          for v in [*p.args.values(), *p.where.values(), *p.expect.values()]
                          if isinstance(v, (str, int)) and not isinstance(v, bool) and str(v).lower() not in sourced
                          and not (isinstance(v, str) and v.lower() in text)]
+            problems += [f"{m.id}: contains {v!r} is in no fact, the goal, the request, the procedure or the tools"
+                         for v in (v for vs in p.contains.values() for v in vs)  # a part of one, or holding one
+                         if not any(v.lower() in s for s in [*sourced, text, goal.request.lower()])  # (D-217)
+                         and not any(len(s) >= 4 and s in v.lower() for s in sourced)]
     return problems
 
 
@@ -152,7 +169,7 @@ def replan_errors(old: Plan, new: Plan, unmet: set[str]) -> list[str]:
 async def make_plan(run, llm, goal: GoalSpec, sop: Sop | None, facts: list[Fact], seen: dict[str, list[str]],
                     current: Plan | None = None, unmet: list = (), replan: int = 0) -> Plan | None:
     brief = {"goal": goal.model_dump(exclude={"decision", "question", "candidates", "reason", "lookups"}),
-             "facts": shown(facts), "sop_id": goal.sop_id,
+             "facts": shown(facts), "sop_id": goal.sop_id, "company_rules": company_rules(),
              "read_tools": read_tools(run, seen), "schema": Plan.model_json_schema()}
     if current is not None:
         brief |= {"current_plan": current.model_dump(exclude_defaults=True),

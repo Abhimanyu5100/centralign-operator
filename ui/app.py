@@ -57,7 +57,10 @@ def _summary(type_: str, p: dict) -> str:
         case "tool_call":
             return f"{p.get('tool')} {json.dumps(p.get('args', {}), ensure_ascii=False)[:160]} ({p.get('side_effect')})"
         case "tool_result":
-            return f"{'ok' if p.get('ok') else 'FAILED ' + str(p.get('error_type'))}: {str(p.get('detail', ''))[:160]}"
+            data = p.get("data") or {}
+            what = p.get("detail") or (f"{len(data['items'])} row(s)" if isinstance(data.get("items"), list)
+                                       else "fields " + ", ".join(sorted(data)))
+            return f"{'ok' if p.get('ok') else 'FAILED ' + str(p.get('error_type'))}: {str(what)[:160]}"
         case "policy_decision":
             return f"{p.get('effect')} {p.get('tool')} {', '.join(p.get('policy_ids') or [])}: {p.get('reason', '')}"
         case "approval":

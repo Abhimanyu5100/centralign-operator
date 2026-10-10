@@ -211,6 +211,59 @@ def test_each_planner_rule_has_a_failing_plan(sandbox, plan, problem):
     drive(run, lambda run: asyncio.sleep(0))
 
 
+@pytest.mark.parametrize("value, refused", [
+    ("invoice.pdf", True),            # live T1 flaky_500: an invented file name (D-217)
+    ("INV-1043.pdf", False),          # holds the fact INV-1043
+    ("sharma_INV-1043.pdf", False),   # holds it too
+    ("INV-10", False),                # a part of the fact
+    ("Logistics", False),             # a part of the goal's vendor
+    ("latest", False),                # from the request
+    ("1.pdf", True),                  # a short value (an id) never sources a longer one
+])
+def test_a_contains_value_must_come_from_a_fact_the_goal_the_request_or_the_procedure(sandbox, value, refused):
+    run = sandbox.run(plan=Plan(sop_id="process-invoice"))
+    goal = GoalSpec(request=SHARMA, decision="proceed", sop_id="process-invoice",
+                    fields=[Field(name="vendor", value="Sharma Logistics Pvt Ltd", source="probe")])
+    facts = [Fact(name="invoice_no", raw="INV-1043", value="INV-1043", result=1),
+             Fact(name="vendor_id", raw="1", value=1, result=1)]
+    plan = plan_with(predicates=[{"read": "list_invoices", "where": {"invoice_no": "INV-1043"},
+                                  "contains": {"source_file": [value]}}])
+    problems = plan_errors(plan, run, goal, load_sops()["process-invoice"], facts)
+    assert any(f"contains {value!r} is in no fact" in p for p in problems) is refused, problems
+    drive(run, lambda run: asyncio.sleep(0))
+
+
+def test_the_planner_reads_acmes_own_limits_from_the_policy_file_at_run_time(tmp_path):
+    """D-217, live T6 and T7: a business approval planned for invoices under the limit. The limit reaches the planner
+    from policies.yaml (the constant Acme's code is checked against), never from the prompt or the planner's code."""
+    from agent.planner import PROMPT, company_rules
+    from agent.policy.loader import POLICIES_PATH
+    moved = tmp_path / "policies.yaml"
+    moved.write_text(POLICIES_PATH.read_text().replace("equals: 5000000", "equals: 7500000"))
+    (tmp_path / "mail_allowlist.yaml").write_text((POLICIES_PATH.parent / "mail_allowlist.yaml").read_text())
+    assert {"APPROVAL_LIMIT_PAISE": 5000000} in [r.get("limits") for r in company_rules()]
+    assert {"APPROVAL_LIMIT_PAISE": 7500000} in [r.get("limits") for r in company_rules(moved)]
+    assert "5,000,000" not in PROMPT and "50,000" not in PROMPT and "company_rules" in PROMPT
+
+
+def test_the_planner_brief_carries_the_company_rules(sandbox):
+    report, llm, _ = operate_with(sandbox, SHARMA, gate("proceed"), calls(("find_vendors", {"q": "Sharma"})),
+                                  calls(("facts_ready", VENDOR_FACT)), say(json.dumps(PLAN)), say("Done."),
+                                  *[say(json.dumps(PLAN)), say("Done.")] * 3)
+    planner = next(r for r in llm.requests if r["messages"][0]["content"].startswith("You write the plan"))
+    assert '"APPROVAL_LIMIT_PAISE": 5000000' in planner["messages"][1]["content"]
+
+
+def test_the_prompts_say_contains_is_per_row_and_judge_criteria_are_about_meaning():
+    """D-217, live T3 (a list read per ticket) and T9 approve (a criterion naming the subject). These pin the text;
+    whether the model follows it is what the live bench measures."""
+    from agent.planner import PROMPT
+    from agent.verifier.judge import PROMPT as JUDGE
+    assert "`contains` checks text inside ONE row's field" in PROMPT and "need one predicate each" in PROMPT
+    assert "about meaning and tone only" in PROMPT and "never which field must say it" in PROMPT
+    assert "whatever field the criterion names" in JUDGE
+
+
 def test_tidy_fixes_what_the_model_gets_wrong_every_time_and_says_so():
     """D-200, from the live T1, T3 and T9 plans: status "any", `contains` as a string, read-step milestones."""
     data = {"milestones": [
