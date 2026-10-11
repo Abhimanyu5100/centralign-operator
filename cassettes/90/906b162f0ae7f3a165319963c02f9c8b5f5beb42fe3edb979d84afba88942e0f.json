@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Patel Engineering Works\",\"source\":\"probe\"}],\"success\":[\"Invoice for Patel Engineering Works is queued for processing.\"],\"question\":\"\",\"reason\":\"Vendor found uniquely; procedure applicable.\",\"sop_id\":\"process-invoice\"}",
+  "content": "{\n  \"decision\": \"proceed\",\n  \"sop_id\": \"process-invoice\",\n  \"question\": \"\",\n  \"reason\": \"The vendor Patel Engineering Works was found uniquely in the records and matches the requested vendor.\",\n  \"candidates\": [\n    \"process-invoice\"\n  ],\n  \"success\": [\n    \"Patel Engineering Works invoice processed successfully\"\n  ],\n  \"fields\": [\n    {\n      \"name\": \"vendor_name\",\n      \"value\": \"Patel Engineering Works\",\n      \"source\": \"probe\"\n    }\n  ]\n}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Patel Engineering Works\",\"source\":\"probe\"}],\"success\":[\"Invoice for Patel Engineering Works is queued for processing.\"],\"question\":\"\",\"reason\":\"Vendor found uniquely; procedure applicable.\",\"sop_id\":\"process-invoice\"}"
+   "content": "{\n  \"decision\": \"proceed\",\n  \"sop_id\": \"process-invoice\",\n  \"question\": \"\",\n  \"reason\": \"The vendor Patel Engineering Works was found uniquely in the records and matches the requested vendor.\",\n  \"candidates\": [\n    \"process-invoice\"\n  ],\n  \"success\": [\n    \"Patel Engineering Works invoice processed successfully\"\n  ],\n  \"fields\": [\n    {\n      \"name\": \"vendor_name\",\n      \"value\": \"Patel Engineering Works\",\n      \"source\": \"probe\"\n    }\n  ]\n}"
   },
-  "provider": "groq",
-  "model": "openai/gpt-oss-120b",
+  "provider": "gemini",
+  "model": "gemini-3.5-flash-lite",
   "usage": {
-   "prompt_tokens": 551,
-   "completion_tokens": 434,
-   "total_tokens": 985
+   "prompt_tokens": 290,
+   "completion_tokens": 132,
+   "total_tokens": 422
   }
  }
 }

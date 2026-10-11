@@ -2,18 +2,33 @@
 # Fresh-clone test (Day 6 G; register 0.7, M.6): what an evaluator does, from the committed HEAD only.
 #   scripts/fresh_clone.sh            clone, uv sync, make test, make run TASK=T1 REPLAY=1 with no key, secret scan
 #   DOCKER=1 scripts/fresh_clone.sh   also: docker compose up in the clone, /healthz, docker compose down
-# The working tree's uncommitted changes are NOT tested: commit first. Run from the repo root.
+#   WORKTREE=1 INCLUDE="..." scripts/fresh_clone.sh   the uncommitted working tree as the next commit would hold it
+# Without WORKTREE=1 only the committed HEAD is tested. Run from the repo root.
 set -euo pipefail
 
 repo=$(pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-echo "== clone $(git rev-parse --short HEAD) into $tmp"
-git clone -q "$repo" "$tmp/clone"
-cd "$tmp/clone"
+if [ "${WORKTREE:-0}" = 1 ]; then
+  # Before a commit: exactly what `git add` of the working tree would commit (tracked and new, not ignored), plus
+  # the force-added paths in INCLUDE (space-separated, e.g. bench/results/<stamp>.json), in an empty folder.
+  echo "== working tree (uncommitted, as the next commit would hold it) into $tmp"
+  mkdir -p "$tmp/clone"
+  { git ls-files -c -o --exclude-standard; for f in ${INCLUDE:-}; do echo "$f"; done; } \
+    | while read -r f; do [ -e "$f" ] && echo "$f"; done > "$tmp/files"
+  rsync -a --files-from="$tmp/files" "$repo/" "$tmp/clone/"
+  cd "$tmp/clone"
+  label="working tree on $(cd "$repo" && git rev-parse --short HEAD)"
+else
+  echo "== clone $(git rev-parse --short HEAD) into $tmp"
+  git clone -q "$repo" "$tmp/clone"
+  cd "$tmp/clone"
+  git ls-files > "$tmp/files"
+  label=$(git rev-parse --short HEAD)
+fi
 
 echo "== secret scan (tracked files and cassettes)"
-if git ls-files -z | xargs -0 grep -nIE 'AIza[0-9A-Za-z_-]{30,}|gsk_[0-9A-Za-z]{20,}|sk-or-v1-[0-9a-f]{20,}|Bearer [A-Za-z0-9._-]{20,}' ; then
+if tr '\n' '\0' < "$tmp/files" | xargs -0 grep -nIE 'AIza[0-9A-Za-z_-]{30,}|gsk_[0-9A-Za-z]{20,}|sk-or-v1-[0-9a-f]{20,}|Bearer [A-Za-z0-9._-]{20,}' ; then
   echo "FAIL: something that looks like a key is tracked"; exit 1
 fi
 test ! -e .env || { echo "FAIL: .env is tracked"; exit 1; }
@@ -34,7 +49,7 @@ env -u GEMINI_API_KEY -u GROQ_API_KEY -u OPENROUTER_API_KEY make bench AGENT=1 N
 
 if [ "${DOCKER:-0}" = 1 ]; then
   echo "== docker compose up (Acme) and /healthz"
-  export COMPOSE_PROJECT_NAME=freshclone GIT_COMMIT=$(git rev-parse --short HEAD)
+  export COMPOSE_PROJECT_NAME=freshclone GIT_COMMIT="$label"
   docker compose build -q
   docker compose up -d acme
   for _ in $(seq 60); do curl -fs http://localhost:8000/healthz >/dev/null && break; sleep 1; done
@@ -43,6 +58,6 @@ if [ "${DOCKER:-0}" = 1 ]; then
 fi
 
 echo "== attribution over the whole history"
-python3 scripts/check_attribution.py
+(cd "$repo" && python3 scripts/check_attribution.py)
 
-echo "FRESH CLONE OK at $(git rev-parse --short HEAD)"
+echo "FRESH CLONE OK ($label)"

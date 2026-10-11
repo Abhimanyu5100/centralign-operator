@@ -97,23 +97,37 @@ how you see what the agent did.
 
 ## Results
 
-TODO (final run): this section is filled from the final live pass^3 results file. The first live pass^3, and the
-per-failure analysis, are in [docs/EVALUATION.md](docs/EVALUATION.md).
+Two full live runs of `make bench AGENT=1 LIVE=1 K=3` (8 core tasks x 3 chaos off, T9 once per decision, 4 chaos
+runs once each, 8 adversarial scripts), chaos seed 0. The per-task tables and every failure's cause are in
+[docs/EVALUATION.md](docs/EVALUATION.md).
 
-| Measure | First live pass^3 ([20261010-002547](bench/results/20261010-002547.md)) | Final live pass^3 |
+| Measure | First run ([20261010-002547](bench/results/20261010-002547.md)) | Final run ([20261010-142841](bench/results/20261010-142841.md)) |
 | --- | --- | --- |
-| pass^3 over the 8 core tasks | 5/8 | TODO |
-| Chaos-off runs passed | 21/27 | TODO |
-| Correct refusals (T4 asks, T5 declines) | 6/6 | TODO |
-| Chaos runs: fault fired / run passed | 4/4 fired, 2/4 passed | TODO |
-| Unexplained side effects | 0 | TODO |
-| Verifier vs `/__admin/diff` agreement | 28/31 (the 3 are a verifier crash, fixed in D-215) | TODO |
-| Adversarial scripts stopped | 8/8 | TODO |
-| LLM calls / tokens / wall time | 370 / 1.44M / 35 min | TODO |
+| Models (executor and planner / gate and judge) | 3.1 Flash-Lite / Groq gpt-oss-120b | 3.5 Flash-Lite / 3.5 Flash-Lite (Groq blocked by the network, HTTP 403) |
+| pass^3 over the 8 core tasks | 5/8 | 2/8 (T5, T8) |
+| Chaos-off runs passed | 21/27 | 19/27 |
+| T9 none / approve / reject (once each) | 2/3 | 3/3 |
+| Correct refusals (T4 asks, T5 declines) | 6/6 | 5/6 |
+| Chaos runs: fault fired / run passed | 4/4 fired, 2/4 passed | 4/4 fired, 3/4 passed |
+| Unexplained side effects | 0 | 0 |
+| Verifier vs `/__admin/diff` agreement | 28/31 (the 3 are a verifier crash, fixed in D-215) | 31/31 |
+| Adversarial scripts stopped | 8/8 | 8/8 |
+| LLM calls / tokens / wall time | 370 / 1.44M / 35 min | 456 / 1.92M / 34 min |
+| Held-out probe (two unseen rewordings, judged by the T1 and T3 checkers) | not run | 2/2 passed |
 
-The first run used Gemini 3.1 Flash-Lite (executor and planner) and Groq gpt-oss-120b (gate and judge). No failing
-run was reported `completed`: every failure ended `failed`, `unverified` or `completed_with_exceptions`, and the
-hand-written SQL checkers agree.
+What the numbers say:
+- **No failing run was reported `completed`**, in either run. Every failure ended `failed`, `unverified`,
+  `needs_clarification` or `completed_with_exceptions`, and the hand-written SQL checkers agree.
+- **The safety numbers held in both runs:** 0 unexplained side effects, every adversarial script stopped, and every
+  chaos fault fired with no double write.
+- **The final run is lower, not higher.** It ran on a different model mix: 3.5 Flash-Lite for everything, because the
+  network blocked Groq. Its main failure was N.192, asserting the request's vendor name ("Rao Packaging") instead of
+  the record's ("Rao Packaging Industries"); it caused 4 of the 8 chaos-off failures. The rest were planner slips
+  that left the run with no plan, so nothing was written (T1, T4, T6), one over-cautious question (T3), and one
+  judge false negative from the fallback judge (T7).
+- **Replay:** the committed cassettes are one real live run per row of the final run (D-216). `make bench AGENT=1`
+  replays all of them with no key, to the same status and the same call and token counts
+  ([20261010-143259](bench/results/20261010-143259.md)).
 
 ## Architecture
 
@@ -230,8 +244,15 @@ The benchmark has one more hard rule: `agent/` never reads `bench/` (D-012), enf
 
 ## Known limitations
 
-- **Free-tier models.** On Day 6, 3.5 Flash-Lite's real daily cap was hit at 414 calls, so the measured bench ran
-  on 3.1 Flash-Lite. Most failures are planner judgement on that model ([docs/EVALUATION.md](docs/EVALUATION.md)).
+- **Free-tier models.** The first run used 3.1 Flash-Lite (3.5's real cap was hit at 414 calls that day), the final
+  run 3.5 Flash-Lite. pass^3 moved from 5/8 to 2/8 between them, so the variance is model- and day-dependent. Most
+  failures are planner judgement ([docs/EVALUATION.md](docs/EVALUATION.md)).
+- **The final pass^3 is partly in-sample.** The fixes after the first live run (D-217) came from benchmark failures,
+  so the final pass^3 is partly in-sample; the held-out probe (two unseen rewordings) is the out-of-sample check
+  ([threats to validity](docs/EVALUATION.md#7-threats-to-validity)).
+- **The final run had no independent judge.** The network blocked Groq (HTTP 403, "Access denied"), so the gate and
+  the judge fell back to Gemini Flash-Lite, the executor's own family. The report flags each such judgement
+  ("fallback: same family as the executor").
 - **Replay proves the pipeline, not model reliability.** `REPLAY=1` reproduces recorded runs exactly with no key.
   How often the model gets it right is what the live pass^3 measures.
 - **Plan predicates come from the same facts as the writes.** The verifier catches a write that differs from the

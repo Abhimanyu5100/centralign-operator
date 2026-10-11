@@ -13,7 +13,7 @@ pytestmark = pytest.mark.e2e
 
 
 def replay(task, chaos, tmp_path, capsys) -> tuple[int, str]:
-    args = argparse.Namespace(task=task, replay=True, chaos=chaos, chaos_seed=0, events=False, approve_wait=0.0,
+    args = argparse.Namespace(task=task, as_task=None, replay=True, chaos=chaos, chaos_seed=0, events=False, approve_wait=0.0,
                               store=str(tmp_path / "runs" / "runs.db"))
     code = asyncio.run(_main(args))
     return code, capsys.readouterr().out
@@ -21,17 +21,17 @@ def replay(task, chaos, tmp_path, capsys) -> tuple[int, str]:
 
 @pytest.mark.parametrize("task, chaos", [("T1", None), ("T2", None), ("T3", None), ("T4", None), ("T5", None),
                                          ("T6", None), ("T7", None), ("T8", None), ("T9:none", None),
-                                         ("T9:reject", None), ("T8", "session_expiry_at_step_5"),
-                                         ("T8", "commit_then_timeout")])
+                                         ("T9:approve", None), ("T9:reject", None), ("T3", "commit_then_timeout"),
+                                         ("T8", "session_expiry_at_step_5"), ("T8", "commit_then_timeout")])
 def test_the_recorded_llm_run_replays_with_no_key_and_passes_its_checker(task, chaos, tmp_path, capsys):
     """Day 6 (D-216): every row whose live run passed replays, with no key, to a pass."""
     code, out = replay(task, chaos, tmp_path, capsys)
     assert code == 0 and "['replayed']" in out and "FAIL" not in out
 
 
-@pytest.mark.parametrize("task, chaos, status", [("T9:approve", None, "completed_with_exceptions"),
-                                                 ("T3", "commit_then_timeout", "completed_with_exceptions")])
+@pytest.mark.parametrize("task, chaos, status", [("T1", "flaky_500", "failed")])
 def test_a_run_that_failed_live_replays_to_the_same_measured_status(task, chaos, status, tmp_path, capsys):
-    """Measured failures are kept, not hidden (D-216): the judge lowered both live; the replay shows the same."""
+    """Measured failures are kept, not hidden (D-216): T1 under flaky_500 failed live in the final run (the 500 was
+    recovered; the plan asserted the request's vendor name, N.192); the replay shows the same."""
     code, out = replay(task, chaos, tmp_path, capsys)
     assert code == 1 and "['replayed']" in out and "CassetteMiss" not in out and f"verifier: {status}" in out

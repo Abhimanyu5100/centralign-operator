@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"decision\":\"proceed\",\"sop_id\":\"schedule-payment\",\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Verma Traders\",\"source\":\"request\"},{\"name\":\"vendor_id\",\"value\":\"3\",\"source\":\"lookup\"}],\"success\":[\"Invoice from Verma Traders scheduled for payment\"],\"question\":\"Pay the pending invoice from Verma Traders.\",\"reason\":\"Vendor Verma Traders found uniquely and approved; request matches schedule-payment procedure.\"}",
+  "content": "{\n  \"decision\": \"proceed\",\n  \"sop_id\": \"schedule-payment\",\n  \"question\": \"\",\n  \"reason\": \"The vendor Verma Traders exists and has 1 unique match in company records, and the procedure for scheduling a payment or processing an invoice applies.\",\n  \"candidates\": [\n    \"process-invoice\",\n    \"schedule-payment\"\n  ],\n  \"success\": [\n    \"Payment scheduled for the pending invoice from Verma Traders\"\n  ],\n  \"fields\": [\n    {\n      \"name\": \"vendor_name\",\n      \"value\": \"Verma Traders\",\n      \"source\": \"request\"\n    },\n    {\n      \"name\": \"vendor_id\",\n      \"value\": \"3\",\n      \"source\": \"probe\"\n    }\n  ]\n}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"decision\":\"proceed\",\"sop_id\":\"schedule-payment\",\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Verma Traders\",\"source\":\"request\"},{\"name\":\"vendor_id\",\"value\":\"3\",\"source\":\"lookup\"}],\"success\":[\"Invoice from Verma Traders scheduled for payment\"],\"question\":\"Pay the pending invoice from Verma Traders.\",\"reason\":\"Vendor Verma Traders found uniquely and approved; request matches schedule-payment procedure.\"}"
+   "content": "{\n  \"decision\": \"proceed\",\n  \"sop_id\": \"schedule-payment\",\n  \"question\": \"\",\n  \"reason\": \"The vendor Verma Traders exists and has 1 unique match in company records, and the procedure for scheduling a payment or processing an invoice applies.\",\n  \"candidates\": [\n    \"process-invoice\",\n    \"schedule-payment\"\n  ],\n  \"success\": [\n    \"Payment scheduled for the pending invoice from Verma Traders\"\n  ],\n  \"fields\": [\n    {\n      \"name\": \"vendor_name\",\n      \"value\": \"Verma Traders\",\n      \"source\": \"request\"\n    },\n    {\n      \"name\": \"vendor_id\",\n      \"value\": \"3\",\n      \"source\": \"probe\"\n    }\n  ]\n}"
   },
-  "provider": "groq",
-  "model": "openai/gpt-oss-120b",
+  "provider": "gemini",
+  "model": "gemini-3.5-flash-lite",
   "usage": {
-   "prompt_tokens": 573,
-   "completion_tokens": 607,
-   "total_tokens": 1180
+   "prompt_tokens": 310,
+   "completion_tokens": 183,
+   "total_tokens": 493
   }
  }
 }

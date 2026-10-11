@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"onboard-employee\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"employee_name\",\"value\":\"Priya Nair\",\"source\":\"request\"},{\"name\":\"start_date\",\"value\":\"Monday\",\"source\":\"request\"}],\"question\":\"\",\"reason\":\"No existing employee matches 'Priya Nair'; treat as new hire and proceed with onboarding.\",\"sop_id\":\"onboard-employee\",\"success\":[\"Employee Priya Nair added to employee roster with start date Monday.\"]}",
+  "content": "{\"decision\": \"ask\", \"sop_id\": \"onboard-employee\", \"question\": \"Did you mean Priya Natarajan or a new hire named Priya Nair?\", \"reason\": \"The request mentions Priya Nair who is not found, but a similar employee Priya Natarajan exists.\", \"candidates\": [\"onboard-employee\"], \"success\": [\"Clarify employee identity\"], \"fields\": [{\"name\": \"employee_name\", \"value\": \"Priya Nair\", \"source\": \"request\"}, {\"name\": \"start_date\", \"value\": \"Monday\", \"source\": \"request\"}]}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"onboard-employee\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"employee_name\",\"value\":\"Priya Nair\",\"source\":\"request\"},{\"name\":\"start_date\",\"value\":\"Monday\",\"source\":\"request\"}],\"question\":\"\",\"reason\":\"No existing employee matches 'Priya Nair'; treat as new hire and proceed with onboarding.\",\"sop_id\":\"onboard-employee\",\"success\":[\"Employee Priya Nair added to employee roster with start date Monday.\"]}"
+   "content": "{\"decision\": \"ask\", \"sop_id\": \"onboard-employee\", \"question\": \"Did you mean Priya Natarajan or a new hire named Priya Nair?\", \"reason\": \"The request mentions Priya Nair who is not found, but a similar employee Priya Natarajan exists.\", \"candidates\": [\"onboard-employee\"], \"success\": [\"Clarify employee identity\"], \"fields\": [{\"name\": \"employee_name\", \"value\": \"Priya Nair\", \"source\": \"request\"}, {\"name\": \"start_date\", \"value\": \"Monday\", \"source\": \"request\"}]}"
   },
-  "provider": "groq",
-  "model": "openai/gpt-oss-120b",
+  "provider": "gemini",
+  "model": "gemini-3.5-flash-lite",
   "usage": {
-   "prompt_tokens": 576,
-   "completion_tokens": 560,
-   "total_tokens": 1136
+   "prompt_tokens": 310,
+   "completion_tokens": 124,
+   "total_tokens": 434
   }
  }
 }

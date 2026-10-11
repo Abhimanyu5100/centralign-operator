@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_requested\",\"source\":\"request\",\"value\":\"Rao Packaging\"},{\"name\":\"vendor_found\",\"source\":\"probe\",\"value\":\"Rao Packaging Industries\"}],\"question\":\"\",\"reason\":\"Vendor uniquely identified and approved.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice will be processed for vendor Rao Packaging Industries.\"]}",
+  "content": "{\n  \"decision\": \"proceed\",\n  \"sop_id\": \"process-invoice\",\n  \"question\": \"\",\n  \"reason\": \"The vendor Rao Packaging matches exactly one approved record in the company's system, and the procedure for processing a vendor invoice fits the request.\",\n  \"candidates\": [\n    \"process-invoice\"\n  ],\n  \"success\": [\n    \"The invoice from Rao Packaging Industries has been processed.\"\n  ],\n  \"fields\": [\n    {\n      \"name\": \"vendor_name\",\n      \"value\": \"Rao Packaging\",\n      \"source\": \"request\"\n    },\n    {\n      \"name\": \"vendor_record\",\n      \"value\": \"Rao Packaging Industries\",\n      \"source\": \"probe\"\n    }\n  ]\n}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_requested\",\"source\":\"request\",\"value\":\"Rao Packaging\"},{\"name\":\"vendor_found\",\"source\":\"probe\",\"value\":\"Rao Packaging Industries\"}],\"question\":\"\",\"reason\":\"Vendor uniquely identified and approved.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice will be processed for vendor Rao Packaging Industries.\"]}"
+   "content": "{\n  \"decision\": \"proceed\",\n  \"sop_id\": \"process-invoice\",\n  \"question\": \"\",\n  \"reason\": \"The vendor Rao Packaging matches exactly one approved record in the company's system, and the procedure for processing a vendor invoice fits the request.\",\n  \"candidates\": [\n    \"process-invoice\"\n  ],\n  \"success\": [\n    \"The invoice from Rao Packaging Industries has been processed.\"\n  ],\n  \"fields\": [\n    {\n      \"name\": \"vendor_name\",\n      \"value\": \"Rao Packaging\",\n      \"source\": \"request\"\n    },\n    {\n      \"name\": \"vendor_record\",\n      \"value\": \"Rao Packaging Industries\",\n      \"source\": \"probe\"\n    }\n  ]\n}"
   },
-  "provider": "groq",
-  "model": "openai/gpt-oss-120b",
+  "provider": "gemini",
+  "model": "gemini-3.5-flash-lite",
   "usage": {
-   "prompt_tokens": 552,
-   "completion_tokens": 523,
-   "total_tokens": 1075
+   "prompt_tokens": 290,
+   "completion_tokens": 179,
+   "total_tokens": 469
   }
  }
 }

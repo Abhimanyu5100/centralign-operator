@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"decision\":\"proceed\",\"sop_id\":\"onboard-employee\",\"candidates\":[\"onboard-employee\"],\"question\":\"Onboard Priya Nair, she joins Monday.\",\"reason\":\"No existing employee named Priya Nair was found; the request matches the onboarding procedure for a new hire.\",\"fields\":[{\"name\":\"employee_name\",\"source\":\"request\",\"value\":\"Priya Nair\"},{\"name\":\"start_date\",\"source\":\"request\",\"value\":\"Monday\"}],\"success\":[\"Employee Priya Nair added to employee records with start date Monday.\"]}",
+  "content": "{\n  \"decision\": \"proceed\",\n  \"sop_id\": \"onboard-employee\",\n  \"question\": \"\",\n  \"reason\": \"The employee Priya Nair is a new hire, and the onboard-employee procedure fits.\",\n  \"candidates\": [\n    \"onboard-employee\"\n  ],\n  \"success\": [\n    \"Priya Nair is onboarded successfully.\"\n  ],\n  \"fields\": [\n    {\n      \"name\": \"Employee Name\",\n      \"value\": \"Priya Nair\",\n      \"source\": \"request\"\n    },\n    {\n      \"name\": \"Start Day\",\n      \"value\": \"Monday\",\n      \"source\": \"request\"\n    }\n  ]\n}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"decision\":\"proceed\",\"sop_id\":\"onboard-employee\",\"candidates\":[\"onboard-employee\"],\"question\":\"Onboard Priya Nair, she joins Monday.\",\"reason\":\"No existing employee named Priya Nair was found; the request matches the onboarding procedure for a new hire.\",\"fields\":[{\"name\":\"employee_name\",\"source\":\"request\",\"value\":\"Priya Nair\"},{\"name\":\"start_date\",\"source\":\"request\",\"value\":\"Monday\"}],\"success\":[\"Employee Priya Nair added to employee records with start date Monday.\"]}"
+   "content": "{\n  \"decision\": \"proceed\",\n  \"sop_id\": \"onboard-employee\",\n  \"question\": \"\",\n  \"reason\": \"The employee Priya Nair is a new hire, and the onboard-employee procedure fits.\",\n  \"candidates\": [\n    \"onboard-employee\"\n  ],\n  \"success\": [\n    \"Priya Nair is onboarded successfully.\"\n  ],\n  \"fields\": [\n    {\n      \"name\": \"Employee Name\",\n      \"value\": \"Priya Nair\",\n      \"source\": \"request\"\n    },\n    {\n      \"name\": \"Start Day\",\n      \"value\": \"Monday\",\n      \"source\": \"request\"\n    }\n  ]\n}"
   },
-  "provider": "groq",
-  "model": "openai/gpt-oss-120b",
+  "provider": "gemini",
+  "model": "gemini-3.5-flash-lite",
   "usage": {
-   "prompt_tokens": 576,
-   "completion_tokens": 437,
-   "total_tokens": 1013
+   "prompt_tokens": 310,
+   "completion_tokens": 163,
+   "total_tokens": 473
   }
  }
 }

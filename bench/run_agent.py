@@ -3,7 +3,8 @@ LLM operator on one request.
 
 Harness side (agent/ never reads bench/, decision 11). A task id, or a request equal to a task's request, resets
 the harness's own Acme (a child process, bench/live.serve) to that task's seed and frozen `now`, then runs
-`agent.run.operate`, the task's checker on the result (DB, side effects, report) and prints both. Any other text
+`agent.run.operate`, the task's checker on the result (DB, side effects, report) and prints both. With AS_TASK=T1 the
+request text is any rewording, run on T1's seed and frozen `now` and judged by T1's checker (a held-out probe). Any other text
 runs on seed `base` at the default `now`, with no checker. REPLAY=1 serves every LLM call from cassettes/ and
 runs with every API key removed from the agent's config, so it proves no key is needed. Runs are written to the
 operator's store (runs/runs.db), so `make ui` shows them. Exit 1 when the checker fails.
@@ -51,9 +52,13 @@ def quota_line(config, book: QuotaBook) -> str:
 
 
 async def _main(args: argparse.Namespace) -> int:
-    found = find_run(args.task)
+    found = find_run(args.as_task) if args.as_task else find_run(args.task)
+    if args.as_task and found is None:
+        raise SystemExit(f"--as {args.as_task}: no such task run")
     task = found.task if found else None
     request, seed, now = (task.request, task.seed, task.now) if task else (args.task, "base", DEFAULT_NOW)
+    if args.as_task:  # a held-out rewording judged by that task's own checker, seed and now (Day 6 probe)
+        request = args.task
     with serve(env=HARNESS_SERVER_ENV) as acme:
         acme.admin("POST", "/__admin/reset", seed=seed, now=now)
         if args.chaos:
@@ -103,6 +108,8 @@ def main() -> None:
     parser.add_argument("--chaos-seed", type=int, default=0)
     parser.add_argument("--events", action="store_true", help="print the run's event log")
     parser.add_argument("--store", default=None, help="run store file (default runs/runs.db)")
+    parser.add_argument("--as", dest="as_task", default=None,
+                        help="judge this request text with a task's checker, seed and now (a held-out rewording)")
     sys.exit(asyncio.run(_main(parser.parse_args())))
 
 

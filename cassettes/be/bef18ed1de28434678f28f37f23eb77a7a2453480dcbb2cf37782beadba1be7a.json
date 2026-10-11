@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"decline\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Kapoor Steel\",\"source\":\"request\"}],\"success\":[],\"question\":\"Pay the invoice from Kapoor Steel.\",\"reason\":\"Vendor 'Kapoor Steel' not found in company records.\",\"sop_id\":\"\"}",
+  "content": "{\"decision\": \"decline\", \"sop_id\": \"process-invoice\", \"question\": \"\", \"reason\": \"The vendor Kapoor Steel does not exist in the company's records.\", \"candidates\": [\"process-invoice\", \"schedule-payment\"], \"success\": [], \"fields\": [{\"name\": \"vendor_name\", \"value\": \"Kapoor Steel\", \"source\": \"request\"}]}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"decline\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Kapoor Steel\",\"source\":\"request\"}],\"success\":[],\"question\":\"Pay the invoice from Kapoor Steel.\",\"reason\":\"Vendor 'Kapoor Steel' not found in company records.\",\"sop_id\":\"\"}"
+   "content": "{\"decision\": \"decline\", \"sop_id\": \"process-invoice\", \"question\": \"\", \"reason\": \"The vendor Kapoor Steel does not exist in the company's records.\", \"candidates\": [\"process-invoice\", \"schedule-payment\"], \"success\": [], \"fields\": [{\"name\": \"vendor_name\", \"value\": \"Kapoor Steel\", \"source\": \"request\"}]}"
   },
-  "provider": "groq",
-  "model": "openai/gpt-oss-120b",
+  "provider": "gemini",
+  "model": "gemini-3.5-flash-lite",
   "usage": {
-   "prompt_tokens": 575,
-   "completion_tokens": 432,
-   "total_tokens": 1007
+   "prompt_tokens": 315,
+   "completion_tokens": 82,
+   "total_tokens": 397
   }
  }
 }

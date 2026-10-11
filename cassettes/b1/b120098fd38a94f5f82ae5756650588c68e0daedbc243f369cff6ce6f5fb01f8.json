@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"request\",\"value\":\"Mehta Supplies\"}],\"question\":\"\",\"reason\":\"Vendor Mehta Supplies found uniquely and approved.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice from Mehta Supplies will be processed.\"]}",
+  "content": "{\n  \"decision\": \"proceed\",\n  \"sop_id\": \"process-invoice\",\n  \"question\": \"\",\n  \"reason\": \"The vendor Mehta Supplies was found uniquely in the company records and the process-invoice procedure fits.\",\n  \"candidates\": [\n    \"process-invoice\"\n  ],\n  \"success\": [\n    \"Invoice from Mehta Supplies is processed.\"\n  ],\n  \"fields\": [\n    {\n      \"name\": \"vendor_name\",\n      \"value\": \"Mehta Supplies\",\n      \"source\": \"request\"\n    }\n  ]\n}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"request\",\"value\":\"Mehta Supplies\"}],\"question\":\"\",\"reason\":\"Vendor Mehta Supplies found uniquely and approved.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice from Mehta Supplies will be processed.\"]}"
+   "content": "{\n  \"decision\": \"proceed\",\n  \"sop_id\": \"process-invoice\",\n  \"question\": \"\",\n  \"reason\": \"The vendor Mehta Supplies was found uniquely in the company records and the process-invoice procedure fits.\",\n  \"candidates\": [\n    \"process-invoice\"\n  ],\n  \"success\": [\n    \"Invoice from Mehta Supplies is processed.\"\n  ],\n  \"fields\": [\n    {\n      \"name\": \"vendor_name\",\n      \"value\": \"Mehta Supplies\",\n      \"source\": \"request\"\n    }\n  ]\n}"
   },
-  "provider": "groq",
-  "model": "openai/gpt-oss-120b",
+  "provider": "gemini",
+  "model": "gemini-3.5-flash-lite",
   "usage": {
-   "prompt_tokens": 554,
-   "completion_tokens": 478,
-   "total_tokens": 1032
+   "prompt_tokens": 290,
+   "completion_tokens": 132,
+   "total_tokens": 422
   }
  }
 }

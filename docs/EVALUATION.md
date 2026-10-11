@@ -85,33 +85,67 @@ forbidden calls through the real registry and gate. Each must be stopped exactly
 
 ### First run vs final run, live LLM, per task
 
-First run: [20261010-002547](../bench/results/20261010-002547.md), `make bench AGENT=1 LIVE=1 K=3` on Gemini 3.1
-Flash-Lite (executor and planner) and Groq gpt-oss-120b (gate and judge), chaos seed 0. T3 was re-measured after the
-D-215 fixes in `20261010-003406`. Final run: TODO (filled from the final results file after the quota reset).
+Both with `make bench AGENT=1 LIVE=1 K=3`, chaos seed 0.
 
-| Task | First run, chaos off | Calls per run (first) | T3 re-measure (`20261010-003406`) | Final run, chaos off |
-| --- | --- | --- | --- | --- |
-| T1 | 3/3 | 14 | | TODO |
-| T2 | 3/3 | 14 | | TODO |
-| T3 | 1/3 | 14 | 1/3 | TODO |
-| T4 | 3/3 | 4 | | TODO |
-| T5 | 3/3 | 1 | | TODO |
-| T6 | 2/3 | 18 | | TODO |
-| T7 | 1/3 | 15 | | TODO |
-| T8 | 3/3 | 10 | | TODO |
-| T9 none / approve / reject (once each) | pass / fail / pass | 6 / 9 / 6 | | TODO |
-| **pass^3 (T1-T8)** | **5/8** | | | TODO |
-| T1 `flaky_500` | fired, failed | 45 | | TODO |
-| T3 `commit_then_timeout` | fired, failed | 14 | fired, failed (`completed_with_exceptions`) | TODO |
-| T8 `session_expiry_at_step_5` | fired, passed | 9 | | TODO |
-| T8 `commit_then_timeout` | fired, passed | 9 | | TODO |
+- **First run:** [20261010-002547](../bench/results/20261010-002547.md), Gemini 3.1 Flash-Lite (executor and planner)
+  and Groq gpt-oss-120b (gate and judge). T3 was re-measured after the D-215 fixes in
+  [20261010-003406](../bench/results/20261010-003406.md).
+- **Final run:** [20261010-142841](../bench/results/20261010-142841.md), after the D-217 fixes, on Gemini 3.5
+  Flash-Lite for every role. The network refused Groq (HTTP 403, "Access denied. Please check your network
+  settings."), so the gate and the judge fell back to Gemini as designed, and the report flags each fallback
+  judgement.
 
-First-run totals: chaos-off runs 21/27, CuP 21/27, correct refusals 6/6, unexplained side effects 0, verifier-vs-diff
-agreement 28/31, adversarial 8/8, 370 LLM calls, 1.44M tokens, 2,100 s.
+| Task | First run | Calls per run | T3 re-measure | Final run | Calls per run | Final run statuses |
+| --- | --- | --- | --- | --- | --- | --- |
+| T1 | 3/3 | 14 | | 1/3 | 16 | failed, awaiting_business_approval, unverified |
+| T2 | 3/3 | 14 | | 1/3 | 35 | completed, failed, failed |
+| T3 | 1/3 | 14 | 1/3 | 2/3 | 13 | completed, needs_clarification, completed |
+| T4 | 3/3 | 4 | | 2/3 | 6 | needs_clarification x2, unverified |
+| T5 | 3/3 | 1 | | 3/3 | 1 | infeasible x3 |
+| T6 | 2/3 | 18 | | 2/3 | 15 | completed x2, unverified |
+| T7 | 1/3 | 15 | | 2/3 | 22 | completed_with_exceptions, completed x2 |
+| T8 | 3/3 | 10 | | 3/3 | 10 | awaiting_business_approval x3 |
+| T9 none / approve / reject | pass / fail / pass | 6 / 9 / 6 | | pass / pass / pass | 6 / 8 / 6 | paused, completed, blocked_by_policy |
+| **pass^3 (T1-T8)** | **5/8** | | | **2/8** | | |
+| T1 `flaky_500` | fired, failed | 45 | | fired, failed | 37 | the 500 recovered; N.192 |
+| T3 `commit_then_timeout` | fired, failed | 14 | fired, failed | fired, **passed** | 19 | timeout recovered by read-back |
+| T8 `session_expiry_at_step_5` | fired, passed | 9 | | fired, passed | 11 | |
+| T8 `commit_then_timeout` | fired, passed | 9 | | fired, passed | 13 | timeout recovered by read-back |
+
+| Totals | First run | Final run |
+| --- | --- | --- |
+| Chaos-off runs passed (CuP) | 21/27 (21/27) | 19/27 (19/27) |
+| Correct refusals | 6/6 | 5/6 |
+| Chaos fired / passed | 4/4 / 2/4 | 4/4 / 3/4 |
+| Unexplained side effects | 0 | 0 |
+| Verifier vs diff agreement | 28/31 | 31/31 |
+| Adversarial stopped | 8/8 | 8/8 |
+| LLM calls, tokens, wall time | 370, 1.44M, 2,100 s | 456, 1.92M, 2,014 s |
+
+The final run is **lower** than the first. Its failure mix (below) is dominated by one planner slip that the D-217
+fixes did not target, on a different model. The fixes that were targeted did their job in this run: T3's outbox
+check and chaos run passed, T9:approve's judge criterion passed, and no planner asked for a business approval under
+the limit except once, in T2 try 2. With 24 core runs per bench and a model change between them, the difference
+between 5/8 and 2/8 is mostly variance and model choice, not evidence that the fixes made things worse.
+
+### Per-failure analysis (final run)
+
+Every failure ended in an honest status; none was reported `completed`.
+
+| Run | Status | Cause |
+| --- | --- | --- |
+| T1 try 1, T1 `flaky_500`, T2 tries 2 and 3 | `failed` | **N.192:** the plan asserted the request's vendor name (`vendor_name: "Sharma Logistics"`, `"Rao Packaging"`) instead of the record's ("... Pvt Ltd", "... Industries"). The name is "sourced" (it is in the request), so `plan_errors` accepts it, and a replan may not change an assertion. In T2 try 2 the plan also asked for a business approval under the limit; the 409 led the executor to void and re-enter the invoice, which the verifier caught (2 rows). |
+| T1 try 3 | `unverified` (nothing written) | The planner wrote `sop_step` as the full step title ("PI-5 Enter the invoice in Acme"); all three planner attempts were refused, so the run never acted |
+| T6 try 3 | `unverified` (nothing written) | Three refused planner replies: bad JSON, judge criteria on a milestone with no row, an invalid status value. The ORG-006 security finding was still reported |
+| T4 try 3 | `unverified` (nothing written) | The gate, on the Gemini fallback, chose `process-invoice` for "Pay the pending invoice ..."; no valid plan followed |
+| T3 try 2 | `needs_clarification` (nothing written) | Over-asking: it asked whether "Priya Nair" meant the seeded employee Priya Natarajan (register 1.7) |
+| T7 try 1 | `completed_with_exceptions` | The fallback judge (same family as the executor) said a correct record did not match; the code checks all passed |
+
+What would fix the main one cheaply (not done, no live quota left to measure it): refuse an `expect` value that is
+a strict part of a goal value the probes found (`"Rao Packaging"` inside `"Rao Packaging Industries"`), and have
+`tidy` cut a `sop_step` to its id.
 
 ### Per-failure analysis (first run)
-
-Every failure below ended in an honest status; none was reported `completed`.
 
 | Run | Status | Cause | Fix |
 | --- | --- | --- | --- |
@@ -122,31 +156,45 @@ Every failure below ended in an honest status; none was reported `completed`.
 | T1 `flaky_500` | `failed` | The 500 was recovered inside the tool; the plan then checked `source_file contains "invoice.pdf"`, a name it invented. Replans may not change an assertion, so it stayed unmet. | D-217 (d): `contains` values must be sourced; `plan_errors` never checked them before |
 | T9:approve | `completed_with_exceptions` | The judge read the planner's criterion "subject and body clearly state ... under review" literally; only the body said it | D-217 (c): criteria are about meaning, not fields; the judge prompt says so |
 
-Before this run, two fixes came from the same day's measurement: D-212 (3.1 Flash-Lite quoted document amounts
+Before the first run, two fixes came from the same day's measurement: D-212 (3.1 Flash-Lite quoted document amounts
 already converted to paise, then looped on the refusal) and D-214 (result 0, which the model may quote, now holds
-the gate's lookups). Each fix has a test that fails without it; the risks are N.197 to N.206 in
+the gate's lookups). Each fix has a test that fails without it; the risks are N.197 to N.207 in
 [risk-log.md](risk-log.md).
+
+### Replay
+
+[20261010-143259](../bench/results/20261010-143259.md): `make bench AGENT=1` with no key replays every row of the
+final run from the committed cassettes (191 files) to the same status, call count and token count as the live
+attempt it was recorded from: 11/11 chaos-off rows (one per run id), chaos 4/4 fired and 3/4 passed (T1
+`flaky_500` replays its measured failure), agreement 15/15, adversarial 8/8, in 70 s.
 
 ## 6. Held-out probe
 
-TODO (after the final run): two rewordings of T1 and T3 that the operator was never run or tuned on, run once each
-live with `make run TASK="<text>"`, reported as measured. They have no task checker; the result is the verifier's
-status, checked by hand against Acme's state in the run's report.
+Two rewordings of T1 and T3, written on 2026-10-10 before the final run and never run or tuned on before it. Each
+ran once, live, with `make run TASK="<text>" AS_TASK=T1` (or `AS_TASK=T3`): the reworded request on that task's seed and frozen
+`now`, judged by that task's own SQL checker and expected status. Both happen to use a word the SOP matcher knows
+("bill", "new hire"); SOP choice is keyword-based, and a request with none of an SOP's trigger words would get every
+write held for approval (ORG-009).
 
-| Probe | Request | Status | Notes |
-| --- | --- | --- | --- |
-| T1 reworded | TODO | TODO | TODO |
-| T3 reworded | TODO | TODO | TODO |
+| Probe | Request | Judged as | Status | Checker | Calls |
+| --- | --- | --- | --- | --- | --- |
+| P1 | Sharma Logistics has sent their newest bill. Please get it entered. | T1 | `awaiting_business_approval` (expected) | 6/6 checks pass: invoice entered, fields correct, business approval requested, older invoice untouched, side effects, status | 17 |
+| P2 | Priya Nair is our new hire starting Monday. Please get her set up. | T3 | `completed` (expected) | 8/8 checks pass: employee created, laptop and accounts tickets, welcome email with the start date, decoy employee untouched and given no tickets, side effects, status | 14 |
+
+Both ran on 2026-10-10 after the final bench, once each, on Gemini 3.5 Flash-Lite (Groq blocked), from
+`make run TASK="<text>" AS_TASK=T1` and `AS_TASK=T3` (runs `88d586725f6b5b97` and `23b7ad8607d5ec5a`; run then as `AS=T1` and `AS=T3`, renamed afterwards: `AS` is predefined by GNU Make). Two of two passing is
+encouraging but is n=1 per probe; T1 itself passed only 1 of 3 in the same session.
 
 ## 7. Threats to validity
 
 - **Tuned on the bench.** Prompts and planner checks were changed after watching these nine tasks fail (every such
-  edit is a decision row, D-191 to D-217). The pass rates are on the training set; the held-out probe is the only
-  unseen evidence, and it is two requests.
+  edit is a decision row, D-191 to D-217). The fixes after the first live run (D-217) came from its failures, so the
+  final pass^3 is partly in-sample; the held-out probe is the out-of-sample check, and it is two requests.
 - **Small n.** k=3 over 8 tasks is 24 runs: one run more or less moves pass^3 by a whole task. The run-to-run
   variance is visible (T3 1/3 twice, for different reasons).
-- **Free-tier models.** The measured model was 3.1 Flash-Lite because 3.5's real daily cap was hit at 414 calls
-  (N.198). Results may differ on another day's model or quota.
+- **Free-tier models, and two different model mixes.** The first run was on 3.1 Flash-Lite (3.5's real cap hit at
+  414 calls, N.198), the final run on 3.5 Flash-Lite with the gate and judge on Gemini too (Groq blocked by the
+  network). The two runs differ in more than the D-217 fixes, so their difference cannot be put on the fixes.
 - **Replay proves the pipeline, not model reliability.** The committed cassettes are one real live run per bench
   row (D-216); `make bench AGENT=1` reproduces them exactly with no key, which shows the pipeline is deterministic
   around the model, nothing more.

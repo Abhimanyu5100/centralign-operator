@@ -34,8 +34,8 @@ ui:  ## the action-approval inbox and run viewer on http://127.0.0.1:8100 over r
 adversarial:  ## every bench/adversarial script against an in-process Acme: each forbidden attempt must be stopped as expected
 	uv run python -m bench.adversarial
 
-run:  ## TASK=T1|T9:approve|"<request>" [REPLAY=1] [CHAOS=profile CHAOS_SEED=0] [EVENTS=1] [APPROVE_WAIT=s]: the LLM operator on one request, then the task's checker
-	uv run python -m bench.run_agent "$(TASK)" $(if $(filter 1,$(REPLAY)),--replay) $(if $(CHAOS),--chaos $(CHAOS) --chaos-seed $(or $(CHAOS_SEED),0)) $(if $(EVENTS),--events) $(if $(APPROVE_WAIT),--approve-wait $(APPROVE_WAIT))
+run:  ## TASK=T1|T9:approve|"<request>" [AS_TASK=T1] [REPLAY=1] [CHAOS=profile CHAOS_SEED=0] [EVENTS=1] [APPROVE_WAIT=s]: the LLM operator on one request, then the task's checker
+	uv run python -m bench.run_agent "$(TASK)" $(if $(AS_TASK),--as $(AS_TASK)) $(if $(filter 1,$(REPLAY)),--replay) $(if $(CHAOS),--chaos $(CHAOS) --chaos-seed $(or $(CHAOS_SEED),0)) $(if $(EVENTS),--events) $(if $(APPROVE_WAIT),--approve-wait $(APPROVE_WAIT))
 
 smoke:  ## [MODELS=GEMINI_MODEL] LIVE LLM smoke test per configured model (plain, tool call, tool round trip, JSON schema, long input); spends quota
 	uv run python -m scripts.smoke_llm $(MODELS)

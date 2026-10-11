@@ -46,9 +46,10 @@ from bench.run_agent import quota_book
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "bench" / "results"
 NO_DELAYED_WRITE = {"T3", "T8"}       # D-123
-# Chaos variants with LLM cassettes (`--agent` replays only these). T1 flaky_500's live recording (Day 6, failed)
-# no longer replays: D-215 changed the refusal its replan retry was sent; its live result stays in the results file.
-RECORDED_CHAOS = {("T3", "commit_then_timeout"), ("T8", "session_expiry_at_step_5"), ("T8", "commit_then_timeout")}
+# Chaos variants with LLM cassettes (`--agent` replays only these): every API variant, from the final Day 6 live run
+# (D-216; T1 flaky_500's recording is its failing attempt, so it replays as measured).
+RECORDED_CHAOS = {("T1", "flaky_500"), ("T3", "commit_then_timeout"), ("T8", "session_expiry_at_step_5"),
+                  ("T8", "commit_then_timeout")}
 REFUSALS = {"T4": "needs_clarification", "T5": "infeasible"}
 
 
