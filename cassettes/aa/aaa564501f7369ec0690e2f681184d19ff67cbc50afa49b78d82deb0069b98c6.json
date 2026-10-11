@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\n  \"decision\": \"proceed\",\n  \"sop_id\": \"onboard-employee\",\n  \"question\": \"\",\n  \"reason\": \"The employee Priya Nair is a new hire, and the onboard-employee procedure fits.\",\n  \"candidates\": [\n    \"onboard-employee\"\n  ],\n  \"success\": [\n    \"Priya Nair is onboarded successfully.\"\n  ],\n  \"fields\": [\n    {\n      \"name\": \"Employee Name\",\n      \"value\": \"Priya Nair\",\n      \"source\": \"request\"\n    },\n    {\n      \"name\": \"Start Day\",\n      \"value\": \"Monday\",\n      \"source\": \"request\"\n    }\n  ]\n}",
+  "content": "{\"candidates\":[\"onboard-employee\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"employee_name\",\"value\":\"Priya Nair\",\"source\":\"request\"},{\"name\":\"start_date\",\"value\":\"Monday\",\"source\":\"request\"}],\"question\":\"\",\"reason\":\"No existing employee named Priya Nair; proceed with onboarding as a new hire.\",\"sop_id\":\"onboard-employee\",\"success\":[\"Employee Priya Nair added to employee records with start date Monday.\"]}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\n  \"decision\": \"proceed\",\n  \"sop_id\": \"onboard-employee\",\n  \"question\": \"\",\n  \"reason\": \"The employee Priya Nair is a new hire, and the onboard-employee procedure fits.\",\n  \"candidates\": [\n    \"onboard-employee\"\n  ],\n  \"success\": [\n    \"Priya Nair is onboarded successfully.\"\n  ],\n  \"fields\": [\n    {\n      \"name\": \"Employee Name\",\n      \"value\": \"Priya Nair\",\n      \"source\": \"request\"\n    },\n    {\n      \"name\": \"Start Day\",\n      \"value\": \"Monday\",\n      \"source\": \"request\"\n    }\n  ]\n}"
+   "content": "{\"candidates\":[\"onboard-employee\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"employee_name\",\"value\":\"Priya Nair\",\"source\":\"request\"},{\"name\":\"start_date\",\"value\":\"Monday\",\"source\":\"request\"}],\"question\":\"\",\"reason\":\"No existing employee named Priya Nair; proceed with onboarding as a new hire.\",\"sop_id\":\"onboard-employee\",\"success\":[\"Employee Priya Nair added to employee records with start date Monday.\"]}"
   },
-  "provider": "gemini",
-  "model": "gemini-3.5-flash-lite",
+  "provider": "groq",
+  "model": "openai/gpt-oss-120b",
   "usage": {
-   "prompt_tokens": 310,
-   "completion_tokens": 163,
-   "total_tokens": 473
+   "prompt_tokens": 576,
+   "completion_tokens": 588,
+   "total_tokens": 1164
   }
  }
 }

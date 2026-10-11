@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\n  \"decision\": \"proceed\",\n  \"sop_id\": \"schedule-payment\",\n  \"question\": \"\",\n  \"reason\": \"The vendor Sharma Logistics Pvt Ltd is found uniquely and has an approved invoice, matching the criteria for scheduling a payment.\",\n  \"candidates\": [\n    \"schedule-payment\"\n  ],\n  \"success\": [\n    \"Payment scheduled for Sharma Logistics Pvt Ltd approved invoice\"\n  ],\n  \"fields\": [\n    {\n      \"name\": \"vendor_name\",\n      \"value\": \"Sharma Logistics Pvt Ltd\",\n      \"source\": \"probe\"\n    }\n  ]\n}",
+  "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"probe\"},{\"name\":\"invoice_status\",\"value\":\"approved\",\"source\":\"probe\"}],\"question\":\"\",\"reason\":\"Vendor Sharma Logistics Pvt Ltd found uniquely and invoice is approved; can schedule payment.\",\"sop_id\":\"schedule-payment\",\"success\":[\"Payment scheduled for Sharma Logistics Pvt Ltd's approved invoice.\"]}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\n  \"decision\": \"proceed\",\n  \"sop_id\": \"schedule-payment\",\n  \"question\": \"\",\n  \"reason\": \"The vendor Sharma Logistics Pvt Ltd is found uniquely and has an approved invoice, matching the criteria for scheduling a payment.\",\n  \"candidates\": [\n    \"schedule-payment\"\n  ],\n  \"success\": [\n    \"Payment scheduled for Sharma Logistics Pvt Ltd approved invoice\"\n  ],\n  \"fields\": [\n    {\n      \"name\": \"vendor_name\",\n      \"value\": \"Sharma Logistics Pvt Ltd\",\n      \"source\": \"probe\"\n    }\n  ]\n}"
+   "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"probe\"},{\"name\":\"invoice_status\",\"value\":\"approved\",\"source\":\"probe\"}],\"question\":\"\",\"reason\":\"Vendor Sharma Logistics Pvt Ltd found uniquely and invoice is approved; can schedule payment.\",\"sop_id\":\"schedule-payment\",\"success\":[\"Payment scheduled for Sharma Logistics Pvt Ltd's approved invoice.\"]}"
   },
-  "provider": "gemini",
-  "model": "gemini-3.5-flash-lite",
+  "provider": "groq",
+  "model": "openai/gpt-oss-120b",
   "usage": {
-   "prompt_tokens": 294,
-   "completion_tokens": 140,
-   "total_tokens": 434
+   "prompt_tokens": 557,
+   "completion_tokens": 503,
+   "total_tokens": 1060
   }
  }
 }

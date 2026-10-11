@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"decision\": \"proceed\", \"sop_id\": \"process-invoice\", \"question\": \"\", \"reason\": \"Vendor Sharma Logistics was found uniquely and the procedure fits.\", \"candidates\": [\"process-invoice\"], \"success\": [\"Invoice from Sharma Logistics processed\"], \"fields\": [{\"name\": \"vendor_name\", \"value\": \"Sharma Logistics\", \"source\": \"request\"}]}",
+  "content": "{\"decision\":\"proceed\",\"sop_id\":\"process-invoice\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"probe\"}],\"success\":[\"Invoice from Sharma Logistics Pvt Ltd processed.\"],\"question\":\"\",\"candidates\":[\"process-invoice\"],\"reason\":\"Vendor uniquely identified and matches the process-invoice procedure.\"}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"decision\": \"proceed\", \"sop_id\": \"process-invoice\", \"question\": \"\", \"reason\": \"Vendor Sharma Logistics was found uniquely and the procedure fits.\", \"candidates\": [\"process-invoice\"], \"success\": [\"Invoice from Sharma Logistics processed\"], \"fields\": [{\"name\": \"vendor_name\", \"value\": \"Sharma Logistics\", \"source\": \"request\"}]}"
+   "content": "{\"decision\":\"proceed\",\"sop_id\":\"process-invoice\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"probe\"}],\"success\":[\"Invoice from Sharma Logistics Pvt Ltd processed.\"],\"question\":\"\",\"candidates\":[\"process-invoice\"],\"reason\":\"Vendor uniquely identified and matches the process-invoice procedure.\"}"
   },
-  "provider": "gemini",
-  "model": "gemini-3.5-flash-lite",
+  "provider": "groq",
+  "model": "openai/gpt-oss-120b",
   "usage": {
-   "prompt_tokens": 289,
-   "completion_tokens": 78,
-   "total_tokens": 367
+   "prompt_tokens": 554,
+   "completion_tokens": 422,
+   "total_tokens": 976
   }
  }
 }

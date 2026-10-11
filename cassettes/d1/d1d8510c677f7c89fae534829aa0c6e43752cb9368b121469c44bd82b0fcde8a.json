@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"decision\": \"ask\", \"sop_id\": \"onboard-employee\", \"question\": \"Did you mean Priya Natarajan or a new hire named Priya Nair?\", \"reason\": \"The request mentions Priya Nair who is not found, but a similar employee Priya Natarajan exists.\", \"candidates\": [\"onboard-employee\"], \"success\": [\"Clarify employee identity\"], \"fields\": [{\"name\": \"employee_name\", \"value\": \"Priya Nair\", \"source\": \"request\"}, {\"name\": \"start_date\", \"value\": \"Monday\", \"source\": \"request\"}]}",
+  "content": "{\"candidates\":[\"onboard-employee\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"employee_name\",\"value\":\"Priya Nair\",\"source\":\"request\"},{\"name\":\"start_day\",\"value\":\"Monday\",\"source\":\"request\"}],\"question\":\"\",\"reason\":\"No existing employee matches the full name Priya Nair; the partial match to Priya Natarajan does not conflict, so the request can be processed as a new hire onboarding.\",\"sop_id\":\"onboard-employee\",\"success\":[\"Priya Nair added as a new employee record\",\"Onboarding workflow initiated with start day Monday\"]}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"decision\": \"ask\", \"sop_id\": \"onboard-employee\", \"question\": \"Did you mean Priya Natarajan or a new hire named Priya Nair?\", \"reason\": \"The request mentions Priya Nair who is not found, but a similar employee Priya Natarajan exists.\", \"candidates\": [\"onboard-employee\"], \"success\": [\"Clarify employee identity\"], \"fields\": [{\"name\": \"employee_name\", \"value\": \"Priya Nair\", \"source\": \"request\"}, {\"name\": \"start_date\", \"value\": \"Monday\", \"source\": \"request\"}]}"
+   "content": "{\"candidates\":[\"onboard-employee\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"employee_name\",\"value\":\"Priya Nair\",\"source\":\"request\"},{\"name\":\"start_day\",\"value\":\"Monday\",\"source\":\"request\"}],\"question\":\"\",\"reason\":\"No existing employee matches the full name Priya Nair; the partial match to Priya Natarajan does not conflict, so the request can be processed as a new hire onboarding.\",\"sop_id\":\"onboard-employee\",\"success\":[\"Priya Nair added as a new employee record\",\"Onboarding workflow initiated with start day Monday\"]}"
   },
-  "provider": "gemini",
-  "model": "gemini-3.5-flash-lite",
+  "provider": "groq",
+  "model": "openai/gpt-oss-120b",
   "usage": {
-   "prompt_tokens": 310,
-   "completion_tokens": 124,
-   "total_tokens": 434
+   "prompt_tokens": 576,
+   "completion_tokens": 704,
+   "total_tokens": 1280
   }
  }
 }

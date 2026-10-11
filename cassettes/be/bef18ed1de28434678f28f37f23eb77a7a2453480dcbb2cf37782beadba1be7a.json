@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"decision\": \"decline\", \"sop_id\": \"process-invoice\", \"question\": \"\", \"reason\": \"The vendor Kapoor Steel does not exist in the company's records.\", \"candidates\": [\"process-invoice\", \"schedule-payment\"], \"success\": [], \"fields\": [{\"name\": \"vendor_name\", \"value\": \"Kapoor Steel\", \"source\": \"request\"}]}",
+  "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"decline\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"request\",\"value\":\"Kapoor Steel\"}],\"success\":[\"No payment processed because the vendor Kapoor Steel was not found in the system.\"],\"question\":\"Could you confirm the correct vendor name for this invoice?\",\"reason\":\"Vendor 'Kapoor Steel' does not exist in the company's records.\",\"sop_id\":\"\"}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"decision\": \"decline\", \"sop_id\": \"process-invoice\", \"question\": \"\", \"reason\": \"The vendor Kapoor Steel does not exist in the company's records.\", \"candidates\": [\"process-invoice\", \"schedule-payment\"], \"success\": [], \"fields\": [{\"name\": \"vendor_name\", \"value\": \"Kapoor Steel\", \"source\": \"request\"}]}"
+   "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"decline\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"request\",\"value\":\"Kapoor Steel\"}],\"success\":[\"No payment processed because the vendor Kapoor Steel was not found in the system.\"],\"question\":\"Could you confirm the correct vendor name for this invoice?\",\"reason\":\"Vendor 'Kapoor Steel' does not exist in the company's records.\",\"sop_id\":\"\"}"
   },
-  "provider": "gemini",
-  "model": "gemini-3.5-flash-lite",
+  "provider": "groq",
+  "model": "openai/gpt-oss-120b",
   "usage": {
-   "prompt_tokens": 315,
-   "completion_tokens": 82,
-   "total_tokens": 397
+   "prompt_tokens": 575,
+   "completion_tokens": 538,
+   "total_tokens": 1113
   }
  }
 }

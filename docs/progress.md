@@ -5,29 +5,25 @@ If this file disagrees with git, git wins for what is committed.
 
 ## Now
 
-- **Last updated:** 2026-10-10 15:05 IST
-- **Day / phase / part:** Day 6, Phase 3 done (final live pass^3, held-out probe, cassettes, docs filled, G), awaiting
-  the author's last commit ("Day 6.Final: ..."). After it: record the demo video, add its link, submit.
-- **Final live pass^3 (bench/results/20261010-142841, 3.5 Flash-Lite for every role; Groq blocked by the network,
-  HTTP 403, N.208):** pass^3 2/8 (T5, T8), chaos-off 19/27, T9 3/3, refusals 5/6, chaos 4/4 fired 3/4 passed,
-  unexplained 0, agreement 31/31, adversarial 8/8, 456 calls, 1.92M tokens, 34 min. First run (20261010-002547, 3.1
-  Flash-Lite + Groq): pass^3 5/8. Main final failure N.192/N.210 (request vendor name asserted), 4 of 8.
-- **Held-out probe (D-218):** P1 (T1 reworded) and P2 (T3 reworded) both pass their task's checker, once each.
-- **Replay (bench/results/20261010-143259):** 191 cassettes from the final run (D-216), `make bench AGENT=1` with
-  no key: every row to its live status, calls and tokens; e2e 69 passed.
-- **G:** `WORKTREE=1 DOCKER=1 scripts/fresh_clone.sh` OK (secret scan clean, make test 1894 + 1 skipped (no key to
-  scan for), T1 replay, replay bench 11/11, Docker /healthz, attribution check passed). It found that GNU make's
-  built-in `AS` broke `make run`; renamed to `AS_TASK`.
-- **Running agent/ total (ceiling 3,950):** **3,870** non-blank lines.
-- **Tests:** `make test` 1895 passed; `make test-e2e` 69 passed; doc test 26 passed.
-- **Next step:** the author's commit (force-add the two new results files), then the demo video and submission.
+- **Last updated:** 2026-10-12 00:15 IST
+- **Day / phase / part:** Day 6, rerun done (D-219), awaiting the author's commit ("Day 6.Rerun: ..."). Then the demo
+  video, its link, submit.
+- **Headline, rerun under the intended conditions (bench/results/20261011-235606; 3.1 Flash-Lite pinned, Groq
+  reachable):** pass^3 3/8 (T1, T5, T8), chaos-off 13/27, refusals 4/6, chaos 4/4 fired 3/4 passed, unexplained 0,
+  agreement 31/31, adversarial 8/8, 427 calls. Listed beside it: first run 5/8 (20261010-002547), VPN-confounded 2/8
+  (20261010-142841). D-217 regressed on this model (N.212); T4 guessed between duplicate invoices (N.213).
+- **Replay (bench/results/20261012-000049):** 166 cassettes from the rerun; every row to its live status with no
+  key; T2 by a shorter path (N.211).
+- **Checks:** `make test` 1895 passed; `make test-e2e` 69 passed; doc test 26 passed; `WORKTREE=1 DOCKER=1
+  scripts/fresh_clone.sh` OK (secret scan, make test, T1 replay, replay bench, Docker /healthz, attribution).
+- **Running agent/ total (ceiling 3,950):** **3,870** non-blank lines (no code change tonight).
+- **Next step:** the author's commit; the demo video (docs/DEMO.md); the two README TODO video links; submit.
 - **RESUME PROMPT:**
   ```
-  Read CLAUDE.md and docs/progress.md. Day 6 is complete: final live pass^3 2/8 (bench/results/20261010-142841),
-  first 5/8 (20261010-002547), held-out probe 2/2, replay 20261010-143259, fresh-clone test OK. What is left: the
-  demo video (docs/DEMO.md), its link in README.md (two TODO placeholders), and the submission form. Optional, with
-  live quota: the N.210 and N.209 fixes (docs/EVALUATION.md "What would fix the main one") with a re-measure. Do not
-  commit or push.
+  Read CLAUDE.md and docs/progress.md. Day 6 is complete: headline rerun pass^3 3/8 (bench/results/20261011-235606),
+  first 5/8, VPN-confounded 2/8, all listed in README and docs/EVALUATION.md. What is left: the demo video
+  (docs/DEMO.md), its link in README.md, the submission form. Optional with quota: N.212 (revert or re-measure the
+  D-217 rule-7 change), N.213 (ask on duplicate candidate rows), N.210, N.211. Do not commit or push.
   ```
 
 ## Done log
@@ -64,7 +60,8 @@ If this file disagrees with git, git wins for what is committed.
 | 2026-10-10 | 6.A-B | Live LLM bench mode (`make bench AGENT=1 LIVE=1 K=3`, per-attempt recordings, quota book, rows printed live, LLM columns, T9 reject scope, D-211); live pass^3 21/27, pass^3 5/8; fixes from measurement D-212 (converted paise, facts two strikes), D-214 (result 0 includes lookups), D-215 (enum where -> args, frozen met milestones, verifier no-row ref); T3 re-measured; cassettes rebuilt from the live runs (`bench/keep_cassettes.py`, D-216); run viewer `/runs` (E); README draft (D); Docker TZ + GIT_COMMIT edits (C, not built); `scripts/fresh_clone.sh`; cuts recorded (D-213) | `agent/{executor,normalise,planner,run}.py`, `agent/verifier/predicates.py`, `bench/{run_bench,live,run_agent,tasks,keep_cassettes}.py`, `ui/app.py`, `ui/templates/{inbox,runs,run}.html`, `cassettes/*`, `README.md`, `Dockerfile`, `docker-compose.yml`, `Makefile`, `scripts/fresh_clone.sh`, tests (executor, operate, verifier, prompt freeze, run_bench, keep_cassettes, run viewer, packaging, e2e replay), `docs/{decisions,risk-log,progress}.md` | `make test`: 1858 passed, 0 failed; `make test-e2e`: 62 passed, 0 failed; live bench 21/27 (pass^3 5/8), adversarial 8/8; replay bench 10/11 as live, adversarial 8/8; every new fix test fails without its fix | e7df5ab |
 | 2026-10-10 | 6.C-E | D-217 generic fixes (company_rules from policies.yaml, contains per row, judge criteria about meaning, contains values sourced); Docker TZ + GIT_COMMIT built and run (timings in Now); README results from both live result files with the D-216 note; run viewer row counts | `agent/planner.py`, `agent/verifier/judge.py`, `ui/app.py`, `README.md`, `Dockerfile`, `docker-compose.yml`, `tests/agent/{test_operate,test_prompt_freeze}.py`, `tests/ui/test_run_viewer.py`, `docs/{decisions,risk-log,progress}.md` | `make test`: 1868 passed, 0 failed; `make test-e2e`: 56 passed, 12 failed (stale replay, N.207); Docker runner bench 12/12, adversarial 8/8; the 5 new D-217 tests fail without the fixes | 65f6391 |
 | 2026-10-10 | 6.Docs | Submission docs: README rewritten as the front door (submission-requirements map, Mermaid architecture, 8 decisions, assumptions, limitations, next, tools), docs/DESIGN.md, docs/EVALUATION.md, docs/EXTENDING.md, docs/DEMO.md; results sections TODO until the final run; doc test (make targets, links and anchors, cited tests, D- and N- ids, results files) | `README.md`, `docs/{DESIGN,EVALUATION,EXTENDING,DEMO}.md`, `tests/test_docs.py`, `docs/progress.md` | `make test`: 1894 passed, 0 failed (doc test 26) | 58a4c56 |
-| 2026-10-10 | 6.Final | Final live pass^3 (2/8, Groq blocked), held-out probe 2/2 (`AS_TASK=`, D-218), cassettes from the final run (191), README/EVALUATION/DEMO results filled, fresh-clone WORKTREE mode, `AS` -> `AS_TASK` fix, risks N.208-N.210 | `Makefile`, `bench/{run_agent,run_bench}.py`, `cassettes/*`, `README.md`, `docs/{EVALUATION,DEMO,decisions,risk-log,progress}.md`, `scripts/fresh_clone.sh`, `tests/e2e/test_agent_replay.py`, `tests/bench/test_run_agent_as.py` | `make test`: 1895 passed; `make test-e2e`: 69 passed; doc test 26 passed; fresh clone OK | pending |
+| 2026-10-10 | 6.Final | Final live pass^3 (2/8, Groq blocked), held-out probe 2/2 (`AS_TASK=`, D-218), cassettes from the final run (191), README/EVALUATION/DEMO results filled, fresh-clone WORKTREE mode, `AS` -> `AS_TASK` fix, risks N.208-N.210 | `Makefile`, `bench/{run_agent,run_bench}.py`, `cassettes/*`, `README.md`, `docs/{EVALUATION,DEMO,decisions,risk-log,progress}.md`, `scripts/fresh_clone.sh`, `tests/e2e/test_agent_replay.py`, `tests/bench/test_run_agent_as.py` | `make test`: 1895 passed; `make test-e2e`: 69 passed; doc test 26 passed; fresh clone OK | a7703d8 |
+| 2026-10-12 | 6.Rerun | Final live pass^3 rerun under the intended conditions (D-219): 3/8, the README headline with all three runs side by side; cassettes rebuilt from it (166); e2e replay cases updated; risks N.211-N.213 | `README.md`, `docs/{EVALUATION,DEMO,decisions,risk-log,progress}.md`, `cassettes/*`, `tests/e2e/test_agent_replay.py` | `make test`: 1895 passed; `make test-e2e`: 69 passed; doc test 26; fresh clone OK | pending |
 
 ## Blockers and open questions
 

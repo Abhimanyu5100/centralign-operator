@@ -19,19 +19,28 @@ def replay(task, chaos, tmp_path, capsys) -> tuple[int, str]:
     return code, capsys.readouterr().out
 
 
-@pytest.mark.parametrize("task, chaos", [("T1", None), ("T2", None), ("T3", None), ("T4", None), ("T5", None),
-                                         ("T6", None), ("T7", None), ("T8", None), ("T9:none", None),
-                                         ("T9:approve", None), ("T9:reject", None), ("T3", "commit_then_timeout"),
+@pytest.mark.parametrize("task, chaos", [("T1", None), ("T3", None), ("T4", None), ("T5", None), ("T8", None),
+                                         ("T9:none", None), ("T9:reject", None), ("T1", "flaky_500"),
                                          ("T8", "session_expiry_at_step_5"), ("T8", "commit_then_timeout")])
 def test_the_recorded_llm_run_replays_with_no_key_and_passes_its_checker(task, chaos, tmp_path, capsys):
-    """Day 6 (D-216): every row whose live run passed replays, with no key, to a pass."""
+    """Day 6 rerun (bench/results/20261011-235606, D-216): every row whose live run passed replays to a pass."""
     code, out = replay(task, chaos, tmp_path, capsys)
     assert code == 0 and "['replayed']" in out and "FAIL" not in out
 
 
-@pytest.mark.parametrize("task, chaos, status", [("T1", "flaky_500", "failed")])
+@pytest.mark.parametrize("task, chaos, status", [("T3", "commit_then_timeout", "failed"),
+                                                 ("T6", None, "completed_with_exceptions"),
+                                                 ("T7", None, "completed_with_exceptions"),
+                                                 ("T9:approve", None, "failed")])
 def test_a_run_that_failed_live_replays_to_the_same_measured_status(task, chaos, status, tmp_path, capsys):
-    """Measured failures are kept, not hidden (D-216): T1 under flaky_500 failed live in the final run (the 500 was
-    recovered; the plan asserted the request's vendor name, N.192); the replay shows the same."""
+    """Measured failures are kept, not hidden (D-216): no attempt of these rows passed in the rerun; the replay of
+    the first attempt shows the same status (docs/EVALUATION.md, per-failure analysis)."""
     code, out = replay(task, chaos, tmp_path, capsys)
     assert code == 1 and "['replayed']" in out and "CassetteMiss" not in out and f"verifier: {status}" in out
+
+
+def test_a_run_that_repeats_an_identical_request_replays_to_its_status_but_stops_early(tmp_path, capsys):
+    """N.211: T2's live attempts each sent one identical request twice and got two replies; a cassette keeps one, so
+    the replay reaches the live status (`failed`) by a shorter path and stops at a cassette miss."""
+    code, out = replay("T2", None, tmp_path, capsys)
+    assert code == 1 and "verifier: failed" in out and "CassetteMiss" in out
