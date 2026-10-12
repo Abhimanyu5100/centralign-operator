@@ -74,7 +74,9 @@ async def _main(args: argparse.Namespace) -> int:
         book = None if args.replay else quota_book(config)
         if book:
             print(quota_line(config, book))
-        approver = for_agent(store.path, found.approver if found else "none", args.approve_wait)
+        # with APPROVE_WAIT a person decides in `make ui`; the variant (T9:approve, T9:reject) only picks the checker
+        approver = for_agent(store.path, found.approver if found and not args.approve_wait else "none",
+                             args.approve_wait)
         report = await operate(request, datetime.fromisoformat(now), store=store, config=config, approver=approver,
                                quota=book)
         diff = acme.admin("GET", "/__admin/diff", since=snapshot)["tables"]

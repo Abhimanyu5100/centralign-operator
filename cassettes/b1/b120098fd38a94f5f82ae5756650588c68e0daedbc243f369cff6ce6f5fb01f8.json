@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"request\",\"value\":\"Mehta Supplies\"}],\"question\":\"\",\"reason\":\"Vendor Mehta Supplies was found exactly once and matches the required party for the invoice processing procedure.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice from Mehta Supplies will be processed.\"]}",
+  "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"request\",\"value\":\"Mehta Supplies\"}],\"question\":\"\",\"reason\":\"Vendor Mehta Supplies found uniquely and approved; procedure matches request.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice from Mehta Supplies will be processed.\"]}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"request\",\"value\":\"Mehta Supplies\"}],\"question\":\"\",\"reason\":\"Vendor Mehta Supplies was found exactly once and matches the required party for the invoice processing procedure.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice from Mehta Supplies will be processed.\"]}"
+   "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"request\",\"value\":\"Mehta Supplies\"}],\"question\":\"\",\"reason\":\"Vendor Mehta Supplies found uniquely and approved; procedure matches request.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice from Mehta Supplies will be processed.\"]}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 554,
-   "completion_tokens": 359,
-   "total_tokens": 913
+   "completion_tokens": 519,
+   "total_tokens": 1073
   }
  }
 }

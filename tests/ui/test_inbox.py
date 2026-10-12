@@ -88,3 +88,18 @@ def test_bad_decisions_are_typed_and_change_nothing(inbox, path, body, status):
 def test_a_random_token_is_made_when_none_is_given(tmp_path):
     first, second = create_app(tmp_path / "a.db"), create_app(tmp_path / "b.db")
     assert len(first.state.token) >= 24 and first.state.token != second.state.token
+
+
+def test_the_card_says_where_each_trust_sensitive_value_was_seen_and_hides_empty_args(tmp_path):
+    """N.13 on the card: the approver sees that the recipient came from a trusted record (the vendor master), not
+    from mail text; an argument the call leaves empty is not shown as "None" (found by the README capture)."""
+    path = tmp_path / "runs.db"
+    store = RunStore(path)
+    run_id = store.start_run("Email Sharma Logistics that invoice INV-1043 is under review.", NOW)
+    predicted = {**PREDICTED, "args": {**PREDICTED["args"], "attachments": None},
+                 "sources": {"to": "trusted record"}}
+    ApprovalStore(store).request(run_id, "e" * 64, ["ORG-005"], "ORG-005 require_approval: external", predicted)
+    store.close()
+    page = TestClient(create_app(path, token="t0ken")).get("/").text
+    assert "Seen in: trusted record" in page
+    assert ">attachments<" not in page and "<pre>None</pre>" not in page

@@ -4,8 +4,9 @@ guard, non-fired chaos runs kept apart, the summary and the markdown. D-095, D-1
 import pytest
 
 from bench import tasks
+from bench.checkers.engine import Check, Result
 from bench.run_bench import (Row, agreement, chaos_variants, completed_under_policy, markdown, pass_k, problems,
-                             summary)
+                             state_ok, summary)
 
 
 def row(run_id="T2", chaos="off", passed=True, fired=None, **extra) -> Row:
@@ -123,3 +124,18 @@ def test_a_live_run_records_its_scenario_apart_and_a_plain_run_keeps_the_plain_k
     assert tasks.cassette_scope(approve) == ""  # a person approving in make ui during a replay follows it
     assert tasks.cassette_scope(plain, "flaky_500", 0) == "flaky_500:0"  # D-209's chaos scope, unchanged
     assert tasks.cassette_scope(reject) == "reject"                       # D-211
+
+
+def test_state_correct_counts_acmes_end_state_apart_from_the_status():
+    """D-221: the rerun's T6 and T7 failed on the status (the judge lowered them) with Acme's state right. The
+    secondary measure counts runs whose DB and side-effect checks all passed; the headline stays `passed`."""
+    rows = [row(passed=False, status="completed_with_exceptions", state_ok=True, failed_checks=["report: status"]),
+            row(passed=False, state_ok=False, failed_checks=["invoice_entered"]), row(state_ok=True)]
+    s = summary(rows, [])
+    assert s["runs_passed"] == "1/3" and s["state_correct"] == "2/3"
+
+
+def test_state_ok_ignores_report_checks_only():
+    checks = [Check("invoice_entered", True), Check("side_effects", True), Check("report: status", False)]
+    assert state_ok(Result("T6", checks)) is True
+    assert state_ok(Result("T6", [*checks, Check("side_effects", False)])) is False

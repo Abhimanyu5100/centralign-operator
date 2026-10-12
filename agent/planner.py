@@ -19,15 +19,13 @@ from agent.policy.loader import POLICIES_PATH, load_policies
 from agent.tools.api import CATALOG_PATH
 from agent.tools.registry import _explain
 
-PROMPT = """You write the plan a back-office run will be checked against. Reply with one JSON object only, in the
+PROMPT_TEXT = """You write the plan a back-office run will be checked against. Reply with one JSON object only, in the
 schema given. Rules:
 1. 1 to 7 milestones (aim for 3 to 7). Each is a TARGET STATE of a record the run creates or changes, or must leave
    unchanged, in words; never a click, a tool call, or finding or reading something. Each names its sop_step;
    every record the run will write is read by some milestone. Use only the args and row_fields of the tool list.
 2. Each milestone is checked by predicates: one API read tool call (read, args) whose rows are picked by `where`
    and must show `expect` (exact values) or `contains`; `count` is how many rows match (0 = must not exist).
-   `contains` checks text inside ONE row's field, every listed text in every picked row: several rows with
-   different values (a laptop ticket and an accounts ticket) need one predicate each.
 3. Find rows by business keys (numbers, names, statuses), never a database id: {"ref": "M1"} is the id of the row
    that milestone M1's first predicate found (that predicate must find exactly one row).
 4. Every value comes from the facts, the goal, the procedure or the tool list. Never invent one.
@@ -35,11 +33,10 @@ schema given. Rules:
 6. awaits_business_approval: true on a milestone whose record will wait for a business approval.
 7. Every procedure step that writes (its Source names a POST) is the sop_step of a milestone. Only a step whose
    title says "when ..." may instead be a key of not_applicable, with the reason it does not apply here: decide
-   from its Target, the facts and company_rules (Acme's own rules; a limit is in paise, compared with the total)
-   whether its condition holds; when it does not, list it in not_applicable or check its "otherwise" state.
-8. judge: at most 3 short criteria about meaning and tone only (whether the text says something, in any words),
-   on a milestone whose predicates find the record; never which field must say it. Exact field contents stay
-   predicates (`contains`)."""
+   from its Target and the facts (amounts are in paise: <LIMIT>) whether its condition
+   holds; when it does not, list it in not_applicable or check its "otherwise" state.
+8. judge: at most 3 short criteria that no exact predicate can check (tone; whether a text says something in
+   words), on a milestone whose predicates find the record. Exact checks stay predicates."""
 REPLAN = """
 
 Revise the plan: an independent check found the milestones in `unmet` not met (what each read found is given).
@@ -50,10 +47,20 @@ the plan was right and the work is missing, send it back unchanged."""
 
 def company_rules(path: Path = POLICIES_PATH) -> list[dict[str, Any]]:
     """The rules Acme enforces itself, each with the constants its code checks (the approval limit), read from the
-    policy file at run time (D-217): the planner predicts Acme's statuses from them. No rule id lives in code."""
+    policy file at run time (D-217); since D-220 only the limit reaches the planner, inside rule 7's text."""
     return [{"rule": r.message, **({"limits": limits} if (limits := {
         c.ref.rsplit(".", 1)[-1]: c.equals for c in r.acme_check if c.kind == "constant"}) else {})}
         for r in load_policies(path).rules if r.enforced_by == "acme"]
+
+
+def plan_prompt(path: Path = POLICIES_PATH) -> str:
+    """The planner prompt with Acme's approval limit written into rule 7 from the policy file (D-220): the pre-D-217
+    wording, whose example the model followed, without the amount living in code."""
+    paise = next(v for r in company_rules(path) for v in (r.get("limits") or {}).values())
+    return PROMPT_TEXT.replace("<LIMIT>", f"Rs {paise // 100:,} is {paise:,} paise")
+
+
+PROMPT = plan_prompt()
 
 
 def read_tools(run, seen: dict[str, list[str]]) -> list[dict[str, Any]]:
@@ -169,7 +176,7 @@ def replan_errors(old: Plan, new: Plan, unmet: set[str]) -> list[str]:
 async def make_plan(run, llm, goal: GoalSpec, sop: Sop | None, facts: list[Fact], seen: dict[str, list[str]],
                     current: Plan | None = None, unmet: list = (), replan: int = 0) -> Plan | None:
     brief = {"goal": goal.model_dump(exclude={"decision", "question", "candidates", "reason", "lookups"}),
-             "facts": shown(facts), "sop_id": goal.sop_id, "company_rules": company_rules(),
+             "facts": shown(facts), "sop_id": goal.sop_id,
              "read_tools": read_tools(run, seen), "schema": Plan.model_json_schema()}
     if current is not None:
         brief |= {"current_plan": current.model_dump(exclude_defaults=True),

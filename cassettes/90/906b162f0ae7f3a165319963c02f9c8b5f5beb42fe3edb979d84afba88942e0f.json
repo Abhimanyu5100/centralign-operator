@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"decision\":\"proceed\",\"sop_id\":\"process-invoice\",\"candidates\":[\"process-invoice\"],\"question\":\"Process Patel Engineering's invoice.\",\"reason\":\"Vendor Patel Engineering Works found uniquely and matches the process-invoice procedure.\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Patel Engineering Works\",\"source\":\"probe\"}],\"success\":[\"Invoice for Patel Engineering Works processed.\"]}",
+  "content": "{\"decision\":\"proceed\",\"sop_id\":\"process-invoice\",\"fields\":[{\"name\":\"requested_vendor\",\"value\":\"Patel Engineering\",\"source\":\"request\"},{\"name\":\"vendor_name\",\"value\":\"Patel Engineering Works\",\"source\":\"lookup\"}],\"success\":[\"Invoice for Patel Engineering Works will be processed.\"],\"question\":\"\",\"candidates\":[\"process-invoice\"],\"reason\":\"Vendor Patel Engineering Works found uniquely and matches the process-invoice procedure.\"}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"decision\":\"proceed\",\"sop_id\":\"process-invoice\",\"candidates\":[\"process-invoice\"],\"question\":\"Process Patel Engineering's invoice.\",\"reason\":\"Vendor Patel Engineering Works found uniquely and matches the process-invoice procedure.\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Patel Engineering Works\",\"source\":\"probe\"}],\"success\":[\"Invoice for Patel Engineering Works processed.\"]}"
+   "content": "{\"decision\":\"proceed\",\"sop_id\":\"process-invoice\",\"fields\":[{\"name\":\"requested_vendor\",\"value\":\"Patel Engineering\",\"source\":\"request\"},{\"name\":\"vendor_name\",\"value\":\"Patel Engineering Works\",\"source\":\"lookup\"}],\"success\":[\"Invoice for Patel Engineering Works will be processed.\"],\"question\":\"\",\"candidates\":[\"process-invoice\"],\"reason\":\"Vendor Patel Engineering Works found uniquely and matches the process-invoice procedure.\"}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 551,
-   "completion_tokens": 374,
-   "total_tokens": 925
+   "completion_tokens": 469,
+   "total_tokens": 1020
   }
  }
 }

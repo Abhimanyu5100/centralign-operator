@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\n  \"candidates\": [\"process-invoice\", \"schedule-payment\"],\n  \"decision\": \"proceed\",\n  \"fields\": [\n    {\n      \"name\": \"vendor_name\",\n      \"source\": \"lookup\",\n      \"value\": \"Verma Traders\"\n    },\n    {\n      \"name\": \"invoice_status\",\n      \"source\": \"request\",\n      \"value\": \"pending\"\n    }\n  ],\n  \"question\": \"\",\n  \"reason\": \"Vendor Verma Traders found uniquely and approved; request aligns with the schedule-payment procedure.\",\n  \"sop_id\": \"schedule-payment\",\n  \"success\": [\"Payment scheduled for pending invoice from Verma Traders.\"]\n}",
+  "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"ask\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"lookup\",\"value\":\"Verma Traders\"},{\"name\":\"vendor_id\",\"source\":\"lookup\",\"value\":\"3\"}],\"question\":\"Please provide the invoice number and amount for the pending invoice from Verma Traders.\",\"reason\":\"Invoice identifier and amount are missing; cannot process payment without these details.\",\"sop_id\":\"\",\"success\":[]}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\n  \"candidates\": [\"process-invoice\", \"schedule-payment\"],\n  \"decision\": \"proceed\",\n  \"fields\": [\n    {\n      \"name\": \"vendor_name\",\n      \"source\": \"lookup\",\n      \"value\": \"Verma Traders\"\n    },\n    {\n      \"name\": \"invoice_status\",\n      \"source\": \"request\",\n      \"value\": \"pending\"\n    }\n  ],\n  \"question\": \"\",\n  \"reason\": \"Vendor Verma Traders found uniquely and approved; request aligns with the schedule-payment procedure.\",\n  \"sop_id\": \"schedule-payment\",\n  \"success\": [\"Payment scheduled for pending invoice from Verma Traders.\"]\n}"
+   "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"ask\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"lookup\",\"value\":\"Verma Traders\"},{\"name\":\"vendor_id\",\"source\":\"lookup\",\"value\":\"3\"}],\"question\":\"Please provide the invoice number and amount for the pending invoice from Verma Traders.\",\"reason\":\"Invoice identifier and amount are missing; cannot process payment without these details.\",\"sop_id\":\"\",\"success\":[]}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 573,
-   "completion_tokens": 579,
-   "total_tokens": 1152
+   "completion_tokens": 784,
+   "total_tokens": 1357
   }
  }
 }

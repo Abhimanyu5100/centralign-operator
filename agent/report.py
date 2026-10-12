@@ -42,6 +42,11 @@ def _pairs(events: list[dict[str, Any]]) -> list[tuple[dict[str, Any], dict[str,
     return pairs
 
 
+def _clip(text: str, limit: int) -> str:
+    """Cut at a word boundary and say so, never mid-word or mid-markup (found by the README capture)."""
+    return text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0].rstrip(" `*_,;:") + " ..."
+
+
 def _summary(result: dict[str, Any]) -> str:
     data = result.get("data") or {}
     if not result.get("ok"):
@@ -173,7 +178,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines += [f"- replan {r['replan']}: {'; '.join(r['reasons'] or [])[:300]}" for r in report.get("replans", [])]
     lines += [f"- escalated: {report['escalation']}"] if report.get("escalation") else []
     lines += [f"- rolled back after the rejection: {report['rollback']}"] if report.get("rollback") else []
-    lines += [f"\n**The agent's own summary** (not the status): {t[:400]}" for t in report.get("narrative", [])]
+    lines += [f"\n**The agent's own summary** (not the status): {_clip(t, 400)}" for t in report.get("narrative", [])]
     lines += ["", f"Evidence: {len(report['evidence'])} tool results in the run log."]
     return "\n".join(lines) + "\n"
 

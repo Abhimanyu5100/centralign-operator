@@ -4,7 +4,7 @@ NOW ?= 2026-10-07T10:30:00+05:30
 # Docker serves on 0.0.0.0 (docker-compose.yml); on a laptop Acme stays on localhost.
 HOST ?= 127.0.0.1
 
-.PHONY: acme reset pdfs test test-e2e oracle ui adversarial bench smoke run
+.PHONY: acme reset pdfs test test-e2e oracle ui adversarial bench smoke run readme-assets demo-video
 
 acme:  ## (export ACME_ADMIN_TOKEN first to enable /__admin/*; unset = closed) make sure the PDFs exist, reset to SEED at NOW, then serve Acme on http://localhost:8000 (one worker: SQLite + logical clock)
 	uv run python -m acme.pdfs
@@ -36,6 +36,12 @@ adversarial:  ## every bench/adversarial script against an in-process Acme: each
 
 run:  ## TASK=T1|T9:approve|"<request>" [AS_TASK=T1] [REPLAY=1] [CHAOS=profile CHAOS_SEED=0] [EVENTS=1] [APPROVE_WAIT=s]: the LLM operator on one request, then the task's checker
 	uv run python -m bench.run_agent "$(TASK)" $(if $(AS_TASK),--as $(AS_TASK)) $(if $(filter 1,$(REPLAY)),--replay) $(if $(CHAOS),--chaos $(CHAOS) --chaos-seed $(or $(CHAOS_SEED),0)) $(if $(EVENTS),--events) $(if $(APPROVE_WAIT),--approve-wait $(APPROVE_WAIT))
+
+demo-video:  ## a captioned demo video from replayed runs (no key, no quota, no voiceover) -> runs/demo/demo.webm
+	uv run python scripts/demo_video.py
+
+readme-assets:  ## the README's screenshots and GIF from replayed runs (no key, no quota) -> docs/assets/
+	uv run python scripts/readme_assets.py
 
 smoke:  ## [MODELS=GEMINI_MODEL] LIVE LLM smoke test per configured model (plain, tool call, tool round trip, JSON schema, long input); spends quota
 	uv run python -m scripts.smoke_llm $(MODELS)

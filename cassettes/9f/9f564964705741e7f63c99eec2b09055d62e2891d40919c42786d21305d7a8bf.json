@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"lookup\"},{\"name\":\"invoice_status\",\"value\":\"approved\",\"source\":\"lookup\"}],\"question\":\"\",\"reason\":\"Vendor Sharma Logistics Pvt Ltd found uniquely and marked approved, enabling payment scheduling.\",\"sop_id\":\"schedule-payment\",\"success\":[\"Payment scheduled for Sharma Logistics Pvt Ltd's approved invoice.\"]}",
+  "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"lookup\",\"value\":\"Sharma Logistics Pvt Ltd\"},{\"name\":\"invoice_status\",\"source\":\"lookup\",\"value\":\"approved\"}],\"question\":\"\",\"reason\":\"Vendor Sharma found uniquely and invoice is approved; schedule-payment SOP matches request.\",\"sop_id\":\"schedule-payment\",\"success\":[\"Payment scheduled for Sharma Logistics Pvt Ltd invoice.\"]}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"lookup\"},{\"name\":\"invoice_status\",\"value\":\"approved\",\"source\":\"lookup\"}],\"question\":\"\",\"reason\":\"Vendor Sharma Logistics Pvt Ltd found uniquely and marked approved, enabling payment scheduling.\",\"sop_id\":\"schedule-payment\",\"success\":[\"Payment scheduled for Sharma Logistics Pvt Ltd's approved invoice.\"]}"
+   "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"lookup\",\"value\":\"Sharma Logistics Pvt Ltd\"},{\"name\":\"invoice_status\",\"source\":\"lookup\",\"value\":\"approved\"}],\"question\":\"\",\"reason\":\"Vendor Sharma found uniquely and invoice is approved; schedule-payment SOP matches request.\",\"sop_id\":\"schedule-payment\",\"success\":[\"Payment scheduled for Sharma Logistics Pvt Ltd invoice.\"]}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 557,
-   "completion_tokens": 492,
-   "total_tokens": 1049
+   "completion_tokens": 609,
+   "total_tokens": 1166
   }
  }
 }

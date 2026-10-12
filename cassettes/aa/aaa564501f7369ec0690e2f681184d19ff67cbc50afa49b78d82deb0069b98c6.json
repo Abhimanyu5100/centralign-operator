@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"onboard-employee\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"employee_name\",\"value\":\"Priya Nair\",\"source\":\"request\"},{\"name\":\"start_date\",\"value\":\"Monday\",\"source\":\"request\"}],\"question\":\"\",\"reason\":\"No existing employee named Priya Nair; proceed with onboarding as a new hire.\",\"sop_id\":\"onboard-employee\",\"success\":[\"Employee Priya Nair added to employee records with start date Monday.\"]}",
+  "content": "{\"candidates\":[\"onboard-employee\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"employee_name\",\"value\":\"Priya Nair\",\"source\":\"request\"},{\"name\":\"start_date\",\"value\":\"Monday\",\"source\":\"request\"}],\"question\":\"\",\"reason\":\"No existing employee matches the full name Priya Nair; proceed to onboard as a new hire.\",\"sop_id\":\"onboard-employee\",\"success\":[\"Employee Priya Nair added to employee records\",\"Onboarding workflow started for Priya Nair with start date Monday\"]}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"onboard-employee\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"employee_name\",\"value\":\"Priya Nair\",\"source\":\"request\"},{\"name\":\"start_date\",\"value\":\"Monday\",\"source\":\"request\"}],\"question\":\"\",\"reason\":\"No existing employee named Priya Nair; proceed with onboarding as a new hire.\",\"sop_id\":\"onboard-employee\",\"success\":[\"Employee Priya Nair added to employee records with start date Monday.\"]}"
+   "content": "{\"candidates\":[\"onboard-employee\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"employee_name\",\"value\":\"Priya Nair\",\"source\":\"request\"},{\"name\":\"start_date\",\"value\":\"Monday\",\"source\":\"request\"}],\"question\":\"\",\"reason\":\"No existing employee matches the full name Priya Nair; proceed to onboard as a new hire.\",\"sop_id\":\"onboard-employee\",\"success\":[\"Employee Priya Nair added to employee records\",\"Onboarding workflow started for Priya Nair with start date Monday\"]}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 576,
-   "completion_tokens": 588,
-   "total_tokens": 1164
+   "completion_tokens": 679,
+   "total_tokens": 1255
   }
  }
 }

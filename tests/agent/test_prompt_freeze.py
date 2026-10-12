@@ -15,7 +15,7 @@ from agent.tools.registry import ToolSpec
 from tests.agent.acme_fixtures import drive, sandbox  # noqa: F401  (sandbox is a fixture)
 
 judge = importlib.import_module("agent.verifier.judge")  # the module (agent.verifier exports the function)
-PINNED = "7c3ce9500d301455428b106d68aa4eb17075303d1bc75f11985c8b747b17e9fd"  # D-212, D-214, D-215, D-217
+PINNED = "b29b224fadbfe704399add2a8baf4089a119d0a6b1de4e44faa3f4c23e089e61"  # D-212, D-214, D-215, D-217, D-220
 
 
 def prompt_inputs(registry) -> str:

@@ -78,6 +78,8 @@ class Row:
     tokens: int = 0
     models: list[str] = field(default_factory=list)
     cassettes: list[str] = field(default_factory=list)
+    state_ok: bool | None = None     # Acme's end state right: every DB predicate and side-effect check, no report check
+    failed_checks: list[str] = field(default_factory=list)  # the engine's failed check names (D-221)
 
 
 # --- the columns (pure functions, tested in tests/bench/test_run_bench.py) ----------------------------------------
@@ -115,6 +117,12 @@ def chaos_variants(task) -> list[tuple[str, int, str]]:
     return variants
 
 
+def state_ok(result) -> bool:
+    """Acme's end state is right: every DB predicate and the side-effect check passed; report checks (the status,
+    questions, findings) are left out. The secondary measure next to `passed` (D-221)."""
+    return all(c.ok for c in result.checks if not c.name.startswith("report: "))
+
+
 def row_of(o: OracleRun, channel: str, chaos: str, attempt: int) -> Row:
     ok, differences = agreement(o.report, o.diff)
     task_id = o.run.run_id.partition(":")[0]
@@ -129,7 +137,9 @@ def row_of(o: OracleRun, channel: str, chaos: str, attempt: int) -> Row:
         failure_kinds=sorted({f["kind"] for f in o.report.get("failures", [])}),
         recovered=sorted({f"{r['error_type']} (recovered)" for r in o.report.get("recovered", [])}),
         seconds=round(o.seconds, 2), verify_seconds=round(o.verify_seconds, 2),
-        llm_calls=o.llm_calls, tokens=o.tokens, models=o.models, cassettes=o.cassettes)
+        llm_calls=o.llm_calls, tokens=o.tokens, models=o.models, cassettes=o.cassettes,
+        state_ok=state_ok(o.result),
+        failed_checks=o.result.failed)
 
 
 def summary(rows: list[Row], adversarial: list[dict[str, Any]], skipped: list[str] | None = None) -> dict[str, Any]:
@@ -148,6 +158,7 @@ def summary(rows: list[Row], adversarial: list[dict[str, Any]], skipped: list[st
         **({"run_once_passed": f"{sum(passes[i] for i in set(passes) - repeated)}/{len(set(passes) - repeated)}"}
            if set(passes) - repeated else {}),
         "cup": f"{sum(r.cup for r in off)}/{len(off)}",
+        "state_correct": f"{sum(bool(r.state_ok) for r in off)}/{len(off)}",  # secondary: Acme's state, not the status
         "unexplained_side_effects": sum(r.unexplained for r in rows),
         "correct_refusals": f"{sum(bool(r.refusal_correct) for r in refusals)}/{len(refusals)}",
         "chaos_fired": f"{len(fired)}/{len(on)}",

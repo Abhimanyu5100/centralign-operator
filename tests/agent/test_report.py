@@ -81,3 +81,12 @@ def test_t1_under_flaky_500_lists_the_recovered_server_errors_without_any_key(sa
          "read_back": "read back: not written, so retried once"}]
     assert "idempotency" not in json.dumps(report)
     assert "- submit_invoice: server_error x1 (transient): retried once" in render_markdown(report)
+
+
+def test_a_long_agent_summary_is_cut_at_a_word_boundary_and_says_so():
+    """Live T6 report: the summary stopped mid-markup ("Attached the source file `"). Cut at a word and mark it."""
+    from agent.report import _clip
+    text = "Entered the invoice and attached the source file `mehta_INV-0091.pdf` to it " * 10
+    cut = _clip(text, 120)
+    assert cut.endswith(" ...") and len(cut) <= 124 and not cut[:-4].endswith(("`", " "))
+    assert text.startswith(cut[:-4]) and _clip("short", 120) == "short"

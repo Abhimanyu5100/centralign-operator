@@ -347,7 +347,7 @@
   "content": null,
   "tool_calls": [
    {
-    "id": "call_2526692",
+    "id": "call_369485",
     "name": "list_mail",
     "arguments": {
      "folder": "inbox"
@@ -361,14 +361,14 @@
     {
      "extra_content": {
       "google": {
-       "thought_signature": "EnMKcQFpFH0TbQ/Pexb/CLIvcn5tM9eCmKNBRjXhdlcXqqnvsBAvCThBmesxDsfjcauCUcUfzdhooI1AVuCrQ+79tFBYsJjUdO0JXW2RU+LPR8o7nz6REOpBmjUBYU3UmjiFvA2+4Kc6xNHoQzOv6blnxGz/"
+       "thought_signature": "EnMKcQFpFH0T4esCM0Y/OucJ1KQeVTzNceg4J+DvBg/TdHvjFapJqyYWGzeqbiGEXNNiAMo8+BUhdafFJ1n9pgKqzIo305UHLdwtnZwF8SyUD6Mvt6w3GANJ4R/8eq+75EyQOufvP3/rZT64fvbzyGv6r4kF"
       }
      },
      "function": {
       "arguments": "{\"folder\":\"inbox\"}",
       "name": "list_mail"
      },
-     "id": "call_2526692",
+     "id": "call_369485",
      "type": "function"
     }
    ]

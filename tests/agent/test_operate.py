@@ -5,6 +5,7 @@ a real LLMClient over a scripted mock provider for the replay test. Register 1.2
 
 import asyncio
 import json
+from pathlib import Path
 
 import httpx
 import pytest
@@ -233,35 +234,40 @@ def test_a_contains_value_must_come_from_a_fact_the_goal_the_request_or_the_proc
     drive(run, lambda run: asyncio.sleep(0))
 
 
-def test_the_planner_reads_acmes_own_limits_from_the_policy_file_at_run_time(tmp_path):
-    """D-217, live T6 and T7: a business approval planned for invoices under the limit. The limit reaches the planner
-    from policies.yaml (the constant Acme's code is checked against), never from the prompt or the planner's code."""
-    from agent.planner import PROMPT, company_rules
+def test_the_planner_prompt_takes_acmes_limit_from_the_policy_file_at_run_time(tmp_path):
+    """D-220 (N.212): rule 7 is back to its pre-D-217 wording, which the model followed, but the amount comes from
+    policies.yaml (the constant Acme's code is checked against), never from the planner's code."""
+    from agent.planner import PROMPT, company_rules, plan_prompt
     from agent.policy.loader import POLICIES_PATH
     moved = tmp_path / "policies.yaml"
     moved.write_text(POLICIES_PATH.read_text().replace("equals: 5000000", "equals: 7500000"))
     (tmp_path / "mail_allowlist.yaml").write_text((POLICIES_PATH.parent / "mail_allowlist.yaml").read_text())
     assert {"APPROVAL_LIMIT_PAISE": 5000000} in [r.get("limits") for r in company_rules()]
-    assert {"APPROVAL_LIMIT_PAISE": 7500000} in [r.get("limits") for r in company_rules(moved)]
-    assert "5,000,000" not in PROMPT and "50,000" not in PROMPT and "company_rules" in PROMPT
+    assert "(amounts are in paise: Rs 50,000 is 5,000,000 paise)" in PROMPT
+    assert "(amounts are in paise: Rs 75,000 is 7,500,000 paise)" in plan_prompt(moved)
+    assert "<LIMIT>" not in PROMPT and "company_rules" not in PROMPT
+    source = Path(__file__).parents[2].joinpath("agent", "planner.py").read_text()
+    assert "50,000" not in source and "5000000" not in source and "5,000,000" not in source
 
 
-def test_the_planner_brief_carries_the_company_rules(sandbox):
+def test_the_planner_brief_no_longer_carries_the_company_rules(sandbox):
+    """D-220: the D-217 company_rules block left the brief; the limit reaches the model only inside rule 7."""
     report, llm, _ = operate_with(sandbox, SHARMA, gate("proceed"), calls(("find_vendors", {"q": "Sharma"})),
                                   calls(("facts_ready", VENDOR_FACT)), say(json.dumps(PLAN)), say("Done."),
                                   *[say(json.dumps(PLAN)), say("Done.")] * 3)
     planner = next(r for r in llm.requests if r["messages"][0]["content"].startswith("You write the plan"))
-    assert '"APPROVAL_LIMIT_PAISE": 5000000' in planner["messages"][1]["content"]
+    assert "company_rules" not in planner["messages"][1]["content"]
+    assert "Rs 50,000 is 5,000,000 paise" in planner["messages"][0]["content"]
 
 
-def test_the_prompts_say_contains_is_per_row_and_judge_criteria_are_about_meaning():
-    """D-217, live T3 (a list read per ticket) and T9 approve (a criterion naming the subject). These pin the text;
-    whether the model follows it is what the live bench measures."""
+def test_the_d217_prompt_sentences_are_reverted():
+    """D-220 (N.212): the rerun measured a regression with the D-217 wording (T2 0/3, T6 and T7 judge-lowered), so
+    the planner and judge prompts are back to the text the first live run used. Pins the revert."""
     from agent.planner import PROMPT
     from agent.verifier.judge import PROMPT as JUDGE
-    assert "`contains` checks text inside ONE row's field" in PROMPT and "need one predicate each" in PROMPT
-    assert "about meaning and tone only" in PROMPT and "never which field must say it" in PROMPT
-    assert "whatever field the criterion names" in JUDGE
+    assert "`contains` checks text inside ONE row's field" not in PROMPT
+    assert "about meaning and tone only" not in PROMPT and "Exact checks stay predicates." in PROMPT
+    assert "whatever field the criterion names" not in JUDGE
 
 
 def test_tidy_fixes_what_the_model_gets_wrong_every_time_and_says_so():

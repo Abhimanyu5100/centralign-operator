@@ -300,7 +300,7 @@
   "content": null,
   "tool_calls": [
    {
-    "id": "call_1462282",
+    "id": "call_389245",
     "name": "get_vendor",
     "arguments": {
      "vendor_id": 1
@@ -314,14 +314,14 @@
     {
      "extra_content": {
       "google": {
-       "thought_signature": "EnMKcQFpFH0T9uZyr+RbtRZqCjl/mjtu+fWCIj6b0nTyjS74kL7SXX4JDOIf9wRyg6lfznEhRvaWRN9zLRmDKLbJW0tru7EX+95j9HlPCIJ0WMeikYAOGdOqAmTRf9JrDhFcbgBgA4Dr1KSBw50/++x2cI1Y"
+       "thought_signature": "EnMKcQFpFH0TtOzcEJOn60x/zapCpFZNtEvSe9u7qNRnpjOT2k+41WwlhQYuJ5rIQ5eTuxM0q6vp1Ht+CEdczck8pQVLl1pi3qP41Juz1DHj70KcMIJPMAPzCDI8twyG+FXuzjvzJrKOpYiXpPanis7DigP/"
       }
      },
      "function": {
       "arguments": "{\"vendor_id\":1}",
       "name": "get_vendor"
      },
-     "id": "call_1462282",
+     "id": "call_389245",
      "type": "function"
     }
    ]

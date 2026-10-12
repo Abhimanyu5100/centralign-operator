@@ -79,3 +79,22 @@ def test_the_link_check_can_fail(tmp_path):
     found = [t for t in LINK.findall(text(bad)) if not (t.startswith("#") and t[1:] in anchors(bad))
              and not (not t.startswith("#") and (tmp_path / t).exists())]
     assert found == ["missing.md", "#nowhere"]
+
+
+IMAGE = re.compile(r'<img[^>]*\bsrc="([^"]+)"|!\[[^\]]*\]\(([^)\s]+)\)')
+EMOJI = re.compile("[\U0001F000-\U0001FAFF☀-➿⬀-⯿️]")
+
+
+@pytest.mark.parametrize("doc", DOCS, ids=lambda p: p.name)
+def test_every_image_exists_and_has_alt_text(doc):
+    """The README's screenshots and GIF come from `make readme-assets`; a moved or missing file fails here."""
+    body = FENCE.sub("", text(doc))
+    for html, md in IMAGE.findall(body):
+        assert (doc.parent / (html or md)).is_file(), f"{doc.name}: missing image {html or md}"
+    assert all(" alt=" in tag for tag in re.findall(r"<img[^>]*>", body, re.S)), f"{doc.name}: an <img> lacks alt"
+
+
+@pytest.mark.parametrize("doc", DOCS, ids=lambda p: p.name)
+def test_no_emoji(doc):
+    """The design brief: plain words and numbers, no emoji or pictographs."""
+    assert not EMOJI.findall(text(doc)), f"{doc.name}: {sorted(set(EMOJI.findall(text(doc))))}"

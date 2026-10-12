@@ -254,6 +254,8 @@ make oracle TASK=T1|all [CHANNEL=gui] [CHAOS=profile CHAOS_SEED=0] [LIVE=1] [EVE
 make run TASK=T1|"<request>" [REPLAY=1] [CHAOS=profile CHAOS_SEED=0] [EVENTS=1]
                  # Phase B: the LLM operator on one request, then the task's checker; REPLAY=1 = cassettes only, no key
 make smoke [MODELS=GEMINI_MODEL]   # LIVE LLM smoke test per configured model (spends quota)
+make readme-assets   # README screenshots and GIF from replayed runs -> docs/assets/ (no key, no quota)
+make demo-video      # captioned demo video from replayed runs -> runs/demo/demo.webm (no key, no quota)
 make bench [K=1] [ONLY=T1,T2] [NO_ADVERSARIAL=1]   # AcmeBench: every oracle, chaos variants, adversarial -> bench/results/
 make ui          # action-approval inbox on 127.0.0.1:8100 (approve or reject held calls)
 make adversarial # every bench/adversarial script against an in-process Acme (each must be stopped as expected)

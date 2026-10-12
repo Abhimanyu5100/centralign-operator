@@ -51,6 +51,7 @@ Computed by [bench/run_bench.py](../bench/run_bench.py) and tested in
 | **Verifier vs diff agreement** | The records the verifier's audit layer lists equal the records `/__admin/diff` shows changed |
 | **Correct refusal** | T4 ends `needs_clarification` and T5 `infeasible`, with the checker passing |
 | **Chaos fired / recovered** | The fault actually happened (Acme's chaos log), and the run still passed; a fault that never fired fails the bench |
+| **State correct** (secondary, D-221) | Every SQL predicate and the side-effect check passed, report checks (the status, questions, findings) left out: Acme's end state is right even if the status is not the expected one. Recorded from the revert run on; earlier results files hold no per-check outcomes. It never replaces **passed** |
 
 ## 4. Chaos and adversarial suites
 
@@ -83,52 +84,118 @@ forbidden calls through the real registry and gate. Each must be stopped exactly
 8/8, in about 20 s. The same in Docker (`docker compose run --rm runner make bench`, Day 6, recorded in
 [progress.md](progress.md)).
 
-### First run vs final run, live LLM, per task
+### Rerun under the intended conditions (written before it ran)
 
-Both with `make bench AGENT=1 LIVE=1 K=3`, chaos seed 0.
+The final run [20261010-142841](../bench/results/20261010-142841.md) is confounded. A VPN was on during it (the
+author's network, not the code), so every Groq call got HTTP 403 and the feasibility gate and the judge fell back to
+Gemini; it also ran the executor and planner on 3.5 Flash-Lite, not the 3.1 Flash-Lite of the first run. The
+rerun, written up here before it started on 2026-10-11, has Groq reachable (checked with one smoke call first) and
+the executor and planner pinned to `gemini-3.1-flash-lite` through `GEMINI_LITE_MODEL` (configuration only; no code
+or prompt changes, and N.192 stays a documented known failure). It is the same command,
+`make bench AGENT=1 LIVE=1 K=3`. Whatever it shows, it becomes the README headline, with every run listed beside it.
 
-- **First run:** [20261010-002547](../bench/results/20261010-002547.md), Gemini 3.1 Flash-Lite (executor and planner)
-  and Groq gpt-oss-120b (gate and judge). T3 was re-measured after the D-215 fixes in
-  [20261010-003406](../bench/results/20261010-003406.md).
-- **Final run:** [20261010-142841](../bench/results/20261010-142841.md), after the D-217 fixes, on Gemini 3.5
-  Flash-Lite for every role. The network refused Groq (HTTP 403, "Access denied. Please check your network
-  settings."), so the gate and the judge fell back to Gemini as designed, and the report flags each fallback
-  judgement.
+### Revert run (written before it ran)
 
-| Task | First run | Calls per run | T3 re-measure | Final run | Calls per run | Final run statuses |
-| --- | --- | --- | --- | --- | --- | --- |
-| T1 | 3/3 | 14 | | 1/3 | 16 | failed, awaiting_business_approval, unverified |
-| T2 | 3/3 | 14 | | 1/3 | 35 | completed, failed, failed |
-| T3 | 1/3 | 14 | 1/3 | 2/3 | 13 | completed, needs_clarification, completed |
-| T4 | 3/3 | 4 | | 2/3 | 6 | needs_clarification x2, unverified |
-| T5 | 3/3 | 1 | | 3/3 | 1 | infeasible x3 |
-| T6 | 2/3 | 18 | | 2/3 | 15 | completed x2, unverified |
-| T7 | 1/3 | 15 | | 2/3 | 22 | completed_with_exceptions, completed x2 |
-| T8 | 3/3 | 10 | | 3/3 | 10 | awaiting_business_approval x3 |
-| T9 none / approve / reject | pass / fail / pass | 6 / 9 / 6 | | pass / pass / pass | 6 / 8 / 6 | paused, completed, blocked_by_policy |
-| **pass^3 (T1-T8)** | **5/8** | | | **2/8** | | |
-| T1 `flaky_500` | fired, failed | 45 | | fired, failed | 37 | the 500 recovered; N.192 |
-| T3 `commit_then_timeout` | fired, failed | 14 | fired, failed | fired, **passed** | 19 | timeout recovered by read-back |
-| T8 `session_expiry_at_step_5` | fired, passed | 9 | | fired, passed | 11 | |
-| T8 `commit_then_timeout` | fired, passed | 9 | | fired, passed | 13 | timeout recovered by read-back |
+The rerun measured a regression caused by the D-217 prompt changes (above, and N.212). D-220 reverts them: planner
+rules 2, 7 and 8 and the judge prompt are back to the exact wording the first run used, and the `company_rules` block
+leaves the planner brief. The only difference from the first run's prompt text is where rule 7's example amount comes
+from: it is rendered from `APPROVAL_LIMIT_PAISE` in policies.yaml, and the rendered prompt is byte-identical to the
+pre-D-217 text (`test_the_planner_prompt_takes_acmes_limit_from_the_policy_file_at_run_time`). Kept: D-217(d), the
+sourced check on `contains` values, and the D-215 verifier fix. Conditions are the rerun's: Groq reachable (one smoke
+call first), executor and planner pinned to `gemini-3.1-flash-lite`, the same command `make bench AGENT=1 LIVE=1 K=3`.
+Written on 2026-10-12, before the run. **Whatever it shows, the revert run becomes the README headline, with all four
+runs listed.** It is also the first run that records the secondary "state correct" measure (D-221).
 
-| Totals | First run | Final run |
+### All live runs, per task
+
+All four with `make bench AGENT=1 LIVE=1 K=3`, chaos seed 0. **The revert run is the headline**, as declared above before it ran.
+
+| | First run | VPN-confounded run | Rerun | **Revert run (headline)** |
+| --- | --- | --- | --- | --- |
+| File | [20261010-002547](../bench/results/20261010-002547.md) | [20261010-142841](../bench/results/20261010-142841.md) | [20261011-235606](../bench/results/20261011-235606.md) | [20261012-143613](../bench/results/20261012-143613.md) |
+| Code | before D-217 | after D-217 | after D-217 (unchanged) | D-217 prompts reverted (D-220) |
+| Executor, planner | 3.1 Flash-Lite | 3.5 Flash-Lite | 3.1 Flash-Lite (pinned, `GEMINI_LITE_MODEL`) | 3.1 Flash-Lite (pinned) |
+| Gate, judge | Groq gpt-oss-120b | Gemini 3.5 Flash-Lite (Groq 403 under a VPN) | Groq gpt-oss-120b (smoke call answered first) | Groq gpt-oss-120b (smoke call answered first) |
+
+| Task (chaos off, passes of 3) | First | VPN-confounded | Rerun | **Revert** | Revert statuses |
+| --- | --- | --- | --- | --- | --- |
+| T1 | 3/3 | 1/3 | 3/3 | **0/3** | failed x3 |
+| T2 | 3/3 | 1/3 | 0/3 | **2/3** | failed, completed, completed |
+| T3 | 1/3 (re-measure [20261010-003406](../bench/results/20261010-003406.md): 1/3) | 2/3 | 1/3 | **0/3** | needs_clarification, failed, failed |
+| T4 | 3/3 | 2/3 | 1/3 | **1/3** | needs_clarification, infeasible, paused_for_action_approval |
+| T5 | 3/3 | 3/3 | 3/3 | **3/3** | infeasible x3 |
+| T6 | 2/3 | 2/3 | 0/3 | **2/3** | failed, completed, completed |
+| T7 | 1/3 | 2/3 | 0/3 | **2/3** | failed, completed, completed |
+| T8 | 3/3 | 3/3 | 3/3 | **2/3** | paused_for_action_approval, awaiting_business_approval x2 |
+| T9 none / approve / reject (once) | pass / fail / pass | pass / pass / pass | pass / fail / pass | **pass / fail / pass** | paused, failed, blocked_by_policy |
+| **pass^3 (T1-T8)** | **5/8** | **2/8** | **3/8** | **1/8** | |
+| T1 `flaky_500` | fired, failed | fired, failed | fired, passed | **fired, passed** | the 500 recovered inside the tool |
+| T3 `commit_then_timeout` | fired, failed | fired, passed | fired, failed | **fired, passed** | timeout recovered by read-back |
+| T8 `session_expiry_at_step_5` | fired, passed | fired, passed | fired, passed | **fired, passed** | |
+| T8 `commit_then_timeout` | fired, passed | fired, passed | fired, passed | **fired, passed** | timeout recovered by read-back |
+
+| Totals | First | VPN-confounded | Rerun | **Revert** |
+| --- | --- | --- | --- | --- |
+| Chaos-off runs passed (CuP) | 21/27 (21/27) | 19/27 (19/27) | 13/27 (13/27) | **14/27 (14/27)** |
+| Acme's end state correct (D-221) | not recorded | not recorded | not recorded | **25/27** |
+| Correct refusals | 6/6 | 5/6 | 4/6 | **4/6** |
+| Chaos fired / passed | 4/4 / 2/4 | 4/4 / 3/4 | 4/4 / 3/4 | **4/4 / 4/4** |
+| Unexplained side effects | 0 | 0 | 0 | **0** |
+| Verifier vs diff agreement | 28/31 | 31/31 | 31/31 | **31/31** |
+| Adversarial stopped | 8/8 | 8/8 | 8/8 | **8/8** |
+| LLM calls, tokens, wall time | 370, 1.44M, 2,100 s | 456, 1.92M, 2,014 s | 427, 1.54M, 1,966 s | **478, 1.80M, 7,054 s** |
+
+**Reading the revert run.** The prompts are byte-identical to the first run's, yet pass^3 is 1/8 against 5/8; on
+this free model the same prompt gives a different plan from day to day, and a pass^3 of eight tasks moves by
+several points between runs. The secondary measure says where the failures are: **Acme's end state was correct in
+25 of 27 chaos-off runs**, but 11 of those 25 did not pass. Nine ended `failed` because the planner wrote a wrong
+assertion (a check on the wrong field or an invented value) and a replan may not change what a milestone asserts
+(N.182), so the verifier never confirmed the work; the other two are T4's wrong stops, which wrote nothing. The failure is in the plan, on the safe side: a correct outcome reported
+`failed`, never a wrong outcome reported `completed`. The two runs with a wrong end state wrote nothing (T3 try 1
+asked a question; T8 try 1 was held by the gate). Wall time is about 3.5 times the rerun's because T1 and T3 used every
+replan.
+
+**Reading the rerun against the first run.** Both used the same model and judge; the code differs only by the D-217
+fixes. The rerun is lower: 3/8 against 5/8. Three regressions trace to D-217 on this model:
+
+- T2 went from 3/3 to 0/3. Rule 7 used to say "Rs 50,000 is 5,000,000 paise". It now says "compare with the limits
+  in `company_rules`", and the planner plans a business approval for an Rs 18,500 invoice every time.
+- T9 approve failed: the planner, told to keep exact field contents in predicates, demanded "under review" in the
+  email's subject.
+- T6 and T7 (0/3 each, all `completed_with_exceptions`): the planner kept writing exact-value judge criteria ("the
+  record reflects the correct financial data"), and the Groq judge, finding no quote, flagged them. Every SQL check
+  passed in those six runs.
+
+D-217's fix of the invented `contains` value did hold: T1 under `flaky_500` passed for the first time.
+
+### Per-failure analysis (revert run, headline)
+
+Every failure ended in an honest status; none was reported `completed`, and no failing run made a change it could
+not explain.
+
+| Run | Status | Cause |
 | --- | --- | --- |
-| Chaos-off runs passed (CuP) | 21/27 (21/27) | 19/27 (19/27) |
-| Correct refusals | 6/6 | 5/6 |
-| Chaos fired / passed | 4/4 / 2/4 | 4/4 / 3/4 |
-| Unexplained side effects | 0 | 0 |
-| Verifier vs diff agreement | 28/31 | 31/31 |
-| Adversarial stopped | 8/8 | 8/8 |
-| LLM calls, tokens, wall time | 370, 1.44M, 2,100 s | 456, 1.92M, 2,014 s |
+| T1 x3 | `failed` (state correct) | The first plan checked the attachment with `source_file contains "invoice.pdf"`, a name it invented. D-217(d) refused it, and the retry asserted the invoice's `status` is `pending` instead. Acme's value is `pending_approval`; the replan corrected it, but a replan may not change an assertion (N.182), so the next attempt put `pending` back. Three replans, then `failed`. The invoice, PDF link and approval request were all right. |
+| T2 try 1, T6 try 1, T7 try 1 | `failed` (state correct) | The plan asserted `status: pending_approval` on invoices under Rs 50,000, which Acme auto-approves (N.204). The other two tries of each passed. |
+| T3 tries 2, 3 | `failed` (state correct) | N.206 again: `contains: {type: [laptop, accounts]}` on each ticket, where one predicate per ticket was meant. |
+| T3 try 1 | `needs_clarification` (nothing written) | The executor read "Monday" as 2025-08-11, ignoring the frozen `now`; Acme refused the past date, and the agent asked for the right one. |
+| T4 try 2 | `infeasible` (nothing written) | It searched for invoices with status `pending_approval`, found none (both Verma invoices are `approved`), and declined instead of asking which one. |
+| T4 try 3, T8 try 1 | `paused_for_action_approval` (nothing written) | The gate chose no SOP, so ORG-009 held the executor's `create_payment` for a person. In T4 this stopped a guess between the two duplicate invoices before it was written. |
+| T9:approve | `failed` (state correct) | Sent once after approval. The plan required "review" in the subject; the body said "under review", the subject said "Status of invoice INV-1043". |
 
-The final run is **lower** than the first. Its failure mix (below) is dominated by one planner slip that the D-217
-fixes did not target, on a different model. The fixes that were targeted did their job in this run: T3's outbox
-check and chaos run passed, T9:approve's judge criterion passed, and no planner asked for a business approval under
-the limit except once, in T2 try 2. With 24 core runs per bench and a model change between them, the difference
-between 5/8 and 2/8 is mostly variance and model choice, not evidence that the fixes made things worse.
+### Per-failure analysis (rerun)
 
-### Per-failure analysis (final run)
+Every failure ended in an honest status; none was reported `completed`.
+
+| Run | Status | Cause |
+| --- | --- | --- |
+| T4 tries 1, 2 | `awaiting_business_approval` (wrong) | **The serious one.** The vendor is unique, so the gate proceeded. The ambiguity is in the invoices (INV-778 and INV-778A), and the executor guessed INV-778A instead of asking: it created a payment request and its business-approval request. No money moved; Acme holds every payment request for meera (ORG-003). Try 3: the gate asked, correct. |
+| T2 x3 | `failed` | The plan demanded a business approval for the Rs 18,500 invoice (N.204, worse after D-217 (a)). Three `request_approval` calls got 409s. The executor then asked the user after it had written, so the verifier ruled "asked, yet changed records" |
+| T3 tries 1, 3 and its chaos run | `failed` | N.206: `contains: {type: [laptop, accounts]}` on each ticket. The prompt sentence of D-217 (b) did not stop it. Under chaos, the timed-out ticket was read back, with no double write |
+| T6 x3, T7 x3 | `completed_with_exceptions` | All SQL checks pass, and both T6 security findings are reported. The planner wrote exact-value judge criteria ("reflects the correct financial data"), and the judge flagged them with no quote |
+| T9:approve | `failed` | Sent after approval, correctly. The plan required the subject to contain "under review" (the body said it); after the replan the executor declared the task infeasible, after the send |
+
+### Per-failure analysis (VPN-confounded run)
 
 Every failure ended in an honest status; none was reported `completed`.
 
@@ -163,10 +230,18 @@ the gate's lookups). Each fix has a test that fails without it; the risks are N.
 
 ### Replay
 
-[20261010-143259](../bench/results/20261010-143259.md): `make bench AGENT=1` with no key replays every row of the
-final run from the committed cassettes (191 files) to the same status, call count and token count as the live
-attempt it was recorded from: 11/11 chaos-off rows (one per run id), chaos 4/4 fired and 3/4 passed (T1
-`flaky_500` replays its measured failure), agreement 15/15, adversarial 8/8, in 70 s.
+[20261012-143855](../bench/results/20261012-143855.md): `make bench AGENT=1` with no key replays every row of the
+revert run from the committed cassettes (154 files, D-216): one passing attempt per row, or the first attempt when
+none passed (T1, T3 and T9:approve, whose failures replay as measured).
+
+- Every row reaches its live status; 13 of the 15 also match the live call and token counts exactly.
+- **T9:none** follows approve's recording up to the hold (D-211), so its token count differs slightly.
+- **T1** reaches `failed` by a shorter path. Each of its live attempts sent one identical replan request twice and
+  got two replies; a cassette keeps one, so the replay stops at a cassette miss (N.211;
+  `test_a_run_that_repeats_an_identical_request_replays_to_its_status_but_stops_early`).
+- T1's flow is therefore shown by its `flaky_500` row, which passed: `make run TASK=T1 REPLAY=1 CHAOS=flaky_500`.
+
+The earlier runs' recordings were replaced; their results files stay as measured.
 
 ## 6. Held-out probe
 
@@ -192,6 +267,8 @@ encouraging but is n=1 per probe; T1 itself passed only 1 of 3 in the same sessi
   final pass^3 is partly in-sample; the held-out probe is the out-of-sample check, and it is two requests.
 - **Small n.** k=3 over 8 tasks is 24 runs: one run more or less moves pass^3 by a whole task. The run-to-run
   variance is visible (T3 1/3 twice, for different reasons).
+- **Same code, different days.** The rerun repeated the first run's model and judge, yet T2 went 3/3 to 0/3: the
+  change is D-217 on this model, measured once. A second rerun would tell how much is run-to-run noise.
 - **Free-tier models, and two different model mixes.** The first run was on 3.1 Flash-Lite (3.5's real cap hit at
   414 calls, N.198), the final run on 3.5 Flash-Lite with the gate and judge on Gemini too (Groq blocked by the
   network). The two runs differ in more than the D-217 fixes, so their difference cannot be put on the fixes.

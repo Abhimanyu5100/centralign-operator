@@ -96,7 +96,8 @@ Proof: `test_flaky_500_same_seed_same_failing_requests_and_reset_clears` is the 
 The prompts are `PROMPT` and `REPLAN` in [agent/planner.py](../agent/planner.py), `SYSTEM`, `GATHER` and `ACT` in
 [agent/executor.py](../agent/executor.py), and `PROMPT` in [agent/verifier/judge.py](../agent/verifier/judge.py).
 Prefer a code check (`plan_errors`, `tidy`) over a prompt sentence: it is testable and does not depend on the
-model (D-200, D-217). Every prompt change is a decision row plus a re-record.
+model (D-200, D-217). Every prompt change is a decision row plus a re-record and a live re-measure: D-217's prompt
+wording regressed on Flash-Lite and was reverted (D-220).
 
 ## 7. Debug a failed run
 

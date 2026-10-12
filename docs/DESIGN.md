@@ -171,8 +171,9 @@ Rules in code, whatever the model says (D-169):
 
 ### 4.3 Planner ([agent/planner.py](../agent/planner.py), [agent/plan.py](../agent/plan.py))
 
-One LLM call, no tools. In: the Goal Spec, the facts, the SOP, the API read tools with their row fields, and
-`company_rules` (Acme's own rules with the limits its code checks, read from `policies.yaml` at run time, D-217).
+One LLM call, no tools. In: the Goal Spec, the facts, the SOP and the API read tools with their row fields. Acme's
+approval limit is written into rule 7 of the prompt from `policies.yaml` at run time (`plan_prompt`, D-220; D-217's
+separate `company_rules` block was reverted after it measured worse).
 Out: a `Plan` of 1-7 milestones, each a **target state** citing an SOP step and checked by predicates.
 
 Code before the plan is accepted:
@@ -467,7 +468,7 @@ Condensed from [decisions.md](decisions.md); each id is a row there.
 | 12 | D-168: SOP candidates by code, the model only narrows | The wrong procedure was picked otherwise |
 | 13 | D-165: cassettes keyed on the request, never the provider | Replays need no key, and anyone's keys can record |
 | 14 | D-190: at most 3 replans, which may change only how rows are found | A replan can never weaken a check |
-| 15 | D-217: Acme's limits reach the planner from `policies.yaml`; `contains` values must be sourced | Generic fixes for measured planner slips, no ids in code |
+| 15 | D-217, D-220: `contains` values must be sourced; Acme's limit reaches the planner from `policies.yaml`, inside the wording the model followed | A generic-looking prompt fix regressed on the small model (N.212), so the prompt went back to measured text and only the constant moved into data |
 
 ## 13. In one sentence each (for the walkthrough)
 

@@ -5,25 +5,27 @@ If this file disagrees with git, git wins for what is committed.
 
 ## Now
 
-- **Last updated:** 2026-10-12 00:15 IST
-- **Day / phase / part:** Day 6, rerun done (D-219), awaiting the author's commit ("Day 6.Rerun: ..."). Then the demo
-  video, its link, submit.
-- **Headline, rerun under the intended conditions (bench/results/20261011-235606; 3.1 Flash-Lite pinned, Groq
-  reachable):** pass^3 3/8 (T1, T5, T8), chaos-off 13/27, refusals 4/6, chaos 4/4 fired 3/4 passed, unexplained 0,
-  agreement 31/31, adversarial 8/8, 427 calls. Listed beside it: first run 5/8 (20261010-002547), VPN-confounded 2/8
-  (20261010-142841). D-217 regressed on this model (N.212); T4 guessed between duplicate invoices (N.213).
-- **Replay (bench/results/20261012-000049):** 166 cassettes from the rerun; every row to its live status with no
-  key; T2 by a shorter path (N.211).
-- **Checks:** `make test` 1895 passed; `make test-e2e` 69 passed; doc test 26 passed; `WORKTREE=1 DOCKER=1
-  scripts/fresh_clone.sh` OK (secret scan, make test, T1 replay, replay bench, Docker /healthz, attribution).
-- **Running agent/ total (ceiling 3,950):** **3,870** non-blank lines (no code change tonight).
-- **Next step:** the author's commit; the demo video (docs/DEMO.md); the two README TODO video links; submit.
+- **Last updated:** 2026-10-12 15:10 IST
+- **Day / phase / part:** Day 7 (submission day). Revert run done (D-220, D-222), docs and README filled, README
+  images and the demo video recorded. Awaiting the author's commit, push, video upload and link, submit.
+- **Headline, revert run (bench/results/20261012-143613; declared before it ran; 3.1 Flash-Lite pinned, Groq
+  reachable):** pass^3 1/8 (T5), runs passed 14/27, **Acme's end state correct 25/27**, refusals 4/6, chaos 4/4 fired
+  and recovered, unexplained 0, agreement 31/31, adversarial 8/8, 478 calls. Listed beside it: first 5/8, VPN-confounded
+  2/8, rerun 3/8. Main failure: a wrong first assertion locked in by the replan rule (N.214); safe direction.
+- **Replay (bench/results/20261012-143855):** 154 cassettes from the revert run; every row to its live status with
+  no key; T1 by a shorter path (N.211). T1's passing recording is its `flaky_500` row, used by the quick start, README
+  images, fresh-clone check and video.
+- **Demo video:** `make demo-video` -> runs/demo/demo.webm (gitignored, about 3 min, captioned, no voice).
+- **Checks:** see the checkpoint row below.
+- **Running agent/ total (ceiling 3,950):** **3,875** non-blank lines.
+- **Next step:** the author commits and pushes; uploads runs/demo/demo.webm; puts its link in README.md (two TODO
+  placeholders); commits and pushes; makes the repo public; submits the form.
 - **RESUME PROMPT:**
   ```
-  Read CLAUDE.md and docs/progress.md. Day 6 is complete: headline rerun pass^3 3/8 (bench/results/20261011-235606),
-  first 5/8, VPN-confounded 2/8, all listed in README and docs/EVALUATION.md. What is left: the demo video
-  (docs/DEMO.md), its link in README.md, the submission form. Optional with quota: N.212 (revert or re-measure the
-  D-217 rule-7 change), N.213 (ask on duplicate candidate rows), N.210, N.211. Do not commit or push.
+  Read CLAUDE.md and docs/progress.md. Everything is built and measured: headline revert run pass^3 1/8, state correct
+  25/27 (bench/results/20261012-143613), all four runs listed in README and docs/EVALUATION.md. What is left is the
+  author's: commit, push, upload runs/demo/demo.webm, its link in README.md, make the repo public, submit. Do not
+  commit or push.
   ```
 
 ## Done log

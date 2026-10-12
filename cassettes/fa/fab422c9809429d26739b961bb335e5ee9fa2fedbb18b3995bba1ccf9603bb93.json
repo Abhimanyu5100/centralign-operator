@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"decision\":\"proceed\",\"sop_id\":\"notify-vendor\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"request\",\"value\":\"Sharma Logistics Pvt Ltd\"},{\"name\":\"invoice_number\",\"source\":\"request\",\"value\":\"INV-1043\"}],\"success\":[\"Vendor Sharma Logistics Pvt Ltd notified about invoice INV-1043 status.\"],\"question\":\"\",\"candidates\":[\"notify-vendor\",\"process-invoice\"],\"reason\":\"Vendor uniquely identified and matches the notify-vendor procedure for emailing about invoice status.\"}",
+  "content": "{\"candidates\":[\"notify-vendor\",\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"request\"},{\"name\":\"invoice_number\",\"value\":\"INV-1043\",\"source\":\"request\"}],\"success\":[\"Vendor Sharma Logistics Pvt Ltd notified about invoice INV-1043 status.\"],\"question\":\"Email Sharma Logistics that invoice INV-1043 is under review.\",\"reason\":\"Vendor uniquely identified and matches notify-vendor procedure.\",\"sop_id\":\"notify-vendor\"}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"decision\":\"proceed\",\"sop_id\":\"notify-vendor\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"request\",\"value\":\"Sharma Logistics Pvt Ltd\"},{\"name\":\"invoice_number\",\"source\":\"request\",\"value\":\"INV-1043\"}],\"success\":[\"Vendor Sharma Logistics Pvt Ltd notified about invoice INV-1043 status.\"],\"question\":\"\",\"candidates\":[\"notify-vendor\",\"process-invoice\"],\"reason\":\"Vendor uniquely identified and matches the notify-vendor procedure for emailing about invoice status.\"}"
+   "content": "{\"candidates\":[\"notify-vendor\",\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"request\"},{\"name\":\"invoice_number\",\"value\":\"INV-1043\",\"source\":\"request\"}],\"success\":[\"Vendor Sharma Logistics Pvt Ltd notified about invoice INV-1043 status.\"],\"question\":\"Email Sharma Logistics that invoice INV-1043 is under review.\",\"reason\":\"Vendor uniquely identified and matches notify-vendor procedure.\",\"sop_id\":\"notify-vendor\"}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 578,
-   "completion_tokens": 501,
-   "total_tokens": 1079
+   "completion_tokens": 460,
+   "total_tokens": 1038
   }
  }
 }

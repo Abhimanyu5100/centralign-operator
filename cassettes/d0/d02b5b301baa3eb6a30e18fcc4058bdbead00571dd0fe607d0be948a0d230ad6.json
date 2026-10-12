@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"decision\":\"proceed\",\"sop_id\":\"process-invoice\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"probe\"}],\"success\":[\"Invoice from Sharma Logistics Pvt Ltd processed.\"],\"question\":\"\",\"candidates\":[\"process-invoice\"],\"reason\":\"Vendor Sharma Logistics Pvt Ltd found uniquely and matches the process-invoice procedure.\"}",
+  "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"probe\"}],\"success\":[\"Invoice processed for vendor Sharma Logistics Pvt Ltd.\"],\"question\":\"\",\"reason\":\"Vendor uniquely identified and matches process-invoice procedure.\",\"sop_id\":\"process-invoice\"}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"decision\":\"proceed\",\"sop_id\":\"process-invoice\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"probe\"}],\"success\":[\"Invoice from Sharma Logistics Pvt Ltd processed.\"],\"question\":\"\",\"candidates\":[\"process-invoice\"],\"reason\":\"Vendor Sharma Logistics Pvt Ltd found uniquely and matches the process-invoice procedure.\"}"
+   "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"probe\"}],\"success\":[\"Invoice processed for vendor Sharma Logistics Pvt Ltd.\"],\"question\":\"\",\"reason\":\"Vendor uniquely identified and matches process-invoice procedure.\",\"sop_id\":\"process-invoice\"}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 554,
-   "completion_tokens": 426,
-   "total_tokens": 980
+   "completion_tokens": 456,
+   "total_tokens": 1010
   }
  }
 }
