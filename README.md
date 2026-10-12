@@ -15,7 +15,7 @@ A take-home prototype for the CentrAlign AI Founding Engineer role ([problem sta
 Everything happens inside Acme, a mock company this repository builds and controls: its API, web pages, mailbox,
 PDFs, audit log and fault injection.
 
-**Demo video:** TODO (link added at submission) · [Design](docs/DESIGN.md) · [Evaluation](docs/EVALUATION.md) ·
+**[Demo video](https://drive.google.com/file/d/1yotxMuYqb8VPgK8B84R9MNSWjUKGwKJR/view?usp=sharing)** (about 3 minutes, captioned) · [Design](docs/DESIGN.md) · [Evaluation](docs/EVALUATION.md) ·
 [Extending](docs/EXTENDING.md)
 
 ## At a glance
@@ -458,7 +458,7 @@ scripts/              fresh-clone test, attribution check, LLM smoke test, READM
 | README with setup and run instructions | [Quick start](#quick-start), [Try it by hand](#try-it-by-hand), [Live run and Docker](#live-run-and-docker) |
 | Short architecture explanation | [How it works](#how-it-works); in full in [docs/DESIGN.md](docs/DESIGN.md) |
 | Important technical and design decisions | [Key decisions](#key-decisions); the top 15 in [docs/DESIGN.md](docs/DESIGN.md#12-top-15-decisions) |
-| Demo video | TODO link at the top; shot list in [docs/DEMO.md](docs/DEMO.md) |
+| Demo video | [Google Drive](https://drive.google.com/file/d/1yotxMuYqb8VPgK8B84R9MNSWjUKGwKJR/view?usp=sharing); shot list in [docs/DEMO.md](docs/DEMO.md) |
 | Known limitations | [Known limitations](#known-limitations) |
 | What I would build next | [What I would build next](#what-i-would-build-next) |
 | Assumptions | [Assumptions](#assumptions) |

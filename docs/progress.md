@@ -18,8 +18,8 @@ If this file disagrees with git, git wins for what is committed.
 - **Demo video:** `make demo-video` -> runs/demo/demo.webm (gitignored, about 3 min, captioned, no voice).
 - **Checks:** see the checkpoint row below.
 - **Running agent/ total (ceiling 3,950):** **3,875** non-blank lines.
-- **Next step:** the author commits and pushes; uploads runs/demo/demo.webm; puts its link in README.md (two TODO
-  placeholders); commits and pushes; makes the repo public; submits the form.
+- **Next step:** the video is uploaded and linked in README.md; the author commits, pushes, makes the repo
+  public and submits the form.
 - **RESUME PROMPT:**
   ```
   Read CLAUDE.md and docs/progress.md. Everything is built and measured: headline revert run pass^3 1/8, state correct
