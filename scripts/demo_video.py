@@ -1,6 +1,6 @@
 """A captioned demo video from replayed runs (`make demo-video`): no API key, no LLM quota, no voiceover.
 
-Replays T1 under flaky_500, T8 under commit_then_timeout, T6, T4 and T5 into a clean run store (runs/demo/demo.db), serves Acme and the
+Replays T1, T8 under commit_then_timeout, T6, T4 and T5 into a clean run store (runs/demo/demo.db), serves Acme and the
 run viewer, then drives one browser page through the real pages with a caption bar, while Playwright records it.
 T9 is replayed with a person's decision pending and approved in the inbox on camera. Output: runs/demo/demo.webm
 (gitignored). Harness side only: agent/ never imports this."""
@@ -200,8 +200,9 @@ async def film(acme_url: str, password: str) -> Path:
                          f"Tries passed</th><th>Acme's end state correct</th></tr>{rows}</table><p class=small>pass^3 {s['pass_k']} · runs passed "
                          f"{s['runs_passed']} · state correct {s.get('state_correct', 'n/a')} · unexplained side "
                          f"effects {s['unexplained_side_effects']} · attacks stopped {s['adversarial_stopped']} · "
-                         f"chaos fired {s['chaos_fired']}</p><p class=small>Most failures are the verifier refusing "
-                         "correct work because the planner wrote a wrong check. All four live runs are listed in "
+                         f"chaos fired {s['chaos_fired']}</p><p class=small>Every failure is in the safe direction: the "
+                         "verifier refused work its checks did not see, or no valid plan meant nothing was written. "
+                         "All five live runs are listed in "
                          "docs/EVALUATION.md with the cause of each failure.</p>", 16)
         await card(page, "<h1>What to look at</h1><p>README: the quick start replays everything with no API key.</p>"
                          "<p>docs/DESIGN.md: architecture, policy gate, verifier, threat model, path to production."
@@ -215,7 +216,7 @@ async def film(acme_url: str, password: str) -> Path:
 async def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     STORE.unlink(missing_ok=True)
-    replay("T1", "--chaos", "flaky_500", "--chaos-seed", "0")  # the T1 recording that passed live
+    replay("T1")  # passed live 3 of 3 without chaos in the headline run
     replay("T8", "--chaos", "commit_then_timeout", "--chaos-seed", "0")
     for task in ("T6", "T4", "T5"):
         replay(task)

@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"probe\",\"value\":\"Rao Packaging Industries\"}],\"question\":\"\",\"reason\":\"Vendor uniquely identified and matches approved vendor; procedure applicable.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice processed for vendor Rao Packaging Industries.\"]}",
+  "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"probe\",\"value\":\"Rao Packaging Industries\"}],\"question\":\"Process the invoice from Rao Packaging.\",\"reason\":\"Vendor Rao Packaging Industries found uniquely (id 2, approved); the requested procedure matches the candidate and no ambiguities exist.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice processing initiated for vendor Rao Packaging Industries.\"]}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"probe\",\"value\":\"Rao Packaging Industries\"}],\"question\":\"\",\"reason\":\"Vendor uniquely identified and matches approved vendor; procedure applicable.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice processed for vendor Rao Packaging Industries.\"]}"
+   "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"probe\",\"value\":\"Rao Packaging Industries\"}],\"question\":\"Process the invoice from Rao Packaging.\",\"reason\":\"Vendor Rao Packaging Industries found uniquely (id 2, approved); the requested procedure matches the candidate and no ambiguities exist.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice processing initiated for vendor Rao Packaging Industries.\"]}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 552,
-   "completion_tokens": 504,
-   "total_tokens": 1056
+   "completion_tokens": 453,
+   "total_tokens": 1005
   }
  }
 }

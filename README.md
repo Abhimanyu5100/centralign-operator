@@ -20,21 +20,21 @@ PDFs, audit log and fault injection.
 
 ## At a glance
 
-The headline is the last of four live benchmark runs on free models, declared the headline before it ran
+The headline is the last of five live benchmark runs on free models, declared the headline before it ran
 ([docs/EVALUATION.md](docs/EVALUATION.md#5-results)):
 
 | Measure (27 chaos-off runs: 8 tasks x 3 tries, T9 x 3 variants) | Headline run |
 | --- | --- |
 | Acme's end state correct | **25/27** runs |
-| Runs passed (status and state both right) | 14/27 |
-| pass^3 (all three tries of a task pass) | 1/8 (earlier runs: 5/8, 2/8, 3/8) |
+| Runs passed (status and state both right) | 19/27 |
+| pass^3 (all three tries of a task pass) | 3/8 (earlier runs: 5/8, 2/8, 3/8, 1/8) |
 | Wrong outcome reported `completed` | **0** |
 | Unexplained side effects | **0** |
 | Injected faults recovered | 4/4 |
 | Attack scripts stopped by policy | 8/8 |
 
-Most failures are the verifier refusing to confirm correct work, because the planner wrote a wrong check: the safe
-direction, and the next thing to fix.
+Every failure is in the safe direction: the verifier refused to confirm work its own checks did not see (a wrong
+check in the plan), or the planner produced no valid plan and nothing was written. The planner is the next thing to fix.
 
 Three properties hold in every run measured, passing or failing:
 
@@ -56,7 +56,7 @@ Three properties hold in every run measured, passing or failing:
     <td width="50%" valign="top">
       <img src="docs/assets/t1-timeline.png" width="100%"
            alt="Part of a run timeline: two plan attempts, then submit_invoice with its arguments, the policy decision allowing it, and the result.">
-      <br><sub><b>Run timeline.</b> T1 (its <code>flaky_500</code> run): the plan, the first write and the policy decision on it.</sub>
+      <br><sub><b>Run timeline.</b> T1: the plan, the first write and the policy decision on it.</sub>
     </td>
   </tr>
   <tr>
@@ -82,12 +82,9 @@ uv sync
 uv run playwright install chromium          # the browser tool and the GUI oracle
 cp .env.example .env                        # every key may stay empty here
 make test                                   # unit, integration and checker tests
-make run TASK=T1 REPLAY=1 CHAOS=flaky_500   # T1 under an injected 500, every model reply from the cassettes
+make run TASK=T1 REPLAY=1                   # T1 end to end, every model reply from the cassettes
 make bench AGENT=1                          # every task replayed by the operator, with the results table
 ```
-
-T1 is shown under `flaky_500` because that is the T1 recording that passed; without chaos, T1 replays to its
-measured `failed` (see Results).
 
 `REPLAY=1` removes every API key from the agent's config and serves each model reply from `cassettes/`. Everything
 else runs for real: a fresh Acme database, a fresh run id, the gate, planner, executor, policy gate, verifier and
@@ -249,30 +246,34 @@ A rejected action's rollback is listed in the report; the status stays `blocked_
 
 ## Results
 
-Four live runs of `make bench AGENT=1 LIVE=1 K=3` on free tiers (executor and planner on Gemini 3.1 Flash-Lite;
-feasibility gate and judge on Groq gpt-oss-120b). Each is listed; none is hidden.
+Five live runs of `make bench AGENT=1 LIVE=1 K=3` on free tiers (feasibility gate and judge on Groq gpt-oss-120b).
+Each is listed; none is hidden.
 
 | Run | pass^3 | Runs passed | Note |
 | --- | --- | --- | --- |
-| [First](bench/results/20261010-002547.md) | 5/8 | 21/27 | before the D-217 prompt changes |
+| [First](bench/results/20261010-002547.md) | 5/8 | 21/27 | before the D-217 prompt changes; 3.1 Flash-Lite |
 | [VPN-confounded](bench/results/20261010-142841.md) | 2/8 | 19/27 | Groq blocked by a VPN; fallback models |
-| [Rerun](bench/results/20261011-235606.md) | 3/8 | 13/27 | D-217 regressed on this model (N.212) |
-| [**Revert (headline)**](bench/results/20261012-143613.md) | **1/8** | **14/27** | D-217 prompts reverted (D-220); state correct 25/27 |
+| [Rerun](bench/results/20261011-235606.md) | 3/8 | 13/27 | D-217 regressed on this model (N.212); 3.1 Flash-Lite |
+| [Revert](bench/results/20261012-143613.md) | 1/8 | 14/27 | D-217 prompts reverted (D-220); 3.1 Flash-Lite; state correct 25/27 |
+| [**OpenRouter (headline)**](bench/results/20261012-211028.md) | **3/8** | **19/27** | same code; chain unpinned, so 3.5 Flash-Lite answered every executor call; OpenRouter enabled as last fallback, never reached (D-223); state correct 25/27 |
 
 In every run: no wrong outcome was reported `completed`, no run made a change it could not explain, and every attack
 script was stopped (8/8). The same prompt text gave 5/8 one day and 1/8 another, so pass^3 on eight tasks is a noisy
 number on a free model; the per-failure tables in [docs/EVALUATION.md](docs/EVALUATION.md) give the cause of every
-failed run.
+failed run. The headline's gain over the revert run comes from the executor model (3.5 instead of 3.1 Flash-Lite),
+not from OpenRouter, which answered no call.
 
-**Where it breaks.** The planner. In the headline run Acme's end state was right in 25 of 27 runs, but in nine of them
-the plan asserted something wrong (an invoice `status` of `pending` where Acme says `pending_approval`, "review" in an
-email subject that said "Status of invoice INV-1043"), and the verifier, by design, would not confirm work its own
-checks did not see. Two runs stopped wrongly without writing anything: T4 once declined instead of asking, and once
-the gate held a payment for a person (ORG-009) before a guess was written.
+**Where it breaks.** The planner. In the headline run Acme's end state was right in 25 of 27 runs. Eight runs did not
+pass: in three the planner (3.5 Flash-Lite) returned malformed JSON three times, so there was no plan, nothing was
+written and the verifier said `unverified`; in two (T2, T7) the plan asserted the wrong status for an invoice Acme had
+auto-approved (`draft`, `pending_approval`), and the verifier, by design, would not confirm work its own checks did not
+see; in two T4 asked nothing and the gate held a payment for a person (ORG-009) before a guess was written; once the
+judge flagged T3's welcome email (`completed_with_exceptions`).
 
-**Replay.** `make bench AGENT=1` reproduces every row's live status with no key from the 154 committed cassettes
-([20261012-143855](bench/results/20261012-143855.md)). The oracle bench (`make bench`, a scripted perfect agent)
-passes 11/11 with chaos 4/4 recovered.
+**Replay.** `make bench AGENT=1` replays every row with no key from the 171 committed cassettes
+([20261012-211340](bench/results/20261012-211340.md)): 15 of 15 rows pass. T9:none failed live (no valid plan), but
+its requests match T9:approve's up to the hold and share their cassettes (D-211), so it replays approve's path.
+The oracle bench (`make bench`, a scripted perfect agent) passes 11/11 with chaos 4/4 recovered.
 
 ## Try it by hand
 
@@ -356,7 +357,8 @@ One more hard rule: `agent/` never reads `bench/` (D-012), enforced by `test_age
 ## Known limitations
 
 - **The planner's checks are the weak point.** On a free model the planner sometimes asserts the wrong field or an
-  invented value; the verifier then reports correct work as `failed` (9 of 27 runs in the headline). The fix in
+  invented value; the verifier then reports correct work as `failed` (2 of 27 runs in the headline, 9 in the revert run),
+  or it returns malformed JSON and the run never acts (3 of 27 in the headline). The fix in
   "What I would build next" (typed predicates and a plan self-check) targets exactly this.
 - **Replay proves the pipeline, not model reliability.** `REPLAY=1` reproduces recorded runs exactly with no key;
   how often the model gets it right is what the live pass^3 measures.
@@ -403,6 +405,7 @@ One more hard rule: `agent/` never reads `bench/` (D-012), enforced by `test_age
 | --- | --- |
 | Claude Code (Anthropic) | The pair programmer for the build. The author reviewed every change and committed it; the rules it worked under are in [CLAUDE.md](CLAUDE.md). Not part of the running system. |
 | Gemini (Google AI Studio, free tier): 3.5 and 3.1 Flash-Lite, 3.5 and 3.7 Flash | The executor loop and the planner, in that fallback order |
+| OpenRouter (free model): `nvidia/nemotron-3-super-120b-a12b:free` | The executor's last fallback (D-223); smoke-tested, never reached in a benchmark run |
 | Groq (free plan): `openai/gpt-oss-120b` | The feasibility gate and the verifier's judge, a different model family from the executor |
 | Playwright (Python) | The browser tool (role and accessible-name locators, a pruned accessibility view), the GUI oracle, the README images |
 | FastAPI, Jinja2, Uvicorn | Acme's API and pages, the approval inbox and the run viewer |

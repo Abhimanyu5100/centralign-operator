@@ -19,7 +19,7 @@ from agent.llm.client import LLMClient, LLMError
 
 MODELS = [("GEMINI", "GEMINI_MODEL"), ("GEMINI", "GEMINI_FLASH2_MODEL"), ("GEMINI", "GEMINI_LITE_MODEL"),
           ("GEMINI", "GEMINI_LITE2_MODEL"), ("GROQ", "GROQ_PLAN_MODEL"), ("GROQ", "GROQ_JUDGE_MODEL"),
-          ("GROQ", "GROQ_COMPACTION_MODEL")]
+          ("GROQ", "GROQ_COMPACTION_MODEL"), ("OPENROUTER", "OPENROUTER_FALLBACK_MODEL")]
 TOOL = {"type": "function", "function": {
     "name": "record_invoice", "description": "Record an invoice number and its total.",
     "parameters": {"type": "object", "additionalProperties": False, "required": ["invoice_no", "amount_paise"],

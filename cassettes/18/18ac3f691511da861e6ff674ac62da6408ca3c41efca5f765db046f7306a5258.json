@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"probe\",\"value\":\"Sharma Logistics Pvt Ltd\"},{\"name\":\"invoice_scope\",\"source\":\"request\",\"value\":\"latest\"}],\"question\":\"Process the latest invoice from Sharma Logistics.\",\"reason\":\"Vendor Sharma Logistics matches exactly one approved record and the requested procedure matches a candidate. No ambiguity or missing parties.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice from Sharma Logistics Pvt Ltd is processed.\"]}",
+  "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"lookup\"},{\"name\":\"invoice_scope\",\"value\":\"latest\",\"source\":\"request\"}],\"success\":[\"Invoice from Sharma Logistics Pvt Ltd will be processed.\"],\"question\":\"\",\"reason\":\"Vendor uniquely identified and suitable procedure exists.\",\"sop_id\":\"process-invoice\"}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"probe\",\"value\":\"Sharma Logistics Pvt Ltd\"},{\"name\":\"invoice_scope\",\"source\":\"request\",\"value\":\"latest\"}],\"question\":\"Process the latest invoice from Sharma Logistics.\",\"reason\":\"Vendor Sharma Logistics matches exactly one approved record and the requested procedure matches a candidate. No ambiguity or missing parties.\",\"sop_id\":\"process-invoice\",\"success\":[\"Invoice from Sharma Logistics Pvt Ltd is processed.\"]}"
+   "content": "{\"candidates\":[\"process-invoice\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"vendor_name\",\"value\":\"Sharma Logistics Pvt Ltd\",\"source\":\"lookup\"},{\"name\":\"invoice_scope\",\"value\":\"latest\",\"source\":\"request\"}],\"success\":[\"Invoice from Sharma Logistics Pvt Ltd will be processed.\"],\"question\":\"\",\"reason\":\"Vendor uniquely identified and suitable procedure exists.\",\"sop_id\":\"process-invoice\"}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 554,
-   "completion_tokens": 475,
-   "total_tokens": 1029
+   "completion_tokens": 519,
+   "total_tokens": 1073
   }
  }
 }

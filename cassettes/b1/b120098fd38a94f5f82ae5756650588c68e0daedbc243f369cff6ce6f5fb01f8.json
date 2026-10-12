@@ -94,8 +94,8 @@
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 554,
-   "completion_tokens": 519,
-   "total_tokens": 1073
+   "completion_tokens": 475,
+   "total_tokens": 1029
   }
  }
 }

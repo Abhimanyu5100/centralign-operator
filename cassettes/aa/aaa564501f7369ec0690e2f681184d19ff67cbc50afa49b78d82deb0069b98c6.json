@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"onboard-employee\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"employee_name\",\"value\":\"Priya Nair\",\"source\":\"request\"},{\"name\":\"start_date\",\"value\":\"Monday\",\"source\":\"request\"}],\"question\":\"\",\"reason\":\"No existing employee matches the full name Priya Nair; proceed to onboard as a new hire.\",\"sop_id\":\"onboard-employee\",\"success\":[\"Employee Priya Nair added to employee records\",\"Onboarding workflow started for Priya Nair with start date Monday\"]}",
+  "content": "{\"candidates\":[\"onboard-employee\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"employee_name\",\"value\":\"Priya Nair\",\"source\":\"request\"},{\"name\":\"start_date\",\"value\":\"Monday\",\"source\":\"request\"}],\"question\":\"\",\"reason\":\"No existing employee matches the full name Priya Nair; the request is to onboard a new employee, so the onboarding procedure can be applied.\",\"sop_id\":\"onboard-employee\",\"success\":[\"Employee Priya Nair added to employee roster\",\"Onboarding tasks scheduled for Monday\"]}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"onboard-employee\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"employee_name\",\"value\":\"Priya Nair\",\"source\":\"request\"},{\"name\":\"start_date\",\"value\":\"Monday\",\"source\":\"request\"}],\"question\":\"\",\"reason\":\"No existing employee matches the full name Priya Nair; proceed to onboard as a new hire.\",\"sop_id\":\"onboard-employee\",\"success\":[\"Employee Priya Nair added to employee records\",\"Onboarding workflow started for Priya Nair with start date Monday\"]}"
+   "content": "{\"candidates\":[\"onboard-employee\"],\"decision\":\"proceed\",\"fields\":[{\"name\":\"employee_name\",\"value\":\"Priya Nair\",\"source\":\"request\"},{\"name\":\"start_date\",\"value\":\"Monday\",\"source\":\"request\"}],\"question\":\"\",\"reason\":\"No existing employee matches the full name Priya Nair; the request is to onboard a new employee, so the onboarding procedure can be applied.\",\"sop_id\":\"onboard-employee\",\"success\":[\"Employee Priya Nair added to employee roster\",\"Onboarding tasks scheduled for Monday\"]}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 576,
-   "completion_tokens": 679,
-   "total_tokens": 1255
+   "completion_tokens": 673,
+   "total_tokens": 1249
   }
  }
 }

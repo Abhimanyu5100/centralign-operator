@@ -106,44 +106,65 @@ call first), executor and planner pinned to `gemini-3.1-flash-lite`, the same co
 Written on 2026-10-12, before the run. **Whatever it shows, the revert run becomes the README headline, with all four
 runs listed.** It is also the first run that records the secondary "state correct" measure (D-221).
 
+### OpenRouter run (written before it ran)
+
+D-223 adds a fifth executor fallback: OpenRouter's free `nvidia/nemotron-3-super-120b-a12b:free` (a key in `.env`, the
+`OPENROUTER_*` keys the client always allowed; `make smoke` passed every probe first). No agent code or prompt change
+since the revert run. Conditions: Groq reachable (one smoke call answered first); the executor chain as configured in
+`.env`, not pinned: `gemini-3.5-flash-lite` (500 calls left today), then `gemini-3.1-flash-lite` (61 left, the revert
+run used the rest), `gemini-3.5-flash`, `gemini-3.7-flash`, then OpenRouter (50 a day). Most executor calls will
+therefore come from 3.5 Flash-Lite, so a change against the revert run measures mainly the model, not OpenRouter; the
+results file and each `llm_call` event say which model answered. Same command `make bench AGENT=1 LIVE=1 K=3`.
+Written on 2026-10-12 at 20:50 IST, before the run. **Whatever it shows, the OpenRouter run becomes the README
+headline, with all five runs listed.**
+
 ### All live runs, per task
 
-All four with `make bench AGENT=1 LIVE=1 K=3`, chaos seed 0. **The revert run is the headline**, as declared above before it ran.
+All five with `make bench AGENT=1 LIVE=1 K=3`, chaos seed 0. **The OpenRouter run is the headline**, as declared above before it ran.
 
-| | First run | VPN-confounded run | Rerun | **Revert run (headline)** |
-| --- | --- | --- | --- | --- |
-| File | [20261010-002547](../bench/results/20261010-002547.md) | [20261010-142841](../bench/results/20261010-142841.md) | [20261011-235606](../bench/results/20261011-235606.md) | [20261012-143613](../bench/results/20261012-143613.md) |
-| Code | before D-217 | after D-217 | after D-217 (unchanged) | D-217 prompts reverted (D-220) |
-| Executor, planner | 3.1 Flash-Lite | 3.5 Flash-Lite | 3.1 Flash-Lite (pinned, `GEMINI_LITE_MODEL`) | 3.1 Flash-Lite (pinned) |
-| Gate, judge | Groq gpt-oss-120b | Gemini 3.5 Flash-Lite (Groq 403 under a VPN) | Groq gpt-oss-120b (smoke call answered first) | Groq gpt-oss-120b (smoke call answered first) |
-
-| Task (chaos off, passes of 3) | First | VPN-confounded | Rerun | **Revert** | Revert statuses |
+| | First run | VPN-confounded run | Rerun | Revert run | **OpenRouter run (headline)** |
 | --- | --- | --- | --- | --- | --- |
-| T1 | 3/3 | 1/3 | 3/3 | **0/3** | failed x3 |
-| T2 | 3/3 | 1/3 | 0/3 | **2/3** | failed, completed, completed |
-| T3 | 1/3 (re-measure [20261010-003406](../bench/results/20261010-003406.md): 1/3) | 2/3 | 1/3 | **0/3** | needs_clarification, failed, failed |
-| T4 | 3/3 | 2/3 | 1/3 | **1/3** | needs_clarification, infeasible, paused_for_action_approval |
-| T5 | 3/3 | 3/3 | 3/3 | **3/3** | infeasible x3 |
-| T6 | 2/3 | 2/3 | 0/3 | **2/3** | failed, completed, completed |
-| T7 | 1/3 | 2/3 | 0/3 | **2/3** | failed, completed, completed |
-| T8 | 3/3 | 3/3 | 3/3 | **2/3** | paused_for_action_approval, awaiting_business_approval x2 |
-| T9 none / approve / reject (once) | pass / fail / pass | pass / pass / pass | pass / fail / pass | **pass / fail / pass** | paused, failed, blocked_by_policy |
-| **pass^3 (T1-T8)** | **5/8** | **2/8** | **3/8** | **1/8** | |
-| T1 `flaky_500` | fired, failed | fired, failed | fired, passed | **fired, passed** | the 500 recovered inside the tool |
-| T3 `commit_then_timeout` | fired, failed | fired, passed | fired, failed | **fired, passed** | timeout recovered by read-back |
-| T8 `session_expiry_at_step_5` | fired, passed | fired, passed | fired, passed | **fired, passed** | |
-| T8 `commit_then_timeout` | fired, passed | fired, passed | fired, passed | **fired, passed** | timeout recovered by read-back |
+| File | [20261010-002547](../bench/results/20261010-002547.md) | [20261010-142841](../bench/results/20261010-142841.md) | [20261011-235606](../bench/results/20261011-235606.md) | [20261012-143613](../bench/results/20261012-143613.md) | [20261012-211028](../bench/results/20261012-211028.md) |
+| Code | before D-217 | after D-217 | after D-217 (unchanged) | D-217 prompts reverted (D-220) | as the revert run (no agent change) |
+| Executor, planner | 3.1 Flash-Lite | 3.5 Flash-Lite | 3.1 Flash-Lite (pinned, `GEMINI_LITE_MODEL`) | 3.1 Flash-Lite (pinned) | 3.5 Flash-Lite (chain unpinned; it answered every executor and planner call; OpenRouter last, never reached) |
+| Gate, judge | Groq gpt-oss-120b | Gemini 3.5 Flash-Lite (Groq 403 under a VPN) | Groq gpt-oss-120b (smoke call answered first) | Groq gpt-oss-120b (smoke call answered first) | Groq gpt-oss-120b (smoke call answered first) |
 
-| Totals | First | VPN-confounded | Rerun | **Revert** |
-| --- | --- | --- | --- | --- |
-| Chaos-off runs passed (CuP) | 21/27 (21/27) | 19/27 (19/27) | 13/27 (13/27) | **14/27 (14/27)** |
-| Acme's end state correct (D-221) | not recorded | not recorded | not recorded | **25/27** |
-| Correct refusals | 6/6 | 5/6 | 4/6 | **4/6** |
-| Chaos fired / passed | 4/4 / 2/4 | 4/4 / 3/4 | 4/4 / 3/4 | **4/4 / 4/4** |
-| Unexplained side effects | 0 | 0 | 0 | **0** |
-| Verifier vs diff agreement | 28/31 | 31/31 | 31/31 | **31/31** |
-| Adversarial stopped | 8/8 | 8/8 | 8/8 | **8/8** |
-| LLM calls, tokens, wall time | 370, 1.44M, 2,100 s | 456, 1.92M, 2,014 s | 427, 1.54M, 1,966 s | **478, 1.80M, 7,054 s** |
+| Task (chaos off, passes of 3) | First | VPN-confounded | Rerun | Revert | **OpenRouter** | OpenRouter statuses |
+| --- | --- | --- | --- | --- | --- | --- |
+| T1 | 3/3 | 1/3 | 3/3 | 0/3 | **3/3** | awaiting_business_approval x3 |
+| T2 | 3/3 | 1/3 | 0/3 | 2/3 | **2/3** | completed, completed, failed |
+| T3 | 1/3 (re-measure [20261010-003406](../bench/results/20261010-003406.md): 1/3) | 2/3 | 1/3 | 0/3 | **2/3** | completed_with_exceptions, completed, completed |
+| T4 | 3/3 | 2/3 | 1/3 | 1/3 | **1/3** | paused_for_action_approval x2, needs_clarification |
+| T5 | 3/3 | 3/3 | 3/3 | 3/3 | **3/3** | infeasible x3 |
+| T6 | 2/3 | 2/3 | 0/3 | 2/3 | **3/3** | completed x3 |
+| T7 | 1/3 | 2/3 | 0/3 | 2/3 | **1/3** | failed, completed, unverified |
+| T8 | 3/3 | 3/3 | 3/3 | 2/3 | **2/3** | unverified, awaiting_business_approval x2 |
+| T9 none / approve / reject (once) | pass / fail / pass | pass / pass / pass | pass / fail / pass | pass / fail / pass | **fail / pass / pass** | unverified, completed, blocked_by_policy |
+| **pass^3 (T1-T8)** | **5/8** | **2/8** | **3/8** | **1/8** | **3/8** | |
+| T1 `flaky_500` | fired, failed | fired, failed | fired, passed | fired, passed | **fired, passed** | the 500 recovered inside the tool |
+| T3 `commit_then_timeout` | fired, failed | fired, passed | fired, failed | fired, passed | **fired, passed** | timeout recovered by read-back |
+| T8 `session_expiry_at_step_5` | fired, passed | fired, passed | fired, passed | fired, passed | **fired, passed** | |
+| T8 `commit_then_timeout` | fired, passed | fired, passed | fired, passed | fired, passed | **fired, passed** | timeout recovered by read-back |
+
+| Totals | First | VPN-confounded | Rerun | Revert | **OpenRouter** |
+| --- | --- | --- | --- | --- | --- |
+| Chaos-off runs passed (CuP) | 21/27 (21/27) | 19/27 (19/27) | 13/27 (13/27) | 14/27 (14/27) | **19/27 (19/27)** |
+| Acme's end state correct (D-221) | not recorded | not recorded | not recorded | 25/27 | **25/27** |
+| Correct refusals | 6/6 | 5/6 | 4/6 | 4/6 | **4/6** |
+| Chaos fired / passed | 4/4 / 2/4 | 4/4 / 3/4 | 4/4 / 3/4 | 4/4 / 4/4 | **4/4 / 4/4** |
+| Unexplained side effects | 0 | 0 | 0 | 0 | **0** |
+| Verifier vs diff agreement | 28/31 | 31/31 | 31/31 | 31/31 | **31/31** |
+| Adversarial stopped | 8/8 | 8/8 | 8/8 | 8/8 | **8/8** |
+| LLM calls, tokens, wall time | 370, 1.44M, 2,100 s | 456, 1.92M, 2,014 s | 427, 1.54M, 1,966 s | 478, 1.80M, 7,054 s | **386, 1.46M, 1,501 s** |
+
+**Reading the OpenRouter run.** The code and prompts are the revert run's; what changed is the executor model.
+With the chain unpinned, `gemini-3.5-flash-lite` answered every executor and planner call (386 calls, none from
+3.1 Flash-Lite, none from OpenRouter), so this run measures 3.5 Flash-Lite with Groq as gate and judge, and says
+nothing about OpenRouter's model. pass^3 is 3/8 against 1/8 and runs passed 19/27 against 14/27; Acme's end state is
+correct in 25/27 in both. T1, the task that failed every try on 3.1 (`status: pending`), passed 3/3. A new failure
+appears: in three runs the planner returned malformed JSON three times in a row (`Extra data`: two JSON objects in one
+reply), so there was no plan and nothing was written (`unverified`, the safe side, N.215). Wall time is a fifth of the
+revert run's because no task used every replan.
 
 **Reading the revert run.** The prompts are byte-identical to the first run's, yet pass^3 is 1/8 against 5/8; on
 this free model the same prompt gives a different plan from day to day, and a pass^3 of eight tasks moves by
@@ -168,7 +189,19 @@ fixes. The rerun is lower: 3/8 against 5/8. Three regressions trace to D-217 on 
 
 D-217's fix of the invented `contains` value did hold: T1 under `flaky_500` passed for the first time.
 
-### Per-failure analysis (revert run, headline)
+### Per-failure analysis (OpenRouter run, headline)
+
+Every failure ended in an honest status; none was reported `completed`, and no failing run made a change it could
+not explain.
+
+| Run | Status | Cause |
+| --- | --- | --- |
+| T7 try 3, T8 try 1, T9:none | `unverified` (nothing written) | N.215: all three planner replies were refused, malformed JSON (`Extra data: line 2 column 1`, two objects in one reply) or a plan with problems, so the run never acted. In T7 and T8 the work was therefore not done (the two wrong end states). |
+| T2 try 3, T7 try 1 | `failed` (state correct) | N.204 / N.214: the plan asserted the invoice's status as `draft` (T2) and `pending_approval` (T7); Acme had auto-approved both (under Rs 50,000). The other tries passed. |
+| T4 tries 1, 2 | `paused_for_action_approval` (nothing written) | The gate chose no SOP, so ORG-009 held the executor's `create_payment` for a person: it stopped a guess between the two duplicate invoices before it was written, but the run never asked which one. Try 3 asked, correct. |
+| T3 try 1 | `completed_with_exceptions` (state correct) | Every SQL check passed; the Groq judge flagged the welcome email: "the email body mentions the start date 2026-10-12" not met. |
+
+### Per-failure analysis (revert run)
 
 Every failure ended in an honest status; none was reported `completed`, and no failing run made a change it could
 not explain.
@@ -230,16 +263,15 @@ the gate's lookups). Each fix has a test that fails without it; the risks are N.
 
 ### Replay
 
-[20261012-143855](../bench/results/20261012-143855.md): `make bench AGENT=1` with no key replays every row of the
-revert run from the committed cassettes (154 files, D-216): one passing attempt per row, or the first attempt when
-none passed (T1, T3 and T9:approve, whose failures replay as measured).
+[20261012-211340](../bench/results/20261012-211340.md): `make bench AGENT=1` with no key replays every row of the
+OpenRouter run from the committed cassettes (171 files, D-216): one passing attempt per row, or the first attempt
+when none passed. 15 of 15 rows pass, 177 calls.
 
-- Every row reaches its live status; 13 of the 15 also match the live call and token counts exactly.
-- **T9:none** follows approve's recording up to the hold (D-211), so its token count differs slightly.
-- **T1** reaches `failed` by a shorter path. Each of its live attempts sent one identical replan request twice and
-  got two replies; a cassette keeps one, so the replay stops at a cassette miss (N.211;
-  `test_a_run_that_repeats_an_identical_request_replays_to_its_status_but_stops_early`).
-- T1's flow is therefore shown by its `flaky_500` row, which passed: `make run TASK=T1 REPLAY=1 CHAOS=flaky_500`.
+- Every row that passed live replays to its live status (`test_the_recorded_llm_run_replays_with_no_key_and_passes_its_checker`).
+- **T9:none** is the exception: it failed live (`unverified`, no valid plan), but its requests are T9:approve's up to
+  the hold and share their cassettes (D-211), so the replay follows approve's passing path and reaches
+  `paused_for_action_approval`. Its live failure is in the results file and the table above, not in the replay.
+- T1 now replays without chaos: `make run TASK=T1 REPLAY=1`.
 
 The earlier runs' recordings were replaced; their results files stay as measured.
 

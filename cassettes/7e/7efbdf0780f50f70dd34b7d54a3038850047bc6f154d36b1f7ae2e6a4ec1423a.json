@@ -347,10 +347,10 @@
   "content": null,
   "tool_calls": [
    {
-    "id": "call_369485",
-    "name": "list_mail",
+    "id": "call_1083349",
+    "name": "get_vendor",
     "arguments": {
-     "folder": "inbox"
+     "vendor_id": 4
     }
    }
   ],
@@ -361,24 +361,24 @@
     {
      "extra_content": {
       "google": {
-       "thought_signature": "EnMKcQFpFH0T4esCM0Y/OucJ1KQeVTzNceg4J+DvBg/TdHvjFapJqyYWGzeqbiGEXNNiAMo8+BUhdafFJ1n9pgKqzIo305UHLdwtnZwF8SyUD6Mvt6w3GANJ4R/8eq+75EyQOufvP3/rZT64fvbzyGv6r4kF"
+       "thought_signature": "EmAKXgFpFH0Tv8pPDSs+MBTYQB1h8eyzjwlAo2FwfRumM5VX/zdF79BPl7BpJWcr9WXdxaah0KLHqJ/W1Mi16O+fbHi+i8WcTulBw98CTXR48z90nNbcqIhR9awcVu3MztE="
       }
      },
      "function": {
-      "arguments": "{\"folder\":\"inbox\"}",
-      "name": "list_mail"
+      "arguments": "{\"vendor_id\":4}",
+      "name": "get_vendor"
      },
-     "id": "call_369485",
+     "id": "call_1083349",
      "type": "function"
     }
    ]
   },
   "provider": "gemini",
-  "model": "gemini-3.1-flash-lite",
+  "model": "gemini-3.5-flash-lite",
   "usage": {
    "prompt_tokens": 2498,
-   "completion_tokens": 17,
-   "total_tokens": 2515
+   "completion_tokens": 16,
+   "total_tokens": 2514
   }
  }
 }

@@ -84,18 +84,18 @@
   }
  },
  "reply": {
-  "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"ask\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"lookup\",\"value\":\"Verma Traders\"},{\"name\":\"vendor_id\",\"source\":\"lookup\",\"value\":\"3\"}],\"question\":\"Please provide the invoice number and amount for the pending invoice from Verma Traders.\",\"reason\":\"Invoice identifier and amount are missing; cannot process payment without these details.\",\"sop_id\":\"\",\"success\":[]}",
+  "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"ask\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"request\",\"value\":\"Verma Traders\"}],\"question\":\"Which invoice from Verma Traders should be paid (invoice number or reference)?\",\"reason\":\"The vendor Verma Traders is uniquely identified, but the request does not specify the invoice number or reference needed to process the payment.\",\"sop_id\":\"schedule-payment\",\"success\":[]}",
   "tool_calls": [],
   "message": {
    "role": "assistant",
-   "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"ask\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"lookup\",\"value\":\"Verma Traders\"},{\"name\":\"vendor_id\",\"source\":\"lookup\",\"value\":\"3\"}],\"question\":\"Please provide the invoice number and amount for the pending invoice from Verma Traders.\",\"reason\":\"Invoice identifier and amount are missing; cannot process payment without these details.\",\"sop_id\":\"\",\"success\":[]}"
+   "content": "{\"candidates\":[\"process-invoice\",\"schedule-payment\"],\"decision\":\"ask\",\"fields\":[{\"name\":\"vendor_name\",\"source\":\"request\",\"value\":\"Verma Traders\"}],\"question\":\"Which invoice from Verma Traders should be paid (invoice number or reference)?\",\"reason\":\"The vendor Verma Traders is uniquely identified, but the request does not specify the invoice number or reference needed to process the payment.\",\"sop_id\":\"schedule-payment\",\"success\":[]}"
   },
   "provider": "groq",
   "model": "openai/gpt-oss-120b",
   "usage": {
    "prompt_tokens": 573,
-   "completion_tokens": 784,
-   "total_tokens": 1357
+   "completion_tokens": 765,
+   "total_tokens": 1338
   }
  }
 }

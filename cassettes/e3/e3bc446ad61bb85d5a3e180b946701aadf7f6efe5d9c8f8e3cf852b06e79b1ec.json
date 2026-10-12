@@ -300,7 +300,7 @@
   "content": null,
   "tool_calls": [
    {
-    "id": "call_389245",
+    "id": "call_1460246",
     "name": "get_vendor",
     "arguments": {
      "vendor_id": 1
@@ -314,20 +314,20 @@
     {
      "extra_content": {
       "google": {
-       "thought_signature": "EnMKcQFpFH0TtOzcEJOn60x/zapCpFZNtEvSe9u7qNRnpjOT2k+41WwlhQYuJ5rIQ5eTuxM0q6vp1Ht+CEdczck8pQVLl1pi3qP41Juz1DHj70KcMIJPMAPzCDI8twyG+FXuzjvzJrKOpYiXpPanis7DigP/"
+       "thought_signature": "EmAKXgFpFH0TniW8q93iNVFr8wM1G68xbLr2Ddw2sa0fOCOQ8qtYSOwRzE3gLSxf8q5p79f22Ed0GswPZB/kPVmogR/XRGqxN/dlNfMsyOPyOK9+HUVrHmFjQOxxiEf8zgM="
       }
      },
      "function": {
       "arguments": "{\"vendor_id\":1}",
       "name": "get_vendor"
      },
-     "id": "call_389245",
+     "id": "call_1460246",
      "type": "function"
     }
    ]
   },
   "provider": "gemini",
-  "model": "gemini-3.1-flash-lite",
+  "model": "gemini-3.5-flash-lite",
   "usage": {
    "prompt_tokens": 1885,
    "completion_tokens": 16,

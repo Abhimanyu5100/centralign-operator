@@ -1,6 +1,6 @@
 """README images from replayed runs (`make readme-assets`): no API key, no LLM quota, deterministic.
 
-Replays T1 (its passing flaky_500 run), T6, T4 and T5 into a clean run store (runs/readme.db), serves the run viewer and approval inbox on it,
+Replays T1, T6, T4 and T5 into a clean run store (runs/readme.db), serves the run viewer and approval inbox on it,
 replays T9 with a person's decision pending, and records that person approving it in the inbox. Writes 2x PNGs and
 an optimised GIF (no watermark, no labels) to docs/assets/. Harness side only: agent/ never imports this."""
 
@@ -22,7 +22,7 @@ OUT = ROOT / "docs" / "assets"
 PORT = 8101  # not make ui's 8100, so a running inbox is never disturbed
 BASE = f"http://127.0.0.1:{PORT}"
 SHOTS = {"T1": "t1", "T6": "t6", "T4": "t4", "T5": "t5"}
-EXTRA = {"T1": ("--chaos", "flaky_500")}  # T1 passed live only under chaos in the headline run; this replay shows it
+EXTRA: dict[str, tuple[str, ...]] = {}  # per-task replay flags (T1 passed live without chaos in the headline run)
 
 
 def replay(task: str, *extra: str, wait: bool = True) -> subprocess.Popen:

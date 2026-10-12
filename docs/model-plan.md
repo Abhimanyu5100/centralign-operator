@@ -141,7 +141,7 @@ before count: at 15 RPM per model at least 30 minutes of pacing, plus model late
 | --- | --- | --- | --- |
 | Google AI Studio (Gemini API) | Gemini Flash, Gemini Flash-Lite | Per project, shown live in AI Studio; reports range roughly 5–15 RPM and 250–1,500 RPD for Flash. Pro models left the free tier in April 2026 | Function calling, vision, long context. Free-tier prompts may be used to improve Google products (fine: Acme data is fake). Limits: https://ai.google.dev/gemini-api/docs/rate-limits |
 | Groq | `openai/gpt-oss-120b` (judge), `qwen/qwen3.8-27b` (compaction, D-165) | 30 RPM, 1K RPD, **8K TPM**, 200K TPD per model | Very fast. The 8K tokens-per-minute cap binds long before the request cap, so Groq serves only the judge and compaction. Limits: https://console.groq.com/docs/rate-limits |
-| OpenRouter | Models ending in `:free` | 20 RPM; 50 requests/day with < $10 credits ever purchased | **Not used (D-165): no key, and none will be made.** A provider with no key is not configured and the client skips it; the `OPENROUTER_*` keys stay in the allowlist, so a key added later just works as the last reasoning fallback. |
+| OpenRouter | Models ending in `:free` | 20 RPM; 50 requests/day with < $10 credits ever purchased | **The executor's last fallback (D-223):** `nvidia/nemotron-3-super-120b-a12b:free` (tools and JSON schema; `make smoke MODELS=OPENROUTER_FALLBACK_MODEL` passed every probe on 2026-10-12), 50 a day and 20 a minute in `LLM_DAILY_LIMITS` / `LLM_RPM`. Reached only after all four Gemini models; the OpenRouter run never reached it. Earlier (D-165) no key existed and the client skipped it. |
 
 Exact model IDs: copy them from each console into `.env` during the Day 3 evening check. Do not trust IDs
 from memory.

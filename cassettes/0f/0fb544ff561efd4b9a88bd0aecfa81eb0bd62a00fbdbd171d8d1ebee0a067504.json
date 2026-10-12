@@ -336,11 +336,10 @@
   "content": null,
   "tool_calls": [
    {
-    "id": "call_483165",
-    "name": "list_invoices",
+    "id": "call_1290915",
+    "name": "find_vendors",
     "arguments": {
-     "status": "approved",
-     "vendor": 1
+     "q": "Sharma"
     }
    }
   ],
@@ -351,24 +350,24 @@
     {
      "extra_content": {
       "google": {
-       "thought_signature": "EnMKcQFpFH0TGlq3z1Of37FZ6d3ed6UIK/T+53gOsrskaZZ/1EB1xJiIuQ1CfYfgiVdwzFyALnz1xfp7L9J8Bo1k1Ut3IK7XvbYCy/rpcNLtyvbh8+Llw0p3GxGCXVxV1OigC26ZpQrAnPYhNc5HjNS2lJ2I"
+       "thought_signature": "EmAKXgFpFH0TJrLLflvr/uLmqF+lFJiQFYDzwM1tTsvVFbrm76G+uMyfflAiDC75vtTX/4BAmGFhpykaLW0c7UnA1HWJCDaIORoNzBfrIND8AmySdgr5yj47/hLvRc3mKQc="
       }
      },
      "function": {
-      "arguments": "{\"status\":\"approved\",\"vendor\":1}",
-      "name": "list_invoices"
+      "arguments": "{\"q\":\"Sharma\"}",
+      "name": "find_vendors"
      },
-     "id": "call_483165",
+     "id": "call_1290915",
      "type": "function"
     }
    ]
   },
   "provider": "gemini",
-  "model": "gemini-3.1-flash-lite",
+  "model": "gemini-3.5-flash-lite",
   "usage": {
    "prompt_tokens": 1958,
-   "completion_tokens": 21,
-   "total_tokens": 1979
+   "completion_tokens": 16,
+   "total_tokens": 1974
   }
  }
 }

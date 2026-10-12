@@ -5,27 +5,29 @@ If this file disagrees with git, git wins for what is committed.
 
 ## Now
 
-- **Last updated:** 2026-10-12 15:10 IST
-- **Day / phase / part:** Day 7 (submission day). Revert run done (D-220, D-222), docs and README filled, README
-  images and the demo video recorded. Awaiting the author's commit, push, video upload and link, submit.
-- **Headline, revert run (bench/results/20261012-143613; declared before it ran; 3.1 Flash-Lite pinned, Groq
-  reachable):** pass^3 1/8 (T5), runs passed 14/27, **Acme's end state correct 25/27**, refusals 4/6, chaos 4/4 fired
-  and recovered, unexplained 0, agreement 31/31, adversarial 8/8, 478 calls. Listed beside it: first 5/8, VPN-confounded
-  2/8, rerun 3/8. Main failure: a wrong first assertion locked in by the replan rule (N.214); safe direction.
-- **Replay (bench/results/20261012-143855):** 154 cassettes from the revert run; every row to its live status with
-  no key; T1 by a shorter path (N.211). T1's passing recording is its `flaky_500` row, used by the quick start, README
-  images, fresh-clone check and video.
-- **Demo video:** `make demo-video` -> runs/demo/demo.webm (gitignored, about 3 min, captioned, no voice).
+- **Last updated:** 2026-10-12 21:30 IST
+- **Day / phase / part:** Day 7 (submission day, after the first submission). OpenRouter enabled as the executor's
+  last fallback (D-223); one more live pass^3, declared the headline before it ran (D-224); cassettes, README images
+  and the demo video rebuilt from it. Awaiting the author's review, commit, push and video re-upload.
+- **Headline, OpenRouter run (bench/results/20261012-211028; declared before it ran; chain unpinned, Groq
+  reachable):** pass^3 3/8 (T1, T5, T6), runs passed 19/27, **Acme's end state correct 25/27**, refusals 4/6, chaos
+  4/4 fired and recovered, unexplained 0, agreement 31/31, adversarial 8/8, 386 calls. 3.5 Flash-Lite answered every
+  executor and planner call; OpenRouter was never reached. Listed beside it: first 5/8, VPN-confounded 2/8, rerun 3/8,
+  revert 1/8. New failure: malformed planner JSON, no plan, nothing written (N.215); safe direction.
+- **Replay (bench/results/20261012-211340):** 171 cassettes; 15/15 rows pass with no key. T9:none failed live but
+  replays approve's shared path (D-211). T1 passes without chaos, so the quick start, README images, fresh-clone
+  check and video use plain T1.
+- **Demo video:** `make demo-video` -> runs/demo/demo.webm (gitignored, re-recorded; the README link still points at
+  the earlier upload until the author replaces it).
 - **Checks:** see the checkpoint row below.
-- **Running agent/ total (ceiling 3,950):** **3,875** non-blank lines.
-- **Next step:** the video is uploaded and linked in README.md; the author commits, pushes, makes the repo
-  public and submits the form.
+- **Running agent/ total (ceiling 3,950):** **3,875** non-blank lines (no agent change).
+- **Next step:** the author reviews `git diff`, commits, pushes, uploads the new runs/demo/demo.webm and updates the
+  link in README.md.
 - **RESUME PROMPT:**
   ```
-  Read CLAUDE.md and docs/progress.md. Everything is built and measured: headline revert run pass^3 1/8, state correct
-  25/27 (bench/results/20261012-143613), all four runs listed in README and docs/EVALUATION.md. What is left is the
-  author's: commit, push, upload runs/demo/demo.webm, its link in README.md, make the repo public, submit. Do not
-  commit or push.
+  Read CLAUDE.md and docs/progress.md. Everything is built and measured: headline OpenRouter run pass^3 3/8, state
+  correct 25/27 (bench/results/20261012-211028), all five runs listed in README and docs/EVALUATION.md. What is left
+  is the author's: commit, push, upload runs/demo/demo.webm, replace its link in README.md. Do not commit or push.
   ```
 
 ## Done log
@@ -64,6 +66,7 @@ If this file disagrees with git, git wins for what is committed.
 | 2026-10-10 | 6.Docs | Submission docs: README rewritten as the front door (submission-requirements map, Mermaid architecture, 8 decisions, assumptions, limitations, next, tools), docs/DESIGN.md, docs/EVALUATION.md, docs/EXTENDING.md, docs/DEMO.md; results sections TODO until the final run; doc test (make targets, links and anchors, cited tests, D- and N- ids, results files) | `README.md`, `docs/{DESIGN,EVALUATION,EXTENDING,DEMO}.md`, `tests/test_docs.py`, `docs/progress.md` | `make test`: 1894 passed, 0 failed (doc test 26) | 58a4c56 |
 | 2026-10-10 | 6.Final | Final live pass^3 (2/8, Groq blocked), held-out probe 2/2 (`AS_TASK=`, D-218), cassettes from the final run (191), README/EVALUATION/DEMO results filled, fresh-clone WORKTREE mode, `AS` -> `AS_TASK` fix, risks N.208-N.210 | `Makefile`, `bench/{run_agent,run_bench}.py`, `cassettes/*`, `README.md`, `docs/{EVALUATION,DEMO,decisions,risk-log,progress}.md`, `scripts/fresh_clone.sh`, `tests/e2e/test_agent_replay.py`, `tests/bench/test_run_agent_as.py` | `make test`: 1895 passed; `make test-e2e`: 69 passed; doc test 26 passed; fresh clone OK | a7703d8 |
 | 2026-10-12 | 6.Rerun | Final live pass^3 rerun under the intended conditions (D-219): 3/8, the README headline with all three runs side by side; cassettes rebuilt from it (166); e2e replay cases updated; risks N.211-N.213 | `README.md`, `docs/{EVALUATION,DEMO,decisions,risk-log,progress}.md`, `cassettes/*`, `tests/e2e/test_agent_replay.py` | `make test`: 1895 passed; `make test-e2e`: 69 passed; doc test 26; fresh clone OK | pending |
+| 2026-10-12 | 7.OpenRouter | OpenRouter as last executor fallback (D-223, smoke passed); live pass^3 declared before it ran, the new headline (D-224): 3/8, 19/27, state correct 25/27; cassettes rebuilt (171), replay 15/15; README images and demo video from plain T1; risk N.215 | `.env` (not committed), `scripts/{smoke_llm,readme_assets,demo_video}.py`, `scripts/fresh_clone.sh`, `README.md`, `docs/{EVALUATION,DEMO,model-plan,decisions,risk-log,progress}.md`, `docs/assets/*`, `cassettes/*`, `bench/results/20261012-21*`, `tests/e2e/test_agent_replay.py` | `make test`: 1909 passed; `make test-e2e`: 69 passed | pending |
 
 ## Blockers and open questions
 
