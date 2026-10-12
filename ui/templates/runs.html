@@ -4,28 +4,31 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Runs</title>
+  {% include "_style.html" %}
   <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 70rem; padding: 0 1rem; color: #1b1b1b; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { text-align: left; vertical-align: top; padding: .3rem .5rem; border-top: 1px solid #eee; }
-    .meta { color: #555; font-size: .9rem; }
-    code { font-size: .9rem; }
+    td.when { color: var(--muted); font-size: .85rem; white-space: nowrap; }
+    td.id code { color: var(--accent); }
   </style>
 </head>
 <body>
-  <nav><a href="/">Approval inbox</a> · <strong>Runs</strong></nav>
+  <header class="top"><div class="bar"><span class="brand">CentrAlign Operator<small>Acme</small></span>
+    <nav><a href="/">Approval inbox</a><strong>Runs</strong></nav></div></header>
+  <main>
   <h1>Runs</h1>
   <p class="meta">Newest first, from {{ store }}. The status is the verifier's, from each run's report.</p>
+  <div class="panel" style="padding: 0; overflow: hidden">
   <table>
     <thead><tr><th scope="col">Run</th><th scope="col">Request</th><th scope="col">Status</th><th scope="col">Frozen now</th></tr></thead>
     <tbody>
     {% for r in runs %}
-      <tr><td><a href="/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a></td><td>{{ r.request }}</td>
-          <td>{{ r.status }}</td><td>{{ r.now }}</td></tr>
+      <tr><td class="id"><a href="/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a></td><td>{{ r.request }}</td>
+          <td><span class="badge s-{{ r.status }}">{{ r.status }}</span></td><td class="when">{{ r.now }}</td></tr>
     {% else %}
       <tr><td colspan="4">No runs yet. Try <code>make run TASK=T1 REPLAY=1</code>.</td></tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
+  </main>
 </body>
 </html>

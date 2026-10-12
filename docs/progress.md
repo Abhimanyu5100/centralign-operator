@@ -17,8 +17,8 @@ If this file disagrees with git, git wins for what is committed.
 - **Replay (bench/results/20261012-211340):** 171 cassettes; 15/15 rows pass with no key. T9:none failed live but
   replays approve's shared path (D-211). T1 passes without chaos, so the quick start, README images, fresh-clone
   check and video use plain T1.
-- **Demo video:** `make demo-video` -> runs/demo/demo.webm (gitignored, re-recorded; the README link still points at
-  the earlier upload until the author replaces it).
+- **Demo video:** `make demo-video` -> runs/demo/demo.webm (gitignored, re-recorded on the polished UI; the README
+  link still points at the earlier upload until the author replaces it).
 - **Checks:** see the checkpoint row below.
 - **Running agent/ total (ceiling 3,950):** **3,875** non-blank lines (no agent change).
 - **Next step:** the author reviews `git diff`, commits, pushes, uploads the new runs/demo/demo.webm and updates the
@@ -67,6 +67,7 @@ If this file disagrees with git, git wins for what is committed.
 | 2026-10-10 | 6.Final | Final live pass^3 (2/8, Groq blocked), held-out probe 2/2 (`AS_TASK=`, D-218), cassettes from the final run (191), README/EVALUATION/DEMO results filled, fresh-clone WORKTREE mode, `AS` -> `AS_TASK` fix, risks N.208-N.210 | `Makefile`, `bench/{run_agent,run_bench}.py`, `cassettes/*`, `README.md`, `docs/{EVALUATION,DEMO,decisions,risk-log,progress}.md`, `scripts/fresh_clone.sh`, `tests/e2e/test_agent_replay.py`, `tests/bench/test_run_agent_as.py` | `make test`: 1895 passed; `make test-e2e`: 69 passed; doc test 26 passed; fresh clone OK | a7703d8 |
 | 2026-10-12 | 6.Rerun | Final live pass^3 rerun under the intended conditions (D-219): 3/8, the README headline with all three runs side by side; cassettes rebuilt from it (166); e2e replay cases updated; risks N.211-N.213 | `README.md`, `docs/{EVALUATION,DEMO,decisions,risk-log,progress}.md`, `cassettes/*`, `tests/e2e/test_agent_replay.py` | `make test`: 1895 passed; `make test-e2e`: 69 passed; doc test 26; fresh clone OK | pending |
 | 2026-10-12 | 7.OpenRouter | OpenRouter as last executor fallback (D-223, smoke passed); live pass^3 declared before it ran, the new headline (D-224): 3/8, 19/27, state correct 25/27; cassettes rebuilt (171), replay 15/15; README images and demo video from plain T1; risk N.215 | `.env` (not committed), `scripts/{smoke_llm,readme_assets,demo_video}.py`, `scripts/fresh_clone.sh`, `README.md`, `docs/{EVALUATION,DEMO,model-plan,decisions,risk-log,progress}.md`, `docs/assets/*`, `cassettes/*`, `bench/results/20261012-21*`, `tests/e2e/test_agent_replay.py` | `make test`: 1909 passed; `make test-e2e`: 69 passed | pending |
+| 2026-10-12 | 7.UI | Run viewer and approval inbox polish: shared style (`ui/templates/_style.html`), header bar, status badges, colour-coded timeline rows, the report rendered from its Markdown subset (escaped first, `report_html`), approve/reject buttons; README images and demo video re-recorded on it. No behaviour change | `ui/app.py`, `ui/templates/*`, `scripts/readme_assets.py`, `tests/ui/test_run_viewer.py`, `docs/assets/*` | `make test`: 1910 passed; `make test-e2e`: 69 passed | pending |
 
 ## Blockers and open questions
 

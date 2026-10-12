@@ -54,7 +54,7 @@ async def screenshots(browser) -> None:
         request = {"T1": "Process the latest", "T6": "Process the new", "T4": "Pay the pending",
                    "T5": "Pay the invoice from Kapoor"}[task]
         await page.goto(f"{BASE}/runs/{run_id(request)}")
-        await page.locator("pre").last.screenshot(path=OUT / f"{name}-report.png")
+        await page.locator(".report").screenshot(path=OUT / f"{name}-report.png")
         if task == "T1":  # the plan, the first write and its policy decision
             rows = await page.evaluate("""() => [...document.querySelectorAll('tr')].map(r =>
                 [(r.cells[1] || {}).textContent || '', (r.cells[2] || {}).textContent || ''])""")
@@ -92,7 +92,7 @@ async def approval_gif(browser) -> None:
     held.wait(timeout=300)
     await page.goto(f"{BASE}/runs/{run_id('Email Sharma')}")
     await snap(2600)
-    await page.locator("pre").last.scroll_into_view_if_needed()
+    await page.locator(".report").scroll_into_view_if_needed()
     await snap(3600)
     (OUT / ".frame.png").unlink()
     small = [im.resize((880, 608), Image.LANCZOS).quantize(colors=128, method=Image.Quantize.MEDIANCUT,

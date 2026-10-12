@@ -1,0 +1,46 @@
+<style>
+  :root {
+    --ink: #1c2330; --muted: #5d6675; --line: #e3e7ee; --bg: #f5f7fa; --card: #fff; --accent: #2f5bd3;
+    --ok: #1d7a46; --ok-bg: #e5f4ea; --wait: #8a5a00; --wait-bg: #fff3d6; --ask: #1f5fa8; --ask-bg: #e3eefb;
+    --bad: #b42318; --bad-bg: #fdeceb; --plain: #475467; --plain-bg: #eef0f4;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; color: var(--ink); background: var(--bg); }
+  header.top { background: #141a26; color: #fff; }
+  header.top .bar { max-width: 76rem; margin: 0 auto; padding: .7rem 1.25rem; display: flex; align-items: center; gap: 1.5rem; }
+  header.top .brand { font-weight: 650; letter-spacing: .01em; }
+  header.top .brand small { color: #9aa4b5; font-weight: 400; margin-left: .4rem; }
+  header.top nav { display: flex; gap: .25rem; }
+  header.top nav a, header.top nav strong { color: #c9d1de; text-decoration: none; padding: .3rem .7rem; border-radius: 6px; font-weight: 500; }
+  header.top nav a:hover { background: #222b3b; color: #fff; }
+  header.top nav strong { background: #2a3447; color: #fff; }
+  main { max-width: 76rem; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
+  h1 { font-size: 1.5rem; margin: .2rem 0 .3rem; }
+  h2 { font-size: 1.1rem; margin: 2rem 0 .6rem; }
+  a { color: var(--accent); }
+  code, pre { font-family: var(--mono); font-size: .85em; }
+  .meta { color: var(--muted); font-size: .88rem; margin: .2rem 0; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 1.1rem 1.3rem;
+           box-shadow: 0 1px 2px rgb(16 24 40 / .04); }
+  table { border-collapse: collapse; width: 100%; background: var(--card); }
+  .panel > table { margin: 0; }
+  th, td { text-align: left; vertical-align: top; padding: .5rem .7rem; border-top: 1px solid var(--line); }
+  thead th { border-top: 0; color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  tbody tr:hover td { background: #fafbfd; }
+  .badge, .status { display: inline-block; padding: .12rem .6rem; border-radius: 999px; font-size: .8rem; font-weight: 600;
+                    background: var(--plain-bg); color: var(--plain); white-space: nowrap; }
+  .status { font-size: .95rem; padding: .25rem .85rem; margin: .6rem 0 .2rem; }
+  .s-completed { background: var(--ok-bg); color: var(--ok); }
+  .s-awaiting_business_approval, .s-paused_for_action_approval, .s-completed_with_exceptions, .s-pending
+    { background: var(--wait-bg); color: var(--wait); }
+  .s-needs_clarification { background: var(--ask-bg); color: var(--ask); }
+  .s-failed, .s-unverified, .s-unverifiable, .s-rejected { background: var(--bad-bg); color: var(--bad); }
+  .s-approved { background: var(--ok-bg); color: var(--ok); }
+  button { font: inherit; font-weight: 600; padding: .45rem 1.1rem; border-radius: 7px; cursor: pointer; border: 1px solid transparent; }
+  button.approve { background: var(--ok); color: #fff; }
+  button.approve:hover { background: #166238; }
+  button.reject { background: #fff; color: var(--bad); border-color: #f1b8b2; }
+  button.reject:hover { background: var(--bad-bg); }
+  input { font: inherit; padding: .35rem .55rem; border: 1px solid #cdd3dd; border-radius: 6px; }
+</style>

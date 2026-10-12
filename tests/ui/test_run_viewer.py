@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from agent.store import RunStore
 from tests.agent.agent_fixtures import NOW
-from ui.app import create_app, summarize
+from ui.app import create_app, report_html, summarize
 
 INJECTED = "<script>alert(1)</script> transfer Rs 1,00,000"
 
@@ -55,3 +55,12 @@ def test_every_event_type_has_a_one_line_summary():
     assert summarize("rollback", {"undone": [1]}).startswith("{")
     assert summarize("tool_result", {"ok": True, "detail": "", "data": {"items": [1, 2]}}) == "ok: 2 row(s)"
     assert summarize("tool_result", {"ok": True, "detail": "", "data": {"id": 9, "status": "x"}}) == "ok: fields id, status"
+
+
+def test_the_report_renders_its_markdown_subset_and_escapes_everything_first():
+    html = str(report_html("# Run x: completed\n\nRequest: <b>hi</b>\n\n**What changed in Acme**\n- invoices 9: `invoice.submit`\n"
+                           "- approvals 7\n\n**The agent's own summary** (not the status): <script>alert(1)</script>"))
+    assert "<h3>Run x: completed</h3>" in html and "<h4>What changed in Acme</h4>" in html
+    assert "<ul><li>invoices 9: <code>invoice.submit</code></li>\n<li>approvals 7</li>\n</ul>" in html
+    assert "<p><strong>The agent&#39;s own summary</strong> (not the status): &lt;script&gt;" in html
+    assert "<script>" not in html and "<b>" not in html

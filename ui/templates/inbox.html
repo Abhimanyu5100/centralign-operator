@@ -4,35 +4,49 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Approval inbox</title>
+  {% include "_style.html" %}
   <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 60rem; padding: 0 1rem; color: #1b1b1b; }
-    .card { border: 1px solid #c8c8c8; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0; }
-    .meta { color: #555; font-size: .9rem; }
-    .src { color: #555; font-size: .85rem; margin: .25rem 0 0; }
-    table { border-collapse: collapse; width: 100%; margin: .5rem 0; }
-    th, td { text-align: left; vertical-align: top; padding: .25rem .5rem; border-top: 1px solid #eee; }
-    th { width: 9rem; color: #555; font-weight: 600; }
-    td pre { margin: 0; white-space: pre-wrap; font-family: inherit; }
-    .why { background: #fff8e1; padding: .5rem .75rem; border-radius: 4px; }
-    form.decide { display: flex; gap: .5rem; align-items: end; flex-wrap: wrap; margin-top: .75rem; }
-    label { display: flex; flex-direction: column; font-size: .85rem; gap: .2rem; }
-    button { padding: .4rem 1rem; }
+    main { max-width: 62rem; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin: 1rem 0; overflow: hidden;
+            box-shadow: 0 1px 3px rgb(16 24 40 / .06); }
+    .card .head { display: flex; align-items: center; gap: .75rem; padding: .8rem 1.2rem; background: #fffaf0; border-bottom: 1px solid #f3e2b8; }
+    .card h3 { margin: 0; font-size: 1.05rem; }
+    .card h3 code { font-size: .95rem; }
+    .card .body { padding: .4rem 1.2rem 1.1rem; }
+    .card table { margin: .4rem 0; }
+    .card th { width: 9rem; color: var(--muted); font-weight: 600; font-size: .88rem; }
+    .card tr:first-child th, .card tr:first-child td { border-top: 0; }
+    td pre { margin: 0; white-space: pre-wrap; font-family: inherit; font-size: inherit; }
+    .src { color: var(--ok); font-size: .82rem; margin: .3rem 0 0; }
+    .why { background: var(--wait-bg); color: #5c3d00; padding: .6rem .85rem; border-radius: 7px; margin: .6rem 0; }
+    form.decide { display: flex; gap: .6rem; align-items: end; flex-wrap: wrap; margin-top: .9rem; }
+    label { display: flex; flex-direction: column; font-size: .8rem; color: var(--muted); gap: .2rem; }
+    .done { background: var(--ok-bg); color: var(--ok); padding: .6rem .9rem; border-radius: 7px; font-weight: 600; }
+    .decided { display: flex; align-items: center; gap: .6rem; padding: .55rem .9rem; border-top: 1px solid var(--line); }
+    .decided:first-child { border-top: 0; }
+    .d-approved { border-left: 4px solid var(--ok); }
+    .d-rejected { border-left: 4px solid var(--bad); }
+    .empty { color: var(--muted); }
   </style>
 </head>
 <body>
-  <nav><strong>Approval inbox</strong> · <a href="/runs">Runs</a></nav>
+  <header class="top"><div class="bar"><span class="brand">CentrAlign Operator<small>Acme</small></span>
+    <nav><strong>Approval inbox</strong><a href="/runs">Runs</a></nav></div></header>
+  <main>
   <h1>Approval inbox</h1>
   <p class="meta">Calls the policy gate held for a person to decide. Approving lets that exact call run once.</p>
-  {% if done %}<p role="status">{{ done }}</p>{% endif %}
+  {% if done %}<p class="done" role="status">{{ done }}</p>{% endif %}
 
   <h2>Pending ({{ pending | length }})</h2>
   {% for a in pending %}
   <section class="card" aria-labelledby="h-{{ a.approval_id }}">
-    <h3 id="h-{{ a.approval_id }}">{{ a.approval_id }}: {{ a.predicted.tool }}</h3>
+    <div class="head"><span class="badge s-pending">held</span>
+      <h3 id="h-{{ a.approval_id }}">{{ a.approval_id }}: <code>{{ a.predicted.tool }}</code></h3></div>
+    <div class="body">
     <p class="meta">Run request: {{ a.request }}</p>
     <table>
       <tr><th scope="row">Will do</th><td>{{ a.predicted.effect }}</td></tr>
-      <tr><th scope="row">Request</th><td>{{ a.predicted.request or "none (local tool)" }}</td></tr>
+      <tr><th scope="row">Request</th><td><code>{{ a.predicted.request or "none (local tool)" }}</code></td></tr>
       <tr><th scope="row">Side effect</th><td>{{ a.predicted.side_effect }} ({{ a.predicted.channel }})</td></tr>
       {% for name, value in a.predicted.args.items() if value is not none %}
       <tr><th scope="row">{{ name }}</th><td><pre>{{ value }}</pre>{% if a.predicted.sources and name in a.predicted.sources %}<p class="src">Seen in: {{ a.predicted.sources[name] }}</p>{% endif %}</td></tr>
@@ -43,19 +57,23 @@
       <input type="hidden" name="token" value="{{ token }}">
       <label>Your name <input name="by" value="approver"></label>
       <label>Note <input name="note"></label>
-      <button type="submit" formaction="/approvals/{{ a.approval_id }}/approve">Approve {{ a.approval_id }}</button>
-      <button type="submit" formaction="/approvals/{{ a.approval_id }}/reject">Reject {{ a.approval_id }}</button>
+      <button class="approve" type="submit" formaction="/approvals/{{ a.approval_id }}/approve">Approve {{ a.approval_id }}</button>
+      <button class="reject" type="submit" formaction="/approvals/{{ a.approval_id }}/reject">Reject {{ a.approval_id }}</button>
     </form>
+    </div>
   </section>
   {% else %}
-  <p>Nothing is waiting.</p>
+  <p class="panel empty">Nothing is waiting.</p>
   {% endfor %}
 
   <h2>Recently decided</h2>
+  <div class="panel" style="padding: 0">
   {% for a in decided %}
-  <p>{{ a.approval_id }} {{ a.predicted.tool }}: {{ a.status }} by {{ a.decided_by }}{% if a.consumed %}, used{% endif %}{% if a.note %} ({{ a.note }}){% endif %}</p>
+  <p class="decided d-{{ a.status }}">{{ a.approval_id }} <code>{{ a.predicted.tool }}</code>: {{ a.status }} by {{ a.decided_by }}{% if a.consumed %}, used{% endif %}{% if a.note %} ({{ a.note }}){% endif %}</p>
   {% else %}
-  <p>None yet.</p>
+  <p class="decided empty">None yet.</p>
   {% endfor %}
+  </div>
+  </main>
 </body>
 </html>

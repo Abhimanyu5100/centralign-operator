@@ -4,41 +4,67 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Run {{ run_id }}</title>
+  {% include "_style.html" %}
   <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 75rem; padding: 0 1rem; color: #1b1b1b; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { text-align: left; vertical-align: top; padding: .25rem .5rem; border-top: 1px solid #eee; }
-    td.type { white-space: nowrap; color: #555; }
-    pre { white-space: pre-wrap; word-break: break-word; background: #f6f6f6; padding: .5rem; border-radius: 4px; }
-    .status { font-size: 1.2rem; font-weight: 600; }
-    tr.policy_decision td, tr.approval td { background: #fff8e1; }
-    tr.verifier_result td { background: #e8f5e9; }
-    tr.security_finding td { background: #fdecea; }
-    .meta { color: #555; font-size: .9rem; }
+    .asked { font-size: 1.15rem; font-weight: 550; margin: .1rem 0 .2rem; }
+    .reasons { margin: .5rem 0 0; padding-left: 1.2rem; color: var(--muted); }
+    td.seq { color: var(--muted); font-size: .8rem; width: 3rem; text-align: right; }
+    td.type { white-space: nowrap; width: 10rem; }
+    td.type span { font-family: var(--mono); font-size: .78rem; padding: .1rem .45rem; border-radius: 5px; background: var(--plain-bg); color: var(--plain); }
+    tbody tr td:first-child { border-left: 3px solid transparent; }
+    tr.plan td:first-child { border-left-color: #0f766e; }
+    tr.plan td.type span { background: #e0f2f1; color: #0f766e; }
+    tr.tool_call td:first-child { border-left-color: var(--accent); }
+    tr.tool_call td.type span { background: #e6ecfb; color: var(--accent); }
+    tr.policy_decision td, tr.approval td { background: #fffaf0; }
+    tr.policy_decision td:first-child, tr.approval td:first-child { border-left-color: #d29a1d; }
+    tr.policy_decision td.type span, tr.approval td.type span { background: var(--wait-bg); color: var(--wait); }
+    tr.verifier_result td { background: #f3faf5; }
+    tr.verifier_result td:first-child { border-left-color: var(--ok); }
+    tr.verifier_result td.type span { background: var(--ok-bg); color: var(--ok); }
+    tr.security_finding td { background: #fff5f4; }
+    tr.security_finding td:first-child { border-left-color: var(--bad); }
+    tr.security_finding td.type span { background: var(--bad-bg); color: var(--bad); }
+    tr.llm_call td { color: var(--muted); }
+    summary { cursor: pointer; }
+    details pre { white-space: pre-wrap; word-break: break-word; background: #f6f8fb; border: 1px solid var(--line);
+                  padding: .6rem .75rem; border-radius: 6px; margin: .5rem 0 .2rem; max-height: 28rem; overflow: auto; }
+    .report h3 { font-size: 1.05rem; margin: 0 0 .6rem; }
+    .report h4 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 1.1rem 0 .3rem; }
+    .report p { margin: .35rem 0; }
+    .report ul { margin: .2rem 0; padding-left: 1.2rem; }
+    .report li { margin: .15rem 0; }
+    .report code { background: var(--plain-bg); padding: .05rem .3rem; border-radius: 4px; }
   </style>
 </head>
 <body>
-  <nav><a href="/">Approval inbox</a> · <a href="/runs">Runs</a></nav>
-  <h1>Run <code>{{ run_id }}</code></h1>
-  <p>{{ asked }}</p>
-  <p class="meta">Frozen now {{ now }}</p>
-  <p class="status">Status: {{ report.status or "no report yet" }}</p>
-  {% if report.status_reasons %}<ul>{% for reason in report.status_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
+  <header class="top"><div class="bar"><span class="brand">CentrAlign Operator<small>Acme</small></span>
+    <nav><a href="/">Approval inbox</a><a href="/runs">Runs</a></nav></div></header>
+  <main>
+  <div class="panel">
+    <p class="meta">Run <code>{{ run_id }}</code> · frozen now {{ now }}</p>
+    <h1 class="asked">{{ asked }}</h1>
+    <p class="status s-{{ report.status or 'none' }}">Status: {{ report.status or "no report yet" }}</p>
+    {% if report.status_reasons %}<ul class="reasons">{% for reason in report.status_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
+  </div>
 
   <h2>Timeline ({{ timeline | length }} events)</h2>
   <p class="meta">Tool calls, policy decisions, approvals, LLM calls and verifier checks in the order they were logged.
     Event types here: {{ types | join(", ") }}.</p>
+  <div class="panel" style="padding: 0; overflow: hidden">
   <table>
     <thead><tr><th scope="col">#</th><th scope="col">Event</th><th scope="col">What happened</th></tr></thead>
     <tbody>
     {% for e in timeline %}
-      <tr class="{{ e.type }}"><td>{{ e.seq }}</td><td class="type">{{ e.type }}</td>
+      <tr class="{{ e.type }}"><td class="seq">{{ e.seq }}</td><td class="type"><span>{{ e.type }}</span></td>
         <td><details><summary>{{ e.summary }}</summary><pre>{{ e.payload }}</pre></details></td></tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
 
   <h2>Report</h2>
-  {% if report_md %}<pre>{{ report_md }}</pre>{% else %}<p>No report was written for this run.</p>{% endif %}
+  {% if report_md %}<div class="panel report">{{ report_html }}</div>{% else %}<p>No report was written for this run.</p>{% endif %}
+  </main>
 </body>
 </html>

@@ -127,8 +127,7 @@ async def film(acme_url: str, password: str) -> Path:
 
         await scene(page, f"{UI}/runs/{t1}", "T1: the run",
                     "First a feasibility gate looks Sharma Logistics up in Acme. Then the operator gathers facts with "
-                    "read tools only: the mail, the PDF, the vendor record. In this recording Acme also fails one call "
-                    "with an injected server error.", 10)
+                    "read tools only: the mail, the PDF, the vendor record.", 10)
         await scroll_to(page, "attempt 1:")
         await caption(page, "T1: the plan", "The planner writes milestones as target states in Acme, not clicks: "
                       "the invoice entered with the PDF's values, a business approval requested, no payment made.")
@@ -146,7 +145,7 @@ async def film(acme_url: str, password: str) -> Path:
         await scroll_to(page, "Report", 60)
         await caption(page, "T1: awaiting_business_approval",
                       "Rs 62,400 is above Acme's Rs 50,000 limit, so the invoice now waits for the finance manager. "
-                      "The agent never decides business approvals. The injected 500 was recovered inside the tool.")
+                      "The agent never decides business approvals.")
         await page.wait_for_timeout(10000)
 
         held = replay("T9:approve", "--approve-wait", "300", wait=False)

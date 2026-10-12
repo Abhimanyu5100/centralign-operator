@@ -33,6 +33,7 @@ from typing import Literal
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup, escape
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent.policy.approvals import ApprovalError, ApprovalStore
@@ -84,6 +85,36 @@ def _summary(type_: str, p: dict) -> str:
         case "precondition":
             return f"{'ok' if p.get('ok') else 'FAILED'}: {p.get('check')}"
     return json.dumps(p, ensure_ascii=False)[:200]
+
+
+def _inline(text: str) -> str:
+    text = str(escape(text))  # escaped before any tag is added: the report quotes the model and the request
+    text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    return re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+
+
+def report_html(md: str) -> Markup:
+    """The report's small Markdown subset (agent/report.py: `# ` title, `**label**` lines, `- ` items, inline
+    `**`/backticks) as HTML. Everything is escaped first, so nothing in a report can inject markup."""
+    out: list[str] = []
+    in_list = False
+    for line in md.splitlines():
+        item = line.startswith("- ")
+        if in_list and not item:
+            out.append("</ul>")
+            in_list = False
+        if not line.strip():
+            continue
+        if line.startswith("# "):
+            out.append(f"<h3>{_inline(line[2:])}</h3>")
+        elif re.fullmatch(r"\*\*[^*]+\*\*", line.strip()):
+            out.append(f"<h4>{_inline(line.strip()[2:-2])}</h4>")
+        elif item:
+            out.append(("" if in_list else "<ul>") + f"<li>{_inline(line[2:])}</li>")
+            in_list = True
+        else:
+            out.append(f"<p>{_inline(line)}</p>")
+    return Markup("\n".join(out + (["</ul>"] if in_list else [])))
 
 
 class DecisionIn(BaseModel):
@@ -188,7 +219,7 @@ def create_app(store_path: Path | str | None = None, token: str | None = None) -
         timeline = [{"seq": seq, "type": t, "summary": summarize(t, json.loads(body)),
                      "payload": json.dumps(json.loads(body), indent=1, ensure_ascii=False)} for seq, t, body in events]
         return TEMPLATES.TemplateResponse(request, "run.html", {
-            "run_id": run_id, "asked": head[0], "now": head[1], "report": data, "report_md": text,
+            "run_id": run_id, "asked": head[0], "now": head[1], "report": data, "report_md": text, "report_html": report_html(text),
             "timeline": timeline, "types": sorted({e["type"] for e in timeline})})
 
     return app
